@@ -30,11 +30,16 @@ const SESSION_SEC  = process.env.SESSION_SECRET || 'dev_secret_troque_em_prod';
 const app = express();
 
 // ── PostgreSQL Pool ──────────────────────────────────────────────────────────
+if (!process.env.DATABASE_URL) {
+  console.error('\n❌  DATABASE_URL nao encontrada!');
+  console.error('   Adicione o plugin PostgreSQL no Railway:');
+  console.error('   Projeto → + New → Database → PostgreSQL\n');
+  process.exit(1);
+}
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL && process.env.DATABASE_URL.includes('railway')
-    ? { rejectUnauthorized: false }
-    : false,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -143,16 +148,24 @@ async function initDB() {
 // ══════════════════════════════════════════════════════════════════════════════
 // 3. MIDDLEWARE
 // ══════════════════════════════════════════════════════════════════════════════
+// Railway usa proxy reverso (SSL termination) — obrigatório para cookies funcionarem
+app.set('trust proxy', 1);
+
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
+
+// Suprimir warning de MemoryStore em produção (aceitável para 1 instância)
+const sessionStore = session.MemoryStore ? new session.MemoryStore() : undefined;
 
 app.use(session({
   secret: SESSION_SEC,
   resave: false,
   saveUninitialized: false,
+  store: sessionStore,
   cookie: {
-    secure: process.env.NODE_ENV === 'production',
+    secure: process.env.NODE_ENV === 'production', // HTTPS via Railway proxy
     httpOnly: true,
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
     maxAge: 8 * 60 * 60 * 1000, // 8 horas
   },
 }));
