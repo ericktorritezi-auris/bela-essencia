@@ -327,7 +327,7 @@ tr:hover td{background:#FAF3F6}
     <a href="#" onclick="showAdmin(event)">Área administrativa</a>
   </div>
   <div style="text-align:center;padding:6px 16px 18px;font-size:10px;color:var(--text-light);opacity:.6">
-    Versão: 1.2.0 | Clínica Bela Essência © 2026
+    Versão: 1.2.1 | Clínica Bela Essência © 2026
   </div>
 </div>
 
@@ -420,7 +420,7 @@ tr:hover td{background:#FAF3F6}
           </div>
         </div>
         <div style="text-align:center;padding:16px 24px;font-size:11px;color:var(--text-light);border-top:1px solid var(--border);background:white;margin-top:auto">
-          Versão: 1.2.0 | Clínica Bela Essência © 2026
+          Versão: 1.2.1 | Clínica Bela Essência © 2026
         </div>
       </main>
     </div>
@@ -467,7 +467,7 @@ const DEL  = (p)    => api('DELETE', p);
 // ══════════════════════════════════════════════════
 // TOAST
 // ══════════════════════════════════════════════════
-function showToast(msg, type='', dur=3500) {
+function showToast(msg, type='', dur=4000) {
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.className = `toast ${type} show`;
@@ -710,41 +710,77 @@ function renderReview() {
 // ══════════════════════════════════════════════════
 // STEP 7: CONFIRM
 // ══════════════════════════════════════════════════
+// Wrapper de timeout para fetch — evita travar indefinidamente
+function withTimeout(promise, ms=12000) {
+  return Promise.race([
+    promise,
+    new Promise((_,reject) => setTimeout(() => reject(new Error('Servidor não respondeu. Tente novamente.')), ms))
+  ]);
+}
+
+// Reabilita o botão confirmar de forma segura (pode ter saído do DOM)
+function resetConfirmBtn() {
+  const b = document.getElementById('confirm-btn');
+  if (b) { b.textContent = '✓ Confirmar agendamento'; b.disabled = false; }
+}
+
 async function confirmBooking() {
-  const btn=document.getElementById('confirm-btn');
-  btn.textContent='Confirmando...'; btn.disabled=true;
+  const btn = document.getElementById('confirm-btn');
+  if (!btn || btn.disabled) return; // evita duplo clique
+  btn.textContent = 'Confirmando...'; btn.disabled = true;
+
   try {
-    // Garante que procData está disponível (pode ter sido perdido entre agendamentos)
-    if (!BK.procData && BK.procId) {
+    // Recupera procData se estiver ausente (mismatch de tipo entre agendamentos)
+    if (!BK.procData) {
       clearProcsCache();
       const procs = await getProcs();
       BK.procData = procs.find(x => Number(x.id) === Number(BK.procId)) || null;
     }
     if (!BK.procData) throw new Error('Procedimento não encontrado. Volte e selecione novamente.');
-    const p=BK.procData, c=CITIES.find(x=>x.id===BK.cityId);
+    if (!BK.cityId)   throw new Error('Cidade não selecionada. Reinicie o agendamento.');
+    if (!BK.date)     throw new Error('Data não selecionada. Volte e escolha uma data.');
+    if (!BK.time)     throw new Error('Horário não selecionado. Volte e escolha um horário.');
+    if (!BK.name || !BK.phone) throw new Error('Dados incompletos. Volte e preencha nome e WhatsApp.');
+
+    const p = BK.procData;
+    const c = CITIES.find(x => Number(x.id) === Number(BK.cityId));
     if (!c) throw new Error('Cidade inválida. Reinicie o agendamento.');
-    // et calculado DENTRO do try para não travar em caso de erro
-    const et=m2t(t2m(BK.time)+Number(p.dur));
-    await POST('/api/appointments', {
-      cityId:BK.cityId, cityName:c.name,
-      procId:BK.procId, procName:p.name,
-      date:BK.date, st:BK.time, et,
-      name:BK.name, phone:BK.phone,
-      price:p.price, pt:p.pt,
-    });
-    document.getElementById('succ-txt').innerHTML=
-      `<strong>${BK.name}</strong>, seu horário está confirmado!<br>`+
-      `<strong>${fmtDateLong(BK.date)}</strong> às <strong>${BK.time}</strong>.<br>`+
-      `<span style="color:var(--gold)">${p.name}</span>`;
-    document.getElementById('wa-link').href=WA_PROF;
-    // Salva dados do cliente na sessão para pré-preencher no próximo agendamento
-    sessionStorage.setItem('be_client_name', BK.name);
+
+    const dur = Number(p.dur) || 60;
+    const et  = m2t(t2m(BK.time) + dur);
+
+    // POST com timeout de 12s — evita travar para sempre
+    await withTimeout(POST('/api/appointments', {
+      cityId:  Number(BK.cityId),
+      cityName: c.name,
+      procId:  Number(BK.procId),
+      procName: p.name,
+      date:  BK.date,
+      st:    BK.time,
+      et,
+      name:  BK.name,
+      phone: BK.phone,
+      price: p.price || null,
+      pt:    p.pt || 'fixed',
+    }));
+
+    // Sucesso — salva dados para próximo agendamento na mesma sessão
+    sessionStorage.setItem('be_client_name',  BK.name);
     sessionStorage.setItem('be_client_phone', BK.phone);
+
+    document.getElementById('succ-txt').innerHTML =
+      `<strong>${BK.name}</strong>, seu horário está confirmado!<br>` +
+      `<strong>${fmtDateLong(BK.date)}</strong> às <strong>${BK.time}</strong>.<br>` +
+      `<span style="color:var(--gold)">${p.name}</span>`;
+    document.getElementById('wa-link').href = WA_PROF;
     goStep(7);
+
   } catch(e) {
-    showToast(e.message || 'Erro ao confirmar. Tente novamente.', 'error');
-    btn.textContent='✓ Confirmar agendamento'; btn.disabled=false;
-    if (e.message && e.message.includes('disponível')) goStep(4);
+    showToast(e.message || 'Erro ao confirmar. Tente novamente.', 'error', 5000);
+    if (e.message && e.message.toLowerCase().includes('disponível')) goStep(4);
+  } finally {
+    // SEMPRE reabilita o botão — independente de sucesso, erro ou timeout
+    resetConfirmBtn();
   }
 }
 
