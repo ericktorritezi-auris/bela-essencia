@@ -531,7 +531,7 @@ tr:hover td{background:#FAF3F6}
 // ══════════════════════════════════════════════════
 // VERSÃO — altere APENAS aqui; atualiza todos os rodapés
 // ══════════════════════════════════════════════════
-const APP_VERSION  = '1.3.0';
+const APP_VERSION  = '1.3.1';
 const APP_COPY     = `Versão: ${APP_VERSION} | Clínica Bela Essência © ${new Date().getFullYear()}`;
 
 function renderFooters() {
@@ -545,8 +545,20 @@ function renderFooters() {
 // ══════════════════════════════════════════════════
 const WA_PROF = 'https://wa.me/5543998734460';
 const CITIES = [
-  { id:1, name:'São Sebastião da Amoreira - PR', short:'São Sebastião da Amoreira', days:[1,2,4,5,6] },
-  { id:2, name:'Assaí - PR', short:'Assaí', days:[3] }
+  {
+    id:1, name:'São Sebastião da Amoreira - PR', short:'São Sebastião da Amoreira', days:[1,2,4,5,6],
+    local:'Clínica Bela Essência',
+    address:'Praça Comendador Jeremias Lunardelli, 55 — 2º andar',
+    cep:'CEP: 86240-000',
+    mapsUrl:'https://maps.google.com/?q=Praça+Comendador+Jeremias+Lunardelli+55+São+Sebastião+da+Amoreira+PR'
+  },
+  {
+    id:2, name:'Assaí - PR', short:'Assaí', days:[3],
+    local:'Studio K',
+    address:'Rua Vereador Clovis Negreiro, 250',
+    cep:'CEP: 86220-000',
+    mapsUrl:'https://maps.google.com/?q=Rua+Vereador+Clovis+Negreiro+250+Assaí+PR'
+  }
 ];
 
 // ══════════════════════════════════════════════════
@@ -808,6 +820,15 @@ function renderReview() {
     <div class="rev-row"><span class="rl">Valor</span><span class="rv" style="color:var(--gold)">${fmtPrice(p)}</span></div>
     <div class="rev-row"><span class="rl">Nome</span><span class="rv">${BK.name}</span></div>
     <div class="rev-row"><span class="rl">WhatsApp</span><span class="rv"><a href="${phoneToWA(BK.phone)}" target="_blank" style="color:var(--rose);text-decoration:none">${fmtPhone(BK.phone)} 💬</a></span></div>
+    <div class="rev-row" style="align-items:flex-start">
+      <span class="rl">Local</span>
+      <span class="rv" style="text-align:right">
+        <strong style="display:block;color:var(--rose)">${c.local}</strong>
+        <span style="font-size:12px;color:var(--text-light);display:block;margin-top:2px">${c.address}</span>
+        <span style="font-size:11px;color:var(--text-light);display:block">${c.cep}</span>
+        <a href="${c.mapsUrl}" target="_blank" style="font-size:11px;color:var(--rose);text-decoration:none;display:inline-block;margin-top:4px">📍 Ver no mapa</a>
+      </span>
+    </div>
   `;
 }
 
@@ -872,10 +893,13 @@ async function confirmBooking() {
     sessionStorage.setItem('be_client_name',  BK.name);
     sessionStorage.setItem('be_client_phone', BK.phone);
 
+    const sc = CITIES.find(x => Number(x.id) === Number(BK.cityId));
     document.getElementById('succ-txt').innerHTML =
       `<strong>${BK.name}</strong>, seu horário está confirmado!<br>` +
       `<strong>${fmtDateLong(BK.date)}</strong> às <strong>${BK.time}</strong>.<br>` +
-      `<span style="color:var(--gold)">${p.name}</span>`;
+      `<span style="color:var(--gold)">${p.name}</span><br><br>` +
+      `<span style="font-size:12px;color:var(--rose);font-weight:700">${sc?.local||''}</span><br>` +
+      `<span style="font-size:12px;color:var(--text-light)">${sc?.address||''} · ${sc?.cep||''}</span>`;
     document.getElementById('wa-link').href = WA_PROF;
     goStep(7);
 
