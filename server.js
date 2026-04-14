@@ -487,12 +487,13 @@ app.get('/api/revenue/summary', requireAdmin, async (req, res) => {
     weekStart.setDate(now.getDate() - weekDay);
     const ws = weekStart.toISOString().slice(0, 10);
 
+    // COUNT(*) conta TODOS os confirmados; SUM(price) ignora NULL naturalmente
     const q = (sql, p) => pool.query(sql, p).then(r => r.rows[0]);
     const [todayRow, weekRow, monthRow, yearRow] = await Promise.all([
-      q(`SELECT COALESCE(SUM(price),0) as total, COUNT(*) as cnt FROM appointments WHERE date=$1 AND status='confirmed' AND pt!='none'`, [today]),
-      q(`SELECT COALESCE(SUM(price),0) as total, COUNT(*) as cnt FROM appointments WHERE date>=$1 AND status='confirmed' AND pt!='none'`, [ws]),
-      q(`SELECT COALESCE(SUM(price),0) as total, COUNT(*) as cnt FROM appointments WHERE to_char(date,'YYYY-MM')=$1 AND status='confirmed' AND pt!='none'`, [month]),
-      q(`SELECT COALESCE(SUM(price),0) as total, COUNT(*) as cnt FROM appointments WHERE to_char(date,'YYYY')=$1 AND status='confirmed' AND pt!='none'`, [year]),
+      q(`SELECT COALESCE(SUM(price),0) as total, COUNT(*) as cnt FROM appointments WHERE date=$1 AND status='confirmed'`, [today]),
+      q(`SELECT COALESCE(SUM(price),0) as total, COUNT(*) as cnt FROM appointments WHERE date>=$1 AND status='confirmed'`, [ws]),
+      q(`SELECT COALESCE(SUM(price),0) as total, COUNT(*) as cnt FROM appointments WHERE to_char(date,'YYYY-MM')=$1 AND status='confirmed'`, [month]),
+      q(`SELECT COALESCE(SUM(price),0) as total, COUNT(*) as cnt FROM appointments WHERE to_char(date,'YYYY')=$1 AND status='confirmed'`, [year]),
     ]);
     res.json({ today: todayRow, week: weekRow, month: monthRow, year: yearRow });
   } catch (err) {
