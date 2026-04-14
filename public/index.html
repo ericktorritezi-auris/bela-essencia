@@ -327,7 +327,7 @@ tr:hover td{background:#FAF3F6}
     <a href="#" onclick="showAdmin(event)">Área administrativa</a>
   </div>
   <div style="text-align:center;padding:6px 16px 18px;font-size:10px;color:var(--text-light);opacity:.6">
-    Versão: 1.1.0 | Clínica Bela Essência © 2026
+    Versão: 1.2.0 | Clínica Bela Essência © 2026
   </div>
 </div>
 
@@ -420,7 +420,7 @@ tr:hover td{background:#FAF3F6}
           </div>
         </div>
         <div style="text-align:center;padding:16px 24px;font-size:11px;color:var(--text-light);border-top:1px solid var(--border);background:white;margin-top:auto">
-          Versão: 1.1.0 | Clínica Bela Essência © 2026
+          Versão: 1.2.0 | Clínica Bela Essência © 2026
         </div>
       </main>
     </div>
@@ -578,7 +578,8 @@ async function renderProcs() {
 }
 async function selProc(id) {
   const procs = await getProcs();
-  const p = procs.find(x => x.id===id);
+  // Comparação com Number() para evitar mismatch de tipo (int vs string) no segundo agendamento
+  const p = procs.find(x => Number(x.id) === Number(id));
   if (!p) return;
   BK.procId=id; BK.procData=p; BK.date=null; BK.time=null;
   const c = CITIES.find(x=>x.id===BK.cityId);
@@ -712,9 +713,18 @@ function renderReview() {
 async function confirmBooking() {
   const btn=document.getElementById('confirm-btn');
   btn.textContent='Confirmando...'; btn.disabled=true;
-  const p=BK.procData, c=CITIES.find(x=>x.id===BK.cityId);
-  const et=m2t(t2m(BK.time)+p.dur);
   try {
+    // Garante que procData está disponível (pode ter sido perdido entre agendamentos)
+    if (!BK.procData && BK.procId) {
+      clearProcsCache();
+      const procs = await getProcs();
+      BK.procData = procs.find(x => Number(x.id) === Number(BK.procId)) || null;
+    }
+    if (!BK.procData) throw new Error('Procedimento não encontrado. Volte e selecione novamente.');
+    const p=BK.procData, c=CITIES.find(x=>x.id===BK.cityId);
+    if (!c) throw new Error('Cidade inválida. Reinicie o agendamento.');
+    // et calculado DENTRO do try para não travar em caso de erro
+    const et=m2t(t2m(BK.time)+Number(p.dur));
     await POST('/api/appointments', {
       cityId:BK.cityId, cityName:c.name,
       procId:BK.procId, procName:p.name,
@@ -827,7 +837,10 @@ async function renderAgenda() {
         <td><span class="badge badge-${a.status==='confirmed'?'ok':'cancel'}">${a.status==='confirmed'?'Confirmado':'Cancelado'}</span></td>
         <td>
           <button class="act-btn" onclick="openEditModal('${a.id}',${a.dur||60})">Editar</button>
-          ${a.status==='confirmed'?`<button class="act-btn danger" onclick="cancelAppt('${a.id}')">Cancelar</button>`:''}
+          ${a.status==='confirmed'
+            ? `<button class="act-btn danger" onclick="cancelAppt('${a.id}')">Cancelar</button>`
+            : `<button class="act-btn danger" onclick="deleteAppt('${a.id}')" style="border-color:var(--error);color:var(--error)">🗑 Excluir</button>`
+          }
           <a href="${phoneToWA(a.phone)}" target="_blank" class="act-btn">WA</a>
         </td>
       </tr>
@@ -840,6 +853,15 @@ async function cancelAppt(id) {
   if(!confirm('Confirma cancelamento?')) return;
   try { await PATCH(`/api/appointments/${id}/cancel`); showToast('Cancelado','ok'); renderAgenda(); renderStats(); }
   catch(e) { showToast(e.message,'error'); }
+}
+
+async function deleteAppt(id) {
+  if(!confirm('TEM CERTEZA QUE QUER EXCLUIR DA BASE ESSE REGISTRO?\n\nEssa ação é irreversível.')) return;
+  try {
+    await DEL(`/api/appointments/${id}`);
+    showToast('Registro excluído da base','ok');
+    renderAgenda(); renderStats();
+  } catch(e) { showToast(e.message,'error'); }
 }
 function openEditModal(id, dur) {
   // Get current row data from the rendered table - simplest approach
