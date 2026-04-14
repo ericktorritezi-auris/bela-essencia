@@ -320,7 +320,11 @@ tr:hover td{background:#FAF3F6}
       </div>
     </div>
   </div>
-  <div class="footer-bar"><a href="#" onclick="showAdmin(event)">Área administrativa</a></div>
+  <div class="footer-bar">
+    <a href="#" onclick="showAdmin(event)">Área administrativa</a>
+    <span style="margin:0 8px;opacity:.3">·</span>
+    <span>Versão: 1.1.0 | Clínica Bela Essência © 2026</span>
+  </div>
 </div>
 
 <!-- ADMIN -->
@@ -410,6 +414,9 @@ tr:hover td{background:#FAF3F6}
               <div style="overflow-x:auto"><table><thead><tr><th>Procedimento</th><th>Duração</th><th>Valor</th><th>Ações</th></tr></thead><tbody id="procs-body"></tbody></table></div>
             </div>
           </div>
+        </div>
+        <div style="text-align:center;padding:16px 24px;font-size:11px;color:var(--text-light);border-top:1px solid var(--border);background:white;margin-top:auto">
+          Versão: 1.1.0 | Clínica Bela Essência © 2026
         </div>
       </main>
     </div>
@@ -513,6 +520,7 @@ function goStep(n) {
   window.scrollTo({ top:0, behavior:'smooth' });
   if (n===3) renderCal();
   if (n===4) renderSlots();
+  if (n===5) prefillClientData();
   if (n===6) renderReview();
 }
 function updDots(n) {
@@ -655,6 +663,16 @@ function selTime(t) {
 // ══════════════════════════════════════════════════
 // STEP 5: VALIDATE INFO
 // ══════════════════════════════════════════════════
+// Pré-preenche nome e telefone se já foram usados nesta sessão
+function prefillClientData() {
+  const savedName  = sessionStorage.getItem('be_client_name');
+  const savedPhone = sessionStorage.getItem('be_client_phone');
+  const nameEl  = document.getElementById('f-name');
+  const phoneEl = document.getElementById('f-phone');
+  if (savedName  && !nameEl.value)  nameEl.value  = savedName;
+  if (savedPhone && !phoneEl.value) phoneEl.value = savedPhone;
+}
+
 function validateInfo() {
   const name=document.getElementById('f-name').value.trim();
   const phone=document.getElementById('f-phone').value.trim();
@@ -705,6 +723,9 @@ async function confirmBooking() {
       `<strong>${fmtDateLong(BK.date)}</strong> às <strong>${BK.time}</strong>.<br>`+
       `<span style="color:var(--gold)">${p.name}</span>`;
     document.getElementById('wa-link').href=WA_PROF;
+    // Salva dados do cliente na sessão para pré-preencher no próximo agendamento
+    sessionStorage.setItem('be_client_name', BK.name);
+    sessionStorage.setItem('be_client_phone', BK.phone);
     goStep(7);
   } catch(e) {
     showToast(e.message || 'Erro ao confirmar. Tente novamente.', 'error');
@@ -744,7 +765,8 @@ function toggleSB(){document.getElementById('adm-sb').classList.toggle('open')}
 function initAdmin() {
   document.getElementById('fl-city').innerHTML='<option value="">Todas as cidades</option>'+
     CITIES.map(c=>`<option value="${c.id}">${c.short}</option>`).join('');
-  document.getElementById('fl-date').value=todayStr();
+  // Data vazia = padrão mostra todos a partir de hoje (backend filtra date >= today)
+  document.getElementById('fl-date').value='';
   const now=new Date();
   document.getElementById('fl-month').value=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
   showSec('agenda');
