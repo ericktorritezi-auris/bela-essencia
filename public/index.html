@@ -309,6 +309,7 @@ tr:hover td{background:#FAF3F6}
         <div class="rev-body" id="rv-body"></div>
       </div>
       <div class="notice info" style="margin-top:14px">ℹ️ Somente a profissional pode alterar ou cancelar após confirmação.</div>
+      <div class="notice err" style="margin-top:8px">⚠️ Cancelamentos somente podem ser solicitados com no mínimo <strong>24 horas de antecedência</strong> ao procedimento agendado.</div>
       <div class="btn-actions">
         <button class="btn btn-primary" id="confirm-btn" onclick="confirmBooking()">✓ Confirmar agendamento</button>
       </div>
@@ -327,7 +328,7 @@ tr:hover td{background:#FAF3F6}
     <a href="#" onclick="showAdmin(event)">Área administrativa</a>
   </div>
   <div style="text-align:center;padding:6px 16px 18px;font-size:10px;color:var(--text-light);opacity:.6">
-    Versão: 1.2.1 | Clínica Bela Essência © 2026
+    Versão: 1.2.3 | Clínica Bela Essência © 2026
   </div>
 </div>
 
@@ -420,7 +421,7 @@ tr:hover td{background:#FAF3F6}
           </div>
         </div>
         <div style="text-align:center;padding:16px 24px;font-size:11px;color:var(--text-light);border-top:1px solid var(--border);background:white;margin-top:auto">
-          Versão: 1.2.1 | Clínica Bela Essência © 2026
+          Versão: 1.2.3 | Clínica Bela Essência © 2026
         </div>
       </main>
     </div>
@@ -849,6 +850,35 @@ async function renderStats() {
   } catch{}
 }
 
+// Stats calculados a partir de uma lista já filtrada (frontend)
+function renderStatsFromList(list, filterLabel) {
+  const confirmed  = list.filter(a => a.status === 'confirmed');
+  const cancelled  = list.filter(a => a.status === 'cancelled');
+  const revenue    = confirmed.reduce((s,a) => s + (Number(a.price)||0), 0);
+  document.getElementById('today-stats').innerHTML=`
+    <div class="stat-card">
+      <div class="stat-lbl">📋 ${filterLabel}</div>
+      <div class="stat-val">${list.length}</div>
+      <div class="stat-sub">total no filtro</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-lbl">✅ Confirmados</div>
+      <div class="stat-val">${confirmed.length}</div>
+      <div class="stat-sub">${fmtCurr(revenue)}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-lbl">❌ Cancelados</div>
+      <div class="stat-val">${cancelled.length}</div>
+      <div class="stat-sub">no filtro</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-lbl">💰 Receita</div>
+      <div class="stat-val" style="font-size:22px">${fmtCurr(revenue)}</div>
+      <div class="stat-sub">confirmados</div>
+    </div>
+  `;
+}
+
 // ── AGENDA ───────────────────────────────────────
 async function renderAgenda() {
   const fd=document.getElementById('fl-date').value;
@@ -858,10 +888,21 @@ async function renderAgenda() {
   if(fd) params.set('date',fd);
   if(fc) params.set('city',fc);
   if(fs) params.set('status',fs);
+  const hasFilter = !!(fd || fc || fs);
   const tbody=document.getElementById('agenda-body');
   tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-light)">Carregando...</td></tr>';
   try {
     const list=await GET(`/api/appointments?${params}`);
+    // Sincroniza cards de stats com o filtro ativo
+    if (hasFilter) {
+      const parts=[];
+      if(fd) parts.push(fmtDate(fd));
+      if(fc) parts.push(CITIES.find(c=>String(c.id)===fc)?.short||'');
+      if(fs) parts.push(fs==='confirmed'?'Confirmados':'Cancelados');
+      renderStatsFromList(list, parts.join(' · ') || 'Filtro');
+    } else {
+      renderStats(); // sem filtro = stats globais normais
+    }
     if(!list.length){tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:36px;color:var(--text-light)">Nenhum agendamento encontrado</td></tr>';return}
     tbody.innerHTML=list.map(a=>`
       <tr>
