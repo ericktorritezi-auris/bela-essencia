@@ -215,6 +215,18 @@ tr:hover td{background:#FAF3F6}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
 ::-webkit-scrollbar-thumb:hover{background:var(--rose-mid)}
+/* ── APPT CARDS (mobile) ── */
+.appt-cards{display:none;padding:0 0 4px}
+.appt-card{background:white;border:1px solid var(--border);border-radius:var(--r-md);padding:14px 15px;margin-bottom:10px;box-shadow:var(--sh-sm)}
+.appt-card-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;gap:8px}
+.appt-card-date{font-weight:700;font-size:13px;color:var(--dark)}
+.appt-card-time{font-size:11px;color:var(--text-light);margin-top:2px}
+.appt-card-body{display:grid;grid-template-columns:1fr 1fr;gap:7px 12px;margin-bottom:12px}
+.appt-card-lbl{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-light);font-weight:800;display:block;margin-bottom:1px}
+.appt-card-val{font-size:12.5px;font-weight:600;color:var(--dark)}
+.appt-card-actions{display:flex;gap:7px;flex-wrap:wrap;border-top:1px solid var(--border-light);padding-top:10px}
+.appt-card-actions .act-btn{flex:1;text-align:center;padding:9px 6px;font-size:12px;margin:0}
+
 @media(max-width:768px){
   .adm-sidebar{transform:translateX(-100%)}
   .adm-sidebar.open{transform:translateX(0)}
@@ -227,6 +239,8 @@ tr:hover td{background:#FAF3F6}
   .tbl-filters{width:100%}
   .fi,.fs{flex:1;min-width:0}
   .pwa-actions{flex-direction:column}
+  .agenda-table-wrap{display:none!important}
+  .appt-cards{display:block}
 }
 @media(max-width:400px){
   .booking-wrap{padding:16px 12px 80px}
@@ -328,7 +342,7 @@ tr:hover td{background:#FAF3F6}
     <a href="#" onclick="showAdmin(event)">Área administrativa</a>
   </div>
   <div style="text-align:center;padding:6px 16px 18px;font-size:10px;color:var(--text-light);opacity:.6">
-    Versão: 1.2.3 | Clínica Bela Essência © 2026
+    Versão: 1.2.4 | Clínica Bela Essência © 2026
   </div>
 </div>
 
@@ -389,7 +403,8 @@ tr:hover td{background:#FAF3F6}
                   <select class="fs" id="fl-status" onchange="renderAgenda()"><option value="">Todos os status</option><option value="confirmed">Confirmados</option><option value="cancelled">Cancelados</option></select>
                 </div>
               </div>
-              <div style="overflow-x:auto"><table><thead><tr><th>Data / Hora</th><th>Cliente</th><th>Procedimento</th><th>Cidade</th><th>Valor</th><th>Status</th><th>Ações</th></tr></thead><tbody id="agenda-body"></tbody></table></div>
+              <div class="agenda-table-wrap" style="overflow-x:auto"><table><thead><tr><th>Data / Hora</th><th>Cliente</th><th>Procedimento</th><th>Cidade</th><th>Valor</th><th>Status</th><th>Ações</th></tr></thead><tbody id="agenda-body"></tbody></table></div>
+              <div class="appt-cards" id="appt-cards"></div>
             </div>
           </div>
           <div id="sec-blocked" class="hidden">
@@ -421,7 +436,7 @@ tr:hover td{background:#FAF3F6}
           </div>
         </div>
         <div style="text-align:center;padding:16px 24px;font-size:11px;color:var(--text-light);border-top:1px solid var(--border);background:white;margin-top:auto">
-          Versão: 1.2.3 | Clínica Bela Essência © 2026
+          Versão: 1.2.4 | Clínica Bela Essência © 2026
         </div>
       </main>
     </div>
@@ -903,7 +918,13 @@ async function renderAgenda() {
     } else {
       renderStats(); // sem filtro = stats globais normais
     }
-    if(!list.length){tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:36px;color:var(--text-light)">Nenhum agendamento encontrado</td></tr>';return}
+    if(!list.length){
+      tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:36px;color:var(--text-light)">Nenhum agendamento encontrado</td></tr>';
+      document.getElementById('appt-cards').innerHTML='<div style="text-align:center;padding:36px;color:var(--text-light);font-size:13px">Nenhum agendamento encontrado</div>';
+      return;
+    }
+
+    // ── Tabela (desktop) ──────────────────────────────────────
     tbody.innerHTML=list.map(a=>`
       <tr>
         <td><div style="font-weight:700">${fmtDate(a.date)}</div><div style="font-size:11px;color:var(--text-light)">${String(a.st).slice(0,5)} – ${String(a.et).slice(0,5)}</div></td>
@@ -922,8 +943,43 @@ async function renderAgenda() {
         </td>
       </tr>
     `).join('');
+
+    // ── Cards (mobile) — todos os botões sempre visíveis ──────
+    document.getElementById('appt-cards').innerHTML=list.map(a=>{
+      const city = CITIES.find(c=>c.id===a.city_id)?.short||a.city_name;
+      const valor = a.pt==='none'?'—':a.pt==='eval'?'Sob avaliação':a.price?fmtCurr(a.price):'—';
+      const isCnf = a.status==='confirmed';
+      return `
+        <div class="appt-card">
+          <div class="appt-card-head">
+            <div>
+              <div class="appt-card-date">${fmtDate(a.date)}</div>
+              <div class="appt-card-time">${String(a.st).slice(0,5)} – ${String(a.et).slice(0,5)}</div>
+            </div>
+            <span class="badge badge-${isCnf?'ok':'cancel'}">${isCnf?'Confirmado':'Cancelado'}</span>
+          </div>
+          <div class="appt-card-body">
+            <div><span class="appt-card-lbl">Cliente</span><span class="appt-card-val">${a.name}</span></div>
+            <div><span class="appt-card-lbl">WhatsApp</span><a href="${phoneToWA(a.phone)}" target="_blank" style="font-size:12px;color:var(--rose);text-decoration:none;font-weight:600">${fmtPhone(a.phone)}</a></div>
+            <div><span class="appt-card-lbl">Procedimento</span><span class="appt-card-val" style="font-size:11.5px">${a.proc_name}</span></div>
+            <div><span class="appt-card-lbl">Cidade</span><span class="appt-card-val" style="font-size:11.5px">${city}</span></div>
+            <div><span class="appt-card-lbl">Valor</span><span class="appt-card-val" style="color:var(--gold)">${valor}</span></div>
+          </div>
+          <div class="appt-card-actions">
+            <button class="act-btn" onclick="openEditModal('${a.id}',${a.dur||60})">Editar</button>
+            ${isCnf
+              ? `<button class="act-btn danger" onclick="cancelAppt('${a.id}')" style="color:var(--warn);border-color:var(--warn)">Cancelar</button>`
+              : `<button class="act-btn danger" onclick="deleteAppt('${a.id}')" style="color:var(--error);border-color:var(--error)">🗑 Excluir da base</button>`
+            }
+            <a href="${phoneToWA(a.phone)}" target="_blank" class="act-btn" style="text-align:center">WA</a>
+          </div>
+        </div>
+      `;
+    }).join('');
+
   } catch(e) {
     tbody.innerHTML=`<tr><td colspan="7" style="text-align:center;padding:28px;color:var(--error)">Erro: ${e.message}</td></tr>`;
+    document.getElementById('appt-cards').innerHTML=`<div style="color:var(--error);padding:20px;font-size:13px">Erro: ${e.message}</div>`;
   }
 }
 async function cancelAppt(id) {
