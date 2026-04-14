@@ -307,7 +307,14 @@ app.get('/api/appointments', requireAdmin, async (req, res) => {
   const { date, city, status } = req.query;
   let sql = 'SELECT * FROM appointments WHERE 1=1';
   const params = [];
-  if (date)   { sql += ` AND date = $${params.push(date)}`; }
+  if (date) {
+    // Filtro exato por data
+    sql += ` AND date = $${params.push(date)}`;
+  } else {
+    // Padrão: exibe da data atual em diante
+    const today = new Date().toISOString().slice(0, 10);
+    sql += ` AND date >= $${params.push(today)}`;
+  }
   if (city)   { sql += ` AND city_id = $${params.push(city)}`; }
   if (status) { sql += ` AND status = $${params.push(status)}`; }
   sql += ' ORDER BY date, st';
