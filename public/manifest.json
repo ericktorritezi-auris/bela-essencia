@@ -1,0 +1,27 @@
+{
+  "name": "Bela Essência",
+  "short_name": "Bela Essência",
+  "description": "Agendamento online – Estética & Beleza com Ana Paula Silva",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FAF7F2",
+  "theme_color": "#9B4D6A",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["beauty", "health", "lifestyle"],
+  "lang": "pt-BR",
+  "dir": "ltr"
+}
