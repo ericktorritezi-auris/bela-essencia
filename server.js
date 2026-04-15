@@ -120,6 +120,19 @@ async function initDB() {
       );
     `);
 
+    // Tabela de promoções
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS promotions (
+        id          SERIAL       PRIMARY KEY,
+        name        VARCHAR(200) NOT NULL,
+        start_date  DATE         NOT NULL,
+        end_date    DATE         NOT NULL,
+        discount    NUMERIC(5,2) NOT NULL CHECK (discount > 0 AND discount <= 100),
+        active      BOOLEAN      NOT NULL DEFAULT TRUE,
+        created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+      );
+    `);
+
     // Tabela de horários específicos bloqueados (agendamentos manuais / ausências parciais)
     await client.query(`
       CREATE TABLE IF NOT EXISTS blocked_slots (
@@ -516,6 +529,65 @@ app.get('/api/revenue/summary', requireAdmin, async (req, res) => {
   }
 });
 
+// ── Promoções ────────────────────────────────────────────────────────────────
+
+// Público: retorna promoção ativa agora (se existir)
+app.get('/api/promotions/active', async (req, res) => {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const { rows } = await pool.query(
+      `SELECT * FROM promotions
+       WHERE active = TRUE AND start_date <= $1 AND end_date >= $1
+       ORDER BY created_at DESC LIMIT 1`,
+      [today]
+    );
+    res.json(rows[0] || null);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin: listar todas
+app.get('/api/promotions', requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT * FROM promotions ORDER BY start_date DESC'
+    );
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin: criar promoção
+app.post('/api/promotions', requireAdmin, async (req, res) => {
+  const { name, start_date, end_date, discount } = req.body;
+  if (!name || !start_date || !end_date || !discount) {
+    return res.status(400).json({ error: 'Todos os campos são obrigatórios' });
+  }
+  if (start_date > end_date) {
+    return res.status(400).json({ error: 'Data de início deve ser antes do fim' });
+  }
+  if (Number(discount) <= 0 || Number(discount) > 100) {
+    return res.status(400).json({ error: 'Desconto deve ser entre 1% e 100%' });
+  }
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO promotions (name, start_date, end_date, discount)
+       VALUES ($1, $2, $3, $4) RETURNING *`,
+      [name, start_date, end_date, Number(discount)]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin: desativar promoção
+app.delete('/api/promotions/:id', requireAdmin, async (req, res) => {
+  try {
+    await pool.query(
+      'UPDATE promotions SET active = FALSE WHERE id = $1',
+      [req.params.id]
+    );
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ── Horários Bloqueados (blocked_slots) ──────────────────────────────────────
 app.get('/api/blocked-slots', async (req, res) => {
   try {
@@ -549,22 +621,24 @@ app.delete('/api/blocked-slots/:id', requireAdmin, async (req, res) => {
 // ── Backup / Export (admin, desktop only) ────────────────────────────────────
 app.get('/api/backup/export', requireAdmin, async (req, res) => {
   try {
-    const [procs, appts, blocked, slots] = await Promise.all([
+    const [procs, appts, blocked, slots, promos] = await Promise.all([
       pool.query('SELECT * FROM procedures ORDER BY id'),
       pool.query('SELECT * FROM appointments ORDER BY date, st'),
       pool.query('SELECT * FROM blocked_dates ORDER BY date'),
       pool.query('SELECT * FROM blocked_slots ORDER BY date, st'),
+      pool.query('SELECT * FROM promotions ORDER BY start_date DESC'),
     ]);
     const today = new Date().toISOString().slice(0,10);
     res.setHeader('Content-Disposition', `attachment; filename="bela-essencia-backup-${today}.json"`);
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.json({
       exportedAt: new Date().toISOString(),
-      version: '1.3.0',
+      version: '1.4.0',
       procedures:    procs.rows,
       appointments:  appts.rows,
       blocked_dates: blocked.rows,
       blocked_slots: slots.rows,
+      promotions:    promos.rows,
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
