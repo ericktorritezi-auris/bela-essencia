@@ -758,7 +758,7 @@ tr:hover td{background:#FAF3F6}
 // ══════════════════════════════════════════════════
 // VERSÃO — altere APENAS aqui; atualiza todos os rodapés
 // ══════════════════════════════════════════════════
-const APP_VERSION  = '1.5.3';
+const APP_VERSION  = '1.5.4';
 const APP_COPY     = `Versão: ${APP_VERSION} | Clínica Bela Essência © ${new Date().getFullYear()}`;
 
 function renderFooters() {
@@ -927,7 +927,20 @@ async function renderProcs() {
   const list = document.getElementById('proc-list');
   list.innerHTML = '<div class="skel"></div><div class="skel" style="height:44px"></div><div class="skel"></div>';
   try {
-    const [procs, promo] = await Promise.all([getProcs(), getActivePromo()]);
+    const [allProcs, promo] = await Promise.all([getProcs(), getActivePromo()]);
+
+    // Filtra procedimentos pela cidade selecionada
+    // CITIES[i].procedures vem da API já filtrado (apenas enabled=true para aquela cidade)
+    const city = CITIES.find(c => Number(c.id) === Number(BK.cityId));
+    let procs;
+    if (city && city.procedures && city.procedures.length > 0) {
+      // Cidade tem configuração específica — usa lista filtrada
+      const enabledIds = new Set(city.procedures.map(p => Number(p.id)));
+      procs = allProcs.filter(p => enabledIds.has(Number(p.id)));
+    } else {
+      // Sem configuração específica — mostra todos
+      procs = allProcs;
+    }
 
     // Banner de promoção ativa
     let banner = '';
@@ -1689,7 +1702,7 @@ async function saveProc(id) {
   try {
     if(id) await PUT(`/api/procedures/${id}`,{name,dur,price,pt});
     else await POST('/api/procedures',{name,dur,price,pt});
-    clearProcsCache();
+    clearProcsCache(); clearCitiesCache();
     showToast('Procedimento salvo','ok');
     closeModal(); renderProcsAdmin();
   } catch(e){ showToast(e.message,'error'); }
