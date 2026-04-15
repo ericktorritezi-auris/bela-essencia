@@ -156,6 +156,31 @@ h1,h2,h3,h4{font-family:'Cormorant Garamond',serif}
 .skel{background:linear-gradient(90deg,var(--border) 25%,var(--border-light) 50%,var(--border) 75%);background-size:200% 100%;animation:skel 1.2s ease infinite;border-radius:var(--r-sm);height:56px}
 @keyframes skel{from{background-position:200% 0}to{background-position:-200% 0}}
 
+/* ── PROMO BANNER ── */
+.promo-banner{background:linear-gradient(135deg,var(--rose),var(--rose-deep));border-radius:var(--r-md);padding:13px 16px;margin-bottom:16px;display:flex;align-items:center;gap:11px;color:white;animation:fsUp .3s ease}
+.promo-banner-icon{font-size:22px;flex-shrink:0}
+.promo-banner-text strong{display:block;font-size:13px;font-weight:800}
+.promo-banner-text span{font-size:11px;opacity:.85}
+.promo-pct{font-family:'Cormorant Garamond',serif;font-size:26px;font-weight:600;color:var(--gold-light);margin-left:auto;flex-shrink:0;white-space:nowrap}
+
+/* ── PROMO PRICE on proc-item ── */
+.badge-promo{font-size:11px;background:#FEF0E0;color:var(--warn);padding:2px 7px;border-radius:10px;font-weight:700;text-decoration:line-through;opacity:.7}
+.badge-promo-new{font-size:11px;background:#E8F5EE;color:var(--success);padding:2px 7px;border-radius:10px;font-weight:800}
+.badge-promo-tag{font-size:10px;background:var(--rose-light);color:var(--rose);padding:2px 7px;border-radius:10px;font-weight:700}
+
+/* ── ADMIN PROMO CARDS ── */
+.promo-card{background:white;border:1.5px solid var(--border);border-radius:var(--r-md);padding:17px 18px;margin-bottom:12px;display:grid;grid-template-columns:1fr auto;align-items:start;gap:12px}
+.promo-card.active-now{border-color:var(--rose);background:var(--rose-light)}
+.promo-name{font-family:'Cormorant Garamond',serif;font-size:19px;font-weight:600;color:var(--dark)}
+.promo-period{font-size:12px;color:var(--text-light);margin-top:3px}
+.promo-disc{font-family:'Cormorant Garamond',serif;font-size:32px;font-weight:600;color:var(--rose);line-height:1;text-align:right}
+.promo-disc span{display:block;font-family:'Nunito',sans-serif;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-light);font-weight:800;margin-top:2px}
+.promo-status{display:inline-flex;align-items:center;padding:3px 9px;border-radius:20px;font-size:10px;font-weight:800;margin-top:6px}
+.ps-active{background:var(--success-bg);color:var(--success)}
+.ps-upcoming{background:var(--gold-light);color:var(--gold-deep)}
+.ps-expired{background:var(--error-bg);color:var(--error)}
+.ps-inactive{background:var(--border);color:var(--text-light)}
+
 /* ── LOCATION CARD ── */
 .lc{margin-top:16px;border-radius:var(--r-md);overflow:hidden;border:1.5px solid var(--border);background:white;box-shadow:var(--sh-sm)}
 .lc-top{background:linear-gradient(135deg,var(--gold-light),#EDE4CE);padding:10px 16px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border)}
@@ -430,6 +455,7 @@ tr:hover td{background:#FAF3F6}
         </div>
         <div style="margin-top:8px">
           <div class="nav-sec-ttl">Configurações</div>
+          <div class="nav-item" id="nav-promos" onclick="showSec('promos')"><span class="nav-icon">🏷</span> Promoções</div>
           <div class="nav-item" id="nav-procs" onclick="showSec('procs')"><span class="nav-icon">✨</span> Procedimentos</div>
           <div class="nav-item desktop-only" id="nav-backup" onclick="showSec('backup')"><span class="nav-icon">💾</span> Backup</div>
         </div>
@@ -517,6 +543,43 @@ tr:hover td{background:#FAF3F6}
               <div style="overflow-x:auto"><table><thead><tr><th>Procedimento</th><th>Duração</th><th>Valor</th><th>Ações</th></tr></thead><tbody id="procs-body"></tbody></table></div>
             </div>
           </div>
+          <!-- SEC: PROMOÇÕES -->
+          <div id="sec-promos" class="hidden">
+            <div class="tbl-wrap" style="margin-bottom:16px">
+              <div style="padding:20px">
+                <div class="tbl-ttl" style="margin-bottom:6px">Nova Promoção</div>
+                <p style="font-size:12px;color:var(--text-light);margin-bottom:16px;line-height:1.7">
+                  O desconto é aplicado automaticamente em todos os procedimentos com valor fixo durante o período cadastrado.
+                </p>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                  <div class="fg" style="margin:0;grid-column:1/-1">
+                    <label>Nome da promoção</label>
+                    <input type="text" class="fi" id="pm-name" placeholder="Ex: Promoção Dia das Mães" style="width:100%;font-size:14px">
+                  </div>
+                  <div class="fg" style="margin:0">
+                    <label>Data de início</label>
+                    <input type="date" class="fi" id="pm-start" style="width:100%">
+                  </div>
+                  <div class="fg" style="margin:0">
+                    <label>Data de fim</label>
+                    <input type="date" class="fi" id="pm-end" style="width:100%">
+                  </div>
+                  <div class="fg" style="margin:0;grid-column:1/-1">
+                    <label>Desconto (%)</label>
+                    <input type="number" class="fi" id="pm-disc" placeholder="Ex: 15" min="1" max="100" step="0.5" style="width:100%;font-size:14px">
+                  </div>
+                </div>
+                <button class="btn btn-primary" onclick="createPromo()" style="width:auto;padding:10px 24px;margin-top:14px">🏷 Criar Promoção</button>
+              </div>
+            </div>
+            <div class="tbl-wrap">
+              <div style="padding:18px">
+                <div class="tbl-ttl" style="margin-bottom:14px">Promoções Cadastradas</div>
+                <div id="promo-list"></div>
+              </div>
+            </div>
+          </div>
+
           <!-- SEC: BACKUP (desktop only) -->
           <div id="sec-backup" class="hidden desktop-only">
             <div class="tbl-wrap" style="margin-bottom:16px">
@@ -553,7 +616,7 @@ tr:hover td{background:#FAF3F6}
 // ══════════════════════════════════════════════════
 // VERSÃO — altere APENAS aqui; atualiza todos os rodapés
 // ══════════════════════════════════════════════════
-const APP_VERSION  = '1.3.2';
+const APP_VERSION  = '1.4.0';
 const APP_COPY     = `Versão: ${APP_VERSION} | Clínica Bela Essência © ${new Date().getFullYear()}`;
 
 function renderFooters() {
@@ -633,7 +696,7 @@ function phoneToWA(ph){const d=ph.replace(/\D/g,'');return `https://wa.me/${d.st
 // ══════════════════════════════════════════════════
 // BOOKING STATE
 // ══════════════════════════════════════════════════
-let BK = { cityId:null, procId:null, procData:null, date:null, time:null, name:'', phone:'' };
+let BK = { cityId:null, procId:null, procData:null, promo:null, date:null, time:null, name:'', phone:'' };
 let CAL = { y:null, mo:null };
 let _procsCache = null;
 
@@ -644,7 +707,8 @@ async function getProcs() {
 function clearProcsCache() { _procsCache = null; }
 
 function resetBooking() {
-  BK = { cityId:null, procId:null, procData:null, date:null, time:null, name:'', phone:'' };
+  BK = { cityId:null, procId:null, procData:null, promo:null, date:null, time:null, name:'', phone:'' };
+  _activePromo = undefined; // refresh promo on next booking
   document.getElementById('f-name').value = '';
   document.getElementById('f-phone').value = '';
   goStep(1);
@@ -697,34 +761,80 @@ async function renderProcs() {
   const list = document.getElementById('proc-list');
   list.innerHTML = '<div class="skel"></div><div class="skel" style="height:44px"></div><div class="skel"></div>';
   try {
-    const procs = await getProcs();
-    list.innerHTML = procs.map(p => `
-      <div class="proc-item" onclick="selProc(${p.id})">
-        <div>
-          <div class="pn">${p.name}</div>
-          <div class="proc-meta">
-            <span class="badge-dur">⏱ ${fmtDur(p.dur)}</span>
-            ${p.pt!=='none'?`<span class="badge-price">${fmtPrice(p)}</span>`:''}
+    const [procs, promo] = await Promise.all([getProcs(), getActivePromo()]);
+
+    // Banner de promoção ativa
+    let banner = '';
+    if (promo) {
+      banner = `
+        <div class="promo-banner">
+          <span class="promo-banner-icon">🏷</span>
+          <div class="promo-banner-text">
+            <strong>${promo.name}</strong>
+            <span>Válida até ${fmtDate(promo.end_date)}</span>
           </div>
+          <span class="promo-pct">${Number(promo.discount).toFixed(0)}% OFF</span>
         </div>
-        <div class="proc-arr">›</div>
-      </div>
-    `).join('');
+      `;
+    }
+
+    list.innerHTML = banner + procs.map(p => {
+      let priceBadge = '';
+      if (p.pt === 'none') {
+        priceBadge = '';
+      } else if (promo && p.pt === 'fixed' && p.price) {
+        const disc = calcDiscounted(Number(p.price), Number(promo.discount));
+        priceBadge = `
+          <span class="badge-promo">R$ ${Number(p.price).toLocaleString('pt-BR')}</span>
+          <span class="badge-promo-new">R$ ${disc.toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>
+          <span class="badge-promo-tag">🏷 ${promo.name}</span>
+        `;
+      } else {
+        priceBadge = `<span class="badge-price">${fmtPrice(p)}</span>`;
+      }
+      return `
+        <div class="proc-item" onclick="selProc(${p.id})">
+          <div>
+            <div class="pn">${p.name}</div>
+            <div class="proc-meta">
+              <span class="badge-dur">⏱ ${fmtDur(p.dur)}</span>
+              ${priceBadge}
+            </div>
+          </div>
+          <div class="proc-arr">›</div>
+        </div>
+      `;
+    }).join('');
   } catch(e) {
     list.innerHTML = `<div class="notice err">Erro ao carregar procedimentos. Tente novamente.</div>`;
   }
 }
 async function selProc(id) {
-  const procs = await getProcs();
-  // Comparação com Number() para evitar mismatch de tipo (int vs string) no segundo agendamento
+  const [procs, promo] = await Promise.all([getProcs(), getActivePromo()]);
   const p = procs.find(x => Number(x.id) === Number(id));
   if (!p) return;
-  BK.procId=id; BK.procData=p; BK.date=null; BK.time=null;
+  BK.procId=id; BK.procData=p; BK.promo=promo; BK.date=null; BK.time=null;
   const c = CITIES.find(x=>x.id===BK.cityId);
   document.getElementById('s3-sub').textContent=`${c.short} · ${p.name}`;
+
+  // Preço exibido na barra (com desconto se promo ativa)
+  let priceDisplay = '';
+  if (p.pt !== 'none') {
+    if (promo && p.pt === 'fixed' && p.price) {
+      const disc = calcDiscounted(Number(p.price), Number(promo.discount));
+      priceDisplay = `
+        <div style="text-align:right">
+          <div style="font-size:13px;text-decoration:line-through;opacity:.6;color:var(--gold-light)">R$ ${Number(p.price).toLocaleString('pt-BR')}</div>
+          <div class="pb-price">R$ ${disc.toLocaleString('pt-BR',{minimumFractionDigits:2})}</div>
+          <div style="font-size:10px;color:var(--gold-light);opacity:.9">${Number(promo.discount).toFixed(0)}% off</div>
+        </div>`;
+    } else {
+      priceDisplay = `<div class="pb-price">${fmtPrice(p)}</div>`;
+    }
+  }
   document.getElementById('proc-bar').innerHTML=`
     <div><div class="pb-name">${p.name}</div><div class="pb-dur">⏱ ${fmtDur(p.dur)}</div></div>
-    ${p.pt!=='none'?`<div class="pb-price">${fmtPrice(p)}</div>`:''}
+    ${priceDisplay}
   `;
   const now=new Date(); CAL={y:now.getFullYear(),mo:now.getMonth()};
   goStep(3);
@@ -840,7 +950,19 @@ function renderReview() {
     <div class="rev-row"><span class="rl">Data</span><span class="rv">${fmtDateLong(BK.date)}</span></div>
     <div class="rev-row"><span class="rl">Horário</span><span class="rv">${BK.time} – ${end}</span></div>
     <div class="rev-row"><span class="rl">Duração</span><span class="rv">${fmtDur(p.dur)}</span></div>
-    <div class="rev-row"><span class="rl">Valor</span><span class="rv" style="color:var(--gold)">${fmtPrice(p)}</span></div>
+    <div class="rev-row"><span class="rl">Valor</span><span class="rv" style="color:var(--gold)">
+      ${(()=>{
+        if(p.pt==='none') return '—';
+        if(p.pt==='eval') return 'Sob avaliação';
+        if(!p.price) return '—';
+        const promo=BK.promo;
+        if(promo && p.pt==='fixed'){
+          const disc=calcDiscounted(Number(p.price),Number(promo.discount));
+          return `<span style="text-decoration:line-through;opacity:.55;font-size:11px">R$ ${Number(p.price).toLocaleString('pt-BR')}</span> <strong>R$ ${disc.toLocaleString('pt-BR',{minimumFractionDigits:2})}</strong><br><span style="font-size:10px;color:var(--rose)">${promo.name} · ${Number(promo.discount).toFixed(0)}% off</span>`;
+        }
+        return fmtPrice(p);
+      })()}
+    </span></div>
     <div class="rev-row"><span class="rl">Nome</span><span class="rv">${BK.name}</span></div>
     <div class="rev-row"><span class="rl">WhatsApp</span><span class="rv"><a href="${phoneToWA(BK.phone)}" target="_blank" style="color:var(--rose);text-decoration:none">${fmtPhone(BK.phone)} 💬</a></span></div>
   `;
@@ -906,6 +1028,13 @@ async function confirmBooking() {
     const dur = Number(p.dur) || 60;
     const et  = m2t(t2m(BK.time) + dur);
 
+    // Preço efetivo: aplica desconto se promoção ativa
+    const promo = BK.promo;
+    let effectivePrice = p.price ? Number(p.price) : null;
+    if (promo && p.pt === 'fixed' && effectivePrice) {
+      effectivePrice = calcDiscounted(effectivePrice, Number(promo.discount));
+    }
+
     // POST com timeout de 12s — evita travar para sempre
     await withTimeout(POST('/api/appointments', {
       cityId:  Number(BK.cityId),
@@ -917,7 +1046,7 @@ async function confirmBooking() {
       et,
       name:  BK.name,
       phone: BK.phone,
-      price: p.price || null,
+      price: effectivePrice,
       pt:    p.pt || 'fixed',
     }));
 
@@ -994,9 +1123,9 @@ function initAdmin() {
   showSec('agenda');
 }
 
-const SEC_TITLES={agenda:'Agenda',blocked:'Bloquear Datas',revenue:'Receita',procs:'Procedimentos',backup:'Backup'};
+const SEC_TITLES={agenda:'Agenda',blocked:'Bloquear Datas',revenue:'Receita',promos:'Promoções',procs:'Procedimentos',backup:'Backup'};
 function showSec(name){
-  ['agenda','blocked','revenue','procs','backup'].forEach(s=>{
+  ['agenda','blocked','revenue','promos','procs','backup'].forEach(s=>{
     const sec=document.getElementById(`sec-${s}`); if(sec) sec.classList.toggle('hidden',s!==name);
     const el=document.getElementById(`nav-${s}`); if(el) el.classList.toggle('active',s===name);
   });
@@ -1004,6 +1133,7 @@ function showSec(name){
   if(name==='agenda'){renderStats();renderAgenda()}
   if(name==='blocked'){renderBlocked();renderBlockedSlots()}
   if(name==='revenue'){renderRevCards();renderRevTable()}
+  if(name==='promos') renderPromos();
   if(name==='procs') renderProcsAdmin();
   if(name==='backup') renderBackupSummary();
   if(window.innerWidth<=768) document.getElementById('adm-sb').classList.remove('open');
@@ -1391,6 +1521,96 @@ async function deleteProc(id) {
     await DEL(`/api/procedures/${id}`);
     clearProcsCache(); showToast('Procedimento removido','ok'); renderProcsAdmin();
   } catch(e){ showToast(e.message,'error'); }
+}
+
+// ── PROMOÇÕES ────────────────────────────────────
+let _activePromo = undefined; // undefined=não buscou, null=sem promoção
+
+async function getActivePromo(refresh=false) {
+  if (_activePromo === undefined || refresh) {
+    _activePromo = await GET('/api/promotions/active').catch(() => null);
+  }
+  return _activePromo;
+}
+
+function calcDiscounted(price, discount) {
+  return Math.round(price * (1 - discount / 100) * 100) / 100;
+}
+
+function fmtPriceWithPromo(p, promo) {
+  if (!promo || p.pt !== 'fixed' || !p.price) return fmtPrice(p);
+  const disc = calcDiscounted(Number(p.price), Number(promo.discount));
+  return `R$ ${disc.toLocaleString('pt-BR', {minimumFractionDigits:2})}`;
+}
+
+// Admin: listar promoções
+async function renderPromos() {
+  const el = document.getElementById('promo-list');
+  el.innerHTML = '<div style="color:var(--text-light);font-size:12px">Carregando...</div>';
+  try {
+    const list = await api('GET', '/api/promotions');
+    if (!list.length) {
+      el.innerHTML = '<div style="color:var(--text-light);font-size:13px">Nenhuma promoção cadastrada.</div>';
+      return;
+    }
+    const today = new Date().toISOString().slice(0,10);
+    el.innerHTML = list.map(p => {
+      const isActive  = p.active && p.start_date <= today && p.end_date >= today;
+      const isUpcoming= p.active && p.start_date > today;
+      const isExpired = p.end_date < today;
+      const statusClass = isActive?'ps-active':isUpcoming?'ps-upcoming':isExpired?'ps-expired':'ps-inactive';
+      const statusLabel = isActive?'✓ Ativa agora':isUpcoming?'⏳ Agendada':isExpired?'Expirada':'Inativa';
+      return `
+        <div class="promo-card ${isActive?'active-now':''}">
+          <div>
+            <div class="promo-name">${p.name}</div>
+            <div class="promo-period">
+              📅 ${fmtDate(p.start_date)} até ${fmtDate(p.end_date)}
+            </div>
+            <span class="promo-status ${statusClass}">${statusLabel}</span>
+          </div>
+          <div style="text-align:right">
+            <div class="promo-disc">${Number(p.discount).toFixed(0)}%<span>de desconto</span></div>
+            ${p.active ? `<button class="act-btn danger" onclick="deletePromo(${p.id})" style="margin-top:8px">Desativar</button>` : ''}
+          </div>
+        </div>
+      `;
+    }).join('');
+  } catch(e) {
+    el.innerHTML = `<div style="color:var(--error);font-size:12px">Erro: ${e.message}</div>`;
+  }
+}
+
+async function createPromo() {
+  const name  = document.getElementById('pm-name').value.trim();
+  const start = document.getElementById('pm-start').value;
+  const end   = document.getElementById('pm-end').value;
+  const disc  = document.getElementById('pm-disc').value;
+  if (!name || !start || !end || !disc) { showToast('Preencha todos os campos','error'); return; }
+  if (start > end) { showToast('Data de início deve ser antes do fim','error'); return; }
+  if (Number(disc) <= 0 || Number(disc) > 100) { showToast('Desconto deve ser entre 1% e 100%','error'); return; }
+  try {
+    await POST('/api/promotions', { name, start_date:start, end_date:end, discount:Number(disc) });
+    document.getElementById('pm-name').value='';
+    document.getElementById('pm-start').value='';
+    document.getElementById('pm-end').value='';
+    document.getElementById('pm-disc').value='';
+    _activePromo = undefined; // reset cache
+    clearProcsCache();
+    showToast('Promoção criada com sucesso!','ok');
+    renderPromos();
+  } catch(e) { showToast(e.message,'error'); }
+}
+
+async function deletePromo(id) {
+  if (!confirm('Desativar esta promoção?')) return;
+  try {
+    await DEL(`/api/promotions/${id}`);
+    _activePromo = undefined;
+    clearProcsCache();
+    showToast('Promoção desativada','ok');
+    renderPromos();
+  } catch(e) { showToast(e.message,'error'); }
 }
 
 // ── BACKUP ───────────────────────────────────────
