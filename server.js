@@ -153,6 +153,89 @@ async function initDB() {
       CREATE INDEX IF NOT EXISTS idx_bslot_date ON blocked_slots(date);
     `);
 
+    // ── CIDADES ──────────────────────────────────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS cities (
+        id            SERIAL       PRIMARY KEY,
+        name          VARCHAR(100) NOT NULL,
+        uf            VARCHAR(2)   NOT NULL,
+        local_name    VARCHAR(200) NOT NULL,
+        address       VARCHAR(200) NOT NULL,
+        number        VARCHAR(20)  NOT NULL,
+        complement    VARCHAR(100),
+        neighborhood  VARCHAR(100) NOT NULL,
+        cep           VARCHAR(9)   NOT NULL,
+        maps_url      TEXT,
+        is_active     BOOLEAN      NOT NULL DEFAULT TRUE,
+        created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+      );
+    `);
+
+    // Procedimentos habilitados por cidade (habilitado por padrão)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS city_procedures (
+        city_id   INTEGER NOT NULL REFERENCES cities(id) ON DELETE CASCADE,
+        proc_id   INTEGER NOT NULL REFERENCES procedures(id) ON DELETE CASCADE,
+        enabled   BOOLEAN NOT NULL DEFAULT TRUE,
+        PRIMARY KEY (city_id, proc_id)
+      );
+    `);
+
+    // ── CONFIGURAÇÃO DE HORÁRIOS ──────────────────────────────────────────────
+    // scope: 'global' | 'day' | 'city_day'
+    // Prioridade de resolução: city_day > day > global
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS work_configs (
+        id          SERIAL       PRIMARY KEY,
+        scope       VARCHAR(10)  NOT NULL DEFAULT 'global',
+        city_id     INTEGER      REFERENCES cities(id) ON DELETE CASCADE,
+        day_of_week SMALLINT,    -- 0=Dom, 1=Seg ... 6=Sáb; NULL se global
+        is_active   BOOLEAN      NOT NULL DEFAULT TRUE,
+        work_start  TIME,        -- NULL = dia desabilitado
+        work_end    TIME,
+        created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+      );
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_wcfg_lookup ON work_configs(scope, city_id, day_of_week);
+    `);
+
+    // Pausas de cada work_config (almoço, lanche, etc.)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS work_breaks (
+        id          SERIAL   PRIMARY KEY,
+        config_id   INTEGER  NOT NULL REFERENCES work_configs(id) ON DELETE CASCADE,
+        break_start TIME     NOT NULL,
+        break_end   TIME     NOT NULL
+      );
+    `);
+
+    // ── PERFIL DO ADMINISTRADOR ───────────────────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS admin_profile (
+        id        SERIAL       PRIMARY KEY,
+        name      VARCHAR(200) NOT NULL DEFAULT 'Administrador',
+        phone     VARCHAR(30),
+        email     VARCHAR(200),
+        login     VARCHAR(50)  NOT NULL DEFAULT 'admin',
+        password  VARCHAR(200) NOT NULL,
+        updated_at TIMESTAMPTZ
+      );
+    `);
+
+    // ── DATAS COMEMORATIVAS ──────────────────────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS commemorative_dates (
+        id        SERIAL       PRIMARY KEY,
+        day       SMALLINT     NOT NULL CHECK (day BETWEEN 1 AND 31),
+        month     SMALLINT     NOT NULL CHECK (month BETWEEN 1 AND 12),
+        title     VARCHAR(200) NOT NULL,
+        message   VARCHAR(300) NOT NULL,
+        is_active BOOLEAN      NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+
     await client.query('COMMIT');
 
     // Seed: insere procedimentos padrão apenas se a tabela estiver vazia
@@ -166,6 +249,72 @@ async function initDB() {
         );
       }
       console.log(`[DB] ${DEFAULT_PROCS.length} procedimentos inseridos.`);
+    }
+
+    // ── Seed: cidades pré-cadastradas ────────────────────────────────────────
+    const { rowCount: cityCount } = await client.query('SELECT 1 FROM cities LIMIT 1');
+    if (cityCount === 0) {
+      const c1 = await client.query(
+        `INSERT INTO cities (name,uf,local_name,address,number,complement,neighborhood,cep,maps_url)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+        ['São Sebastião da Amoreira','PR','Clínica Bela Essência',
+         'Praça Comendador Jeremias Lunardelli','55','2 andar','Centro','86240-000',
+         'https://maps.google.com/?q=Praça+Comendador+Jeremias+Lunardelli+55+São+Sebastião+da+Amoreira+PR']
+      );
+      const c2 = await client.query(
+        `INSERT INTO cities (name,uf,local_name,address,number,complement,neighborhood,cep,maps_url)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+        ['Assaí','PR','Studio K','Rua Vereador Clovis Negreiro','250','','Copasa','86220-000',
+         'https://maps.google.com/?q=Rua+Vereador+Clovis+Negreiro+250+Assaí+PR']
+      );
+      console.log('[DB] Cidades pré-cadastradas.');
+
+      // Seed: work_configs por cidade+dia
+      // SSA: Seg(1),Ter(2),Qui(4),Sex(5),Sáb(6) ativos — Qua(3) e Dom(0) desabilitados
+      const ssaId = c1.rows[0].id, assaiId = c2.rows[0].id;
+      const ssaDays = [
+        {d:0,on:false},{d:1,on:true},{d:2,on:true},{d:3,on:false},
+        {d:4,on:true},{d:5,on:true},{d:6,on:true}
+      ];
+      const assaiDays = [
+        {d:0,on:false},{d:1,on:false},{d:2,on:false},{d:3,on:true},
+        {d:4,on:false},{d:5,on:false},{d:6,on:false}
+      ];
+      for (const {d,on} of ssaDays) {
+        const r = await client.query(
+          `INSERT INTO work_configs (scope,city_id,day_of_week,is_active,work_start,work_end)
+           VALUES ('city_day',$1,$2,$3,$4,$5) RETURNING id`,
+          [ssaId, d, on, on?'08:00':null, on?'18:00':null]
+        );
+        if (on) await client.query(
+          `INSERT INTO work_breaks (config_id,break_start,break_end) VALUES ($1,'12:00','13:00')`,
+          [r.rows[0].id]
+        );
+      }
+      for (const {d,on} of assaiDays) {
+        const r = await client.query(
+          `INSERT INTO work_configs (scope,city_id,day_of_week,is_active,work_start,work_end)
+           VALUES ('city_day',$1,$2,$3,$4,$5) RETURNING id`,
+          [assaiId, d, on, on?'08:00':null, on?'18:00':null]
+        );
+        if (on) await client.query(
+          `INSERT INTO work_breaks (config_id,break_start,break_end) VALUES ($1,'12:00','13:00')`,
+          [r.rows[0].id]
+        );
+      }
+      console.log('[DB] Configurações de horário pré-cadastradas.');
+    }
+
+    // ── Seed: perfil admin ────────────────────────────────────────────────────
+    const { rowCount: apCount } = await client.query('SELECT 1 FROM admin_profile LIMIT 1');
+    if (apCount === 0) {
+      const initPass = process.env.ADMIN_PASS || 'belaessencia2025';
+      await client.query(
+        `INSERT INTO admin_profile (name,phone,email,login,password)
+         VALUES ($1,$2,$3,'admin',$4)`,
+        ['Ana Paula Silva','(43) 99873-4460','anapaulasilvanac@gmail.com', initPass]
+      );
+      console.log('[DB] Perfil admin pré-cadastrado.');
     }
 
     console.log('[DB] Schema inicializado com sucesso.');
@@ -224,8 +373,20 @@ app.get('/api/health', async (req, res) => {
 });
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
   const { user, pass } = req.body;
+  try {
+    // Check DB first, fallback to env vars
+    const { rows } = await pool.query(
+      'SELECT password FROM admin_profile WHERE login=$1 LIMIT 1', [user]
+    );
+    const dbPass = rows.length ? rows[0].password : null;
+    const validPass = dbPass ? (pass === dbPass) : (user === ADMIN_USER && pass === ADMIN_PASS);
+    if (validPass) {
+      req.session.isAdmin = true;
+      return res.json({ ok: true });
+    }
+  } catch { /* fallback to env */ }
   if (user === ADMIN_USER && pass === ADMIN_PASS) {
     req.session.isAdmin = true;
     return res.json({ ok: true });
@@ -466,6 +627,42 @@ function minToTime(m) {
   return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 }
 
+// Resolve work config for a specific city + day_of_week (priority: city_day > day > global)
+async function resolveWorkConfig(cityId, dayOfWeek) {
+  // Try city_day
+  let r = await pool.query(
+    `SELECT wc.*, array_agg(json_build_object('s',wb.break_start,'e',wb.break_end)) FILTER (WHERE wb.id IS NOT NULL) as breaks
+     FROM work_configs wc
+     LEFT JOIN work_breaks wb ON wb.config_id = wc.id
+     WHERE wc.scope='city_day' AND wc.city_id=$1 AND wc.day_of_week=$2
+     GROUP BY wc.id LIMIT 1`,
+    [cityId, dayOfWeek]
+  );
+  if (r.rowCount) return r.rows[0];
+  // Try day
+  r = await pool.query(
+    `SELECT wc.*, array_agg(json_build_object('s',wb.break_start,'e',wb.break_end)) FILTER (WHERE wb.id IS NOT NULL) as breaks
+     FROM work_configs wc
+     LEFT JOIN work_breaks wb ON wb.config_id = wc.id
+     WHERE wc.scope='day' AND wc.day_of_week=$1
+     GROUP BY wc.id LIMIT 1`,
+    [dayOfWeek]
+  );
+  if (r.rowCount) return r.rows[0];
+  // Try global
+  r = await pool.query(
+    `SELECT wc.*, array_agg(json_build_object('s',wb.break_start,'e',wb.break_end)) FILTER (WHERE wb.id IS NOT NULL) as breaks
+     FROM work_configs wc
+     LEFT JOIN work_breaks wb ON wb.config_id = wc.id
+     WHERE wc.scope='global'
+     GROUP BY wc.id LIMIT 1`
+  );
+  if (r.rowCount) return r.rows[0];
+  // Fallback to hardcoded defaults
+  return { is_active:true, work_start:'08:00', work_end:'18:00',
+           breaks:[{s:'12:00:00',e:'13:00:00'}] };
+}
+
 app.get('/api/availability', async (req, res) => {
   const { date, procId, cityId } = req.query;
   if (!date || !procId || !cityId) {
@@ -477,26 +674,47 @@ app.get('/api/availability', async (req, res) => {
     const blk = await pool.query('SELECT 1 FROM blocked_dates WHERE date=$1', [date]);
     if (blk.rowCount > 0) return res.json([]);
 
-    // Busca duração do procedimento
-    const pRes = await pool.query('SELECT dur FROM procedures WHERE id=$1 AND active=TRUE', [procId]);
+    // Resolve config de horário para esta cidade+dia
+    const [y,m,d] = date.split('-').map(Number);
+    const dayOfWeek = new Date(y, m-1, d).getDay();
+    const cfg = await resolveWorkConfig(Number(cityId), dayOfWeek);
+
+    // Dia desabilitado na config
+    if (!cfg.is_active || !cfg.work_start || !cfg.work_end) return res.json([]);
+
+    const wStart = timeToMin(cfg.work_start);
+    const wEnd   = timeToMin(cfg.work_end);
+    const breaks  = (cfg.breaks || []).filter(Boolean).map(b => ({
+      s: timeToMin(b.s), e: timeToMin(b.e)
+    }));
+
+    // Verifica se procedimento está habilitado para esta cidade
+    const pRes = await pool.query(
+      `SELECT p.dur FROM procedures p
+       LEFT JOIN city_procedures cp ON cp.proc_id=p.id AND cp.city_id=$2
+       WHERE p.id=$1 AND p.active=TRUE AND (cp.enabled IS NULL OR cp.enabled=TRUE)`,
+      [procId, cityId]
+    );
     if (!pRes.rowCount) return res.json([]);
     const dur = pRes.rows[0].dur;
 
-    // Busca agendamentos confirmados E horários bloqueados no dia
+    // Agendamentos e horários bloqueados
     const [aRes, sRes] = await Promise.all([
       pool.query(`SELECT st, et FROM appointments WHERE date=$1 AND status!='cancelled'`, [date]),
       pool.query(`SELECT st, et FROM blocked_slots WHERE date=$1`, [date]),
     ]);
     const busy = [...aRes.rows, ...sRes.rows].map(r => ({
-      s: timeToMin(r.st),
-      e: timeToMin(r.et),
+      s: timeToMin(r.st), e: timeToMin(r.et),
     }));
 
-    // Calcula slots livres
+    // Calcula slots livres respeitando configuração dinâmica
     const slots = [];
-    for (let s = WSTART; s <= WLAST; s += SLOT) {
+    for (let s = wStart; s <= wEnd; s += SLOT) {
       const e = s + dur;
-      if (s < LEND && e > LSTRT) continue; // bloqueia almoço
+      // Verificar pausas
+      const inBreak = breaks.some(b => s < b.e && e > b.s);
+      if (inBreak) continue;
+      // Verificar sobreposição com agendamentos
       const overlap = busy.some(b => s < b.e && e > b.s);
       if (!overlap) slots.push(minToTime(s));
     }
@@ -656,6 +874,247 @@ app.get('/api/backup/export', requireAdmin, async (req, res) => {
       blocked_slots: slots.rows,
       promotions:    promos.rows,
     });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Cidades ──────────────────────────────────────────────────────────────────
+app.get('/api/cities', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT * FROM cities WHERE is_active=TRUE ORDER BY id'
+    );
+    // Attach enabled procedures per city
+    for (const city of rows) {
+      const pr = await pool.query(
+        `SELECT p.id, p.name, p.dur, p.price, p.pt,
+                COALESCE(cp.enabled, TRUE) as enabled
+         FROM procedures p
+         LEFT JOIN city_procedures cp ON cp.proc_id=p.id AND cp.city_id=$1
+         WHERE p.active=TRUE ORDER BY p.id`,
+        [city.id]
+      );
+      city.procedures = pr.rows;
+      // Active days from work_configs
+      const wd = await pool.query(
+        `SELECT day_of_week, is_active FROM work_configs
+         WHERE scope='city_day' AND city_id=$1 ORDER BY day_of_week`,
+        [city.id]
+      );
+      city.activeDays = wd.rows.filter(r=>r.is_active).map(r=>r.day_of_week);
+    }
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/cities/all', requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT * FROM cities ORDER BY id');
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/cities', requireAdmin, async (req, res) => {
+  const { name, uf, local_name, address, number, complement, neighborhood, cep, proc_ids } = req.body;
+  if (!name||!uf||!local_name||!address||!number||!neighborhood||!cep)
+    return res.status(400).json({ error: 'Campos obrigatórios faltando' });
+  try {
+    const mapsUrl = `https://maps.google.com/?q=${encodeURIComponent(address+' '+number+' '+name+' '+uf)}`;
+    const { rows } = await pool.query(
+      `INSERT INTO cities (name,uf,local_name,address,number,complement,neighborhood,cep,maps_url)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+      [name,uf,local_name,address,number,complement||'',neighborhood,cep,mapsUrl]
+    );
+    const city = rows[0];
+    // Seed default schedule (all days disabled)
+    const procs = await pool.query('SELECT id FROM procedures WHERE active=TRUE');
+    for (let d=0; d<=6; d++) {
+      await pool.query(
+        `INSERT INTO work_configs (scope,city_id,day_of_week,is_active,work_start,work_end)
+         VALUES ('city_day',$1,$2,FALSE,NULL,NULL)`,
+        [city.id, d]
+      );
+    }
+    // Insert procedure overrides (all enabled by default unless specified)
+    if (proc_ids && proc_ids.length) {
+      for (const p of procs.rows) {
+        await pool.query(
+          `INSERT INTO city_procedures (city_id,proc_id,enabled) VALUES ($1,$2,$3)
+           ON CONFLICT (city_id,proc_id) DO UPDATE SET enabled=EXCLUDED.enabled`,
+          [city.id, p.id, proc_ids.includes(p.id)]
+        );
+      }
+    }
+    res.status(201).json(city);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/api/cities/:id', requireAdmin, async (req, res) => {
+  const { name, uf, local_name, address, number, complement, neighborhood, cep, is_active, proc_overrides } = req.body;
+  try {
+    const mapsUrl = `https://maps.google.com/?q=${encodeURIComponent((address||'')+' '+(number||'')+' '+(name||'')+' '+(uf||''))}`;
+    const { rows } = await pool.query(
+      `UPDATE cities SET name=COALESCE($1,name), uf=COALESCE($2,uf), local_name=COALESCE($3,local_name),
+       address=COALESCE($4,address), number=COALESCE($5,number), complement=COALESCE($6,complement),
+       neighborhood=COALESCE($7,neighborhood), cep=COALESCE($8,cep),
+       maps_url=$9, is_active=COALESCE($10,is_active)
+       WHERE id=$11 RETURNING *`,
+      [name,uf,local_name,address,number,complement,neighborhood,cep,mapsUrl,is_active,req.params.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Cidade não encontrada' });
+    // Update procedure overrides
+    if (proc_overrides) {
+      for (const [procId, enabled] of Object.entries(proc_overrides)) {
+        await pool.query(
+          `INSERT INTO city_procedures (city_id,proc_id,enabled) VALUES ($1,$2,$3)
+           ON CONFLICT (city_id,proc_id) DO UPDATE SET enabled=EXCLUDED.enabled`,
+          [req.params.id, procId, enabled]
+        );
+      }
+    }
+    res.json(rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/cities/:id', requireAdmin, async (req, res) => {
+  try {
+    // Only delete if inactive
+    const { rows } = await pool.query('SELECT is_active FROM cities WHERE id=$1', [req.params.id]);
+    if (!rows.length) return res.status(404).json({ error: 'Cidade não encontrada' });
+    if (rows[0].is_active) return res.status(400).json({ error: 'Desative a cidade antes de excluir' });
+    await pool.query('DELETE FROM cities WHERE id=$1', [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Work Configs ──────────────────────────────────────────────────────────────
+app.get('/api/work-configs', requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT wc.*, c.name as city_name,
+              array_agg(json_build_object('id',wb.id,'s',wb.break_start::text,'e',wb.break_end::text))
+                FILTER (WHERE wb.id IS NOT NULL) as breaks
+       FROM work_configs wc
+       LEFT JOIN cities c ON c.id=wc.city_id
+       LEFT JOIN work_breaks wb ON wb.config_id=wc.id
+       GROUP BY wc.id, c.name ORDER BY wc.city_id, wc.day_of_week`
+    );
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/api/work-configs/:id', requireAdmin, async (req, res) => {
+  const { is_active, work_start, work_end, breaks } = req.body;
+  try {
+    await pool.query(
+      `UPDATE work_configs SET is_active=$1, work_start=$2, work_end=$3 WHERE id=$4`,
+      [is_active, is_active ? work_start : null, is_active ? work_end : null, req.params.id]
+    );
+    if (breaks !== undefined) {
+      await pool.query('DELETE FROM work_breaks WHERE config_id=$1', [req.params.id]);
+      if (breaks && breaks.length) {
+        for (const b of breaks) {
+          await pool.query(
+            'INSERT INTO work_breaks (config_id,break_start,break_end) VALUES ($1,$2,$3)',
+            [req.params.id, b.s, b.e]
+          );
+        }
+      }
+    }
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Admin Profile ─────────────────────────────────────────────────────────────
+app.get('/api/admin/profile', requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT id, name, phone, email, login FROM admin_profile LIMIT 1'
+    );
+    res.json(rows[0] || {});
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/api/admin/profile', requireAdmin, async (req, res) => {
+  const { name, phone, email } = req.body;
+  if (!name||!phone||!email) return res.status(400).json({ error: 'Nome, telefone e e-mail são obrigatórios' });
+  try {
+    await pool.query(
+      `UPDATE admin_profile SET name=$1, phone=$2, email=$3, updated_at=NOW() WHERE login='admin'`,
+      [name, phone, email]
+    );
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/api/admin/password', requireAdmin, async (req, res) => {
+  const { current, newPass, confirm } = req.body;
+  if (!current||!newPass||!confirm) return res.status(400).json({ error: 'Preencha todos os campos' });
+  if (newPass !== confirm) return res.status(400).json({ error: 'Nova senha e confirmação não coincidem' });
+  // Validate password rules: min 8, letters+numbers, at least 1 uppercase, no special chars
+  if (!/^[A-Za-z0-9]{8,}$/.test(newPass))
+    return res.status(400).json({ error: 'Senha deve ter no mínimo 8 caracteres, apenas letras e números' });
+  if (!/[A-Z]/.test(newPass))
+    return res.status(400).json({ error: 'Senha deve ter pelo menos uma letra maiúscula' });
+  if (!/[0-9]/.test(newPass))
+    return res.status(400).json({ error: 'Senha deve ter pelo menos um número' });
+  try {
+    const { rows } = await pool.query('SELECT password FROM admin_profile LIMIT 1');
+    const stored = rows.length ? rows[0].password : (process.env.ADMIN_PASS || '');
+    if (current !== stored) return res.status(401).json({ error: 'Senha atual incorreta' });
+    await pool.query(`UPDATE admin_profile SET password=$1, updated_at=NOW() WHERE login='admin'`, [newPass]);
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Datas Comemorativas ───────────────────────────────────────────────────────
+app.get('/api/commemorative', async (req, res) => {
+  try {
+    const now = new Date();
+    const { rows } = await pool.query(
+      `SELECT * FROM commemorative_dates
+       WHERE is_active=TRUE AND day=$1 AND month=$2 LIMIT 1`,
+      [now.getDate(), now.getMonth() + 1]
+    );
+    res.json(rows[0] || null);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/commemorative/all', requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT * FROM commemorative_dates ORDER BY month,day');
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/commemorative', requireAdmin, async (req, res) => {
+  const { day, month, title, message } = req.body;
+  if (!day||!month||!title||!message) return res.status(400).json({ error: 'Todos os campos obrigatórios' });
+  if (message.length > 300) return res.status(400).json({ error: 'Mensagem máximo 300 caracteres' });
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO commemorative_dates (day,month,title,message) VALUES ($1,$2,$3,$4) RETURNING *`,
+      [day, month, title, message]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.patch('/api/commemorative/:id/toggle', requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'UPDATE commemorative_dates SET is_active=NOT is_active WHERE id=$1 RETURNING is_active', [req.params.id]
+    );
+    res.json(rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/commemorative/:id', requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT is_active FROM commemorative_dates WHERE id=$1',[req.params.id]);
+    if (!rows.length) return res.status(404).json({ error: 'Data não encontrada' });
+    if (rows[0].is_active) return res.status(400).json({ error: 'Cancele a data antes de excluir' });
+    await pool.query('DELETE FROM commemorative_dates WHERE id=$1', [req.params.id]);
+    res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
