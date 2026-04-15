@@ -549,7 +549,7 @@ tr:hover td{background:#FAF3F6}
               <div style="padding:20px">
                 <div class="tbl-ttl" style="margin-bottom:6px">Nova Promoção</div>
                 <p style="font-size:12px;color:var(--text-light);margin-bottom:16px;line-height:1.7">
-                  O desconto é aplicado automaticamente em todos os procedimentos com valor fixo durante o período cadastrado.
+                  O desconto é aplicado automaticamente nos procedimentos selecionados durante o período.
                 </p>
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
                   <div class="fg" style="margin:0;grid-column:1/-1">
@@ -569,7 +569,20 @@ tr:hover td{background:#FAF3F6}
                     <input type="number" class="fi" id="pm-disc" placeholder="Ex: 15" min="1" max="100" step="0.5" style="width:100%;font-size:14px">
                   </div>
                 </div>
-                <button class="btn btn-primary" onclick="createPromo()" style="width:auto;padding:10px 24px;margin-top:14px">🏷 Criar Promoção</button>
+                <!-- Seleção de procedimentos -->
+                <div style="margin-top:14px">
+                  <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:var(--text-light);margin-bottom:8px">Aplicar em</div>
+                  <div style="display:flex;gap:10px;margin-bottom:10px">
+                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text)">
+                      <input type="radio" name="pm-scope" value="all" id="pm-all" checked onchange="togglePromoScope()" style="accent-color:var(--rose)"> Todos os procedimentos
+                    </label>
+                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text)">
+                      <input type="radio" name="pm-scope" value="select" id="pm-sel" onchange="togglePromoScope()" style="accent-color:var(--rose)"> Selecionar
+                    </label>
+                  </div>
+                  <div id="pm-proc-list" class="hidden" style="background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:7px;max-height:240px;overflow-y:auto"></div>
+                </div>
+                <button class="btn btn-primary" onclick="createPromo()" style="width:auto;padding:10px 24px;margin-top:16px">🏷 Criar Promoção</button>
               </div>
             </div>
             <div class="tbl-wrap">
@@ -616,7 +629,7 @@ tr:hover td{background:#FAF3F6}
 // ══════════════════════════════════════════════════
 // VERSÃO — altere APENAS aqui; atualiza todos os rodapés
 // ══════════════════════════════════════════════════
-const APP_VERSION  = '1.4.0';
+const APP_VERSION  = '1.4.1';
 const APP_COPY     = `Versão: ${APP_VERSION} | Clínica Bela Essência © ${new Date().getFullYear()}`;
 
 function renderFooters() {
@@ -782,7 +795,7 @@ async function renderProcs() {
       let priceBadge = '';
       if (p.pt === 'none') {
         priceBadge = '';
-      } else if (promo && p.pt === 'fixed' && p.price) {
+      } else if (promo && p.pt === 'fixed' && p.price && promoAppliesToProc(promo, p.id)) {
         const disc = calcDiscounted(Number(p.price), Number(promo.discount));
         priceBadge = `
           <span class="badge-promo">R$ ${Number(p.price).toLocaleString('pt-BR')}</span>
@@ -820,7 +833,7 @@ async function selProc(id) {
   // Preço exibido na barra (com desconto se promo ativa)
   let priceDisplay = '';
   if (p.pt !== 'none') {
-    if (promo && p.pt === 'fixed' && p.price) {
+    if (promo && p.pt === 'fixed' && p.price && promoAppliesToProc(promo, p.id)) {
       const disc = calcDiscounted(Number(p.price), Number(promo.discount));
       priceDisplay = `
         <div style="text-align:right">
@@ -956,7 +969,7 @@ function renderReview() {
         if(p.pt==='eval') return 'Sob avaliação';
         if(!p.price) return '—';
         const promo=BK.promo;
-        if(promo && p.pt==='fixed'){
+        if(promo && p.pt==='fixed' && promoAppliesToProc(promo, p.id)){
           const disc=calcDiscounted(Number(p.price),Number(promo.discount));
           return `<span style="text-decoration:line-through;opacity:.55;font-size:11px">R$ ${Number(p.price).toLocaleString('pt-BR')}</span> <strong>R$ ${disc.toLocaleString('pt-BR',{minimumFractionDigits:2})}</strong><br><span style="font-size:10px;color:var(--rose)">${promo.name} · ${Number(promo.discount).toFixed(0)}% off</span>`;
         }
@@ -1031,7 +1044,7 @@ async function confirmBooking() {
     // Preço efetivo: aplica desconto se promoção ativa
     const promo = BK.promo;
     let effectivePrice = p.price ? Number(p.price) : null;
-    if (promo && p.pt === 'fixed' && effectivePrice) {
+    if (promo && p.pt === 'fixed' && effectivePrice && promoAppliesToProc(promo, Number(BK.procId))) {
       effectivePrice = calcDiscounted(effectivePrice, Number(promo.discount));
     }
 
@@ -1537,10 +1550,39 @@ function calcDiscounted(price, discount) {
   return Math.round(price * (1 - discount / 100) * 100) / 100;
 }
 
+// Verifica se a promoção se aplica a um procedimento específico
+function promoAppliesToProc(promo, procId) {
+  if (!promo) return false;
+  if (promo.apply_to_all) return true;
+  const ids = promo.proc_ids || [];
+  return ids.map(Number).includes(Number(procId));
+}
+
 function fmtPriceWithPromo(p, promo) {
   if (!promo || p.pt !== 'fixed' || !p.price) return fmtPrice(p);
+  if (!promoAppliesToProc(promo, p.id)) return fmtPrice(p);
   const disc = calcDiscounted(Number(p.price), Number(promo.discount));
   return `R$ ${disc.toLocaleString('pt-BR', {minimumFractionDigits:2})}`;
+}
+
+// Admin: toggle procedure selection in promo form
+async function togglePromoScope() {
+  const isSelect = document.getElementById('pm-sel').checked;
+  const wrap = document.getElementById('pm-proc-list');
+  wrap.classList.toggle('hidden', !isSelect);
+  if (isSelect && !wrap.innerHTML.trim()) {
+    // Load procedures into checkboxes
+    try {
+      const procs = await getProcs();
+      wrap.innerHTML = procs.map(p =>
+        p.pt === 'fixed' && p.price ? `
+          <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:12.5px;font-weight:600;color:var(--text);padding:5px 0">
+            <input type="checkbox" name="pm-proc" value="${p.id}" style="accent-color:var(--rose);width:15px;height:15px;flex-shrink:0">
+            <span style="line-height:1.4">${p.name}<br><small style="color:var(--text-light);font-weight:400">${fmtPrice(p)}</small></span>
+          </label>` : ''
+      ).join('');
+    } catch(e) { wrap.innerHTML = '<div style="color:var(--error);font-size:12px">Erro ao carregar</div>'; }
+  }
 }
 
 // Admin: listar promoções
@@ -1555,23 +1597,26 @@ async function renderPromos() {
     }
     const today = new Date().toISOString().slice(0,10);
     el.innerHTML = list.map(p => {
-      const isActive  = p.active && p.start_date <= today && p.end_date >= today;
-      const isUpcoming= p.active && p.start_date > today;
-      const isExpired = p.end_date < today;
+      const isActive   = p.active && p.start_date <= today && p.end_date >= today;
+      const isUpcoming = p.active && p.start_date > today;
+      const isExpired  = p.end_date < today;
       const statusClass = isActive?'ps-active':isUpcoming?'ps-upcoming':isExpired?'ps-expired':'ps-inactive';
       const statusLabel = isActive?'✓ Ativa agora':isUpcoming?'⏳ Agendada':isExpired?'Expirada':'Inativa';
+      const scopeLabel  = p.apply_to_all ? 'Todos os procedimentos' : `${(p.proc_ids||[]).length} procedimento(s) selecionado(s)`;
       return `
         <div class="promo-card ${isActive?'active-now':''}">
           <div>
             <div class="promo-name">${p.name}</div>
-            <div class="promo-period">
-              📅 ${fmtDate(p.start_date)} até ${fmtDate(p.end_date)}
-            </div>
+            <div class="promo-period">📅 ${fmtDate(p.start_date)} até ${fmtDate(p.end_date)}</div>
+            <div style="font-size:11px;color:var(--text-light);margin-top:3px">🎯 ${scopeLabel}</div>
             <span class="promo-status ${statusClass}">${statusLabel}</span>
           </div>
           <div style="text-align:right">
             <div class="promo-disc">${Number(p.discount).toFixed(0)}%<span>de desconto</span></div>
-            ${p.active ? `<button class="act-btn danger" onclick="deletePromo(${p.id})" style="margin-top:8px">Desativar</button>` : ''}
+            <div style="display:flex;flex-direction:column;gap:5px;margin-top:9px;align-items:flex-end">
+              ${p.active ? `<button class="act-btn" onclick="deactivatePromo(${p.id})">Desativar</button>` : ''}
+              <button class="act-btn danger" onclick="hardDeletePromo(${p.id})" style="color:var(--error);border-color:var(--error)">🗑 Excluir</button>
+            </div>
           </div>
         </div>
       `;
@@ -1589,26 +1634,49 @@ async function createPromo() {
   if (!name || !start || !end || !disc) { showToast('Preencha todos os campos','error'); return; }
   if (start > end) { showToast('Data de início deve ser antes do fim','error'); return; }
   if (Number(disc) <= 0 || Number(disc) > 100) { showToast('Desconto deve ser entre 1% e 100%','error'); return; }
+
+  const isSelectScope = document.getElementById('pm-sel').checked;
+  let apply_to_all = !isSelectScope;
+  let proc_ids = [];
+  if (isSelectScope) {
+    proc_ids = [...document.querySelectorAll('input[name="pm-proc"]:checked')].map(el => Number(el.value));
+    if (!proc_ids.length) { showToast('Selecione ao menos um procedimento','error'); return; }
+  }
+
   try {
-    await POST('/api/promotions', { name, start_date:start, end_date:end, discount:Number(disc) });
+    await POST('/api/promotions', { name, start_date:start, end_date:end, discount:Number(disc), apply_to_all, proc_ids });
     document.getElementById('pm-name').value='';
     document.getElementById('pm-start').value='';
     document.getElementById('pm-end').value='';
     document.getElementById('pm-disc').value='';
-    _activePromo = undefined; // reset cache
+    document.getElementById('pm-all').checked = true;
+    document.getElementById('pm-proc-list').classList.add('hidden');
+    document.getElementById('pm-proc-list').innerHTML='';
+    _activePromo = undefined;
     clearProcsCache();
     showToast('Promoção criada com sucesso!','ok');
     renderPromos();
   } catch(e) { showToast(e.message,'error'); }
 }
 
-async function deletePromo(id) {
+async function deactivatePromo(id) {
   if (!confirm('Desativar esta promoção?')) return;
+  try {
+    await PATCH(`/api/promotions/${id}/deactivate`);
+    _activePromo = undefined;
+    clearProcsCache();
+    showToast('Promoção desativada','ok');
+    renderPromos();
+  } catch(e) { showToast(e.message,'error'); }
+}
+
+async function hardDeletePromo(id) {
+  if (!confirm('TEM CERTEZA QUE QUER EXCLUIR ESSA PROMOÇÃO DA BASE?\n\nEssa ação é irreversível.')) return;
   try {
     await DEL(`/api/promotions/${id}`);
     _activePromo = undefined;
     clearProcsCache();
-    showToast('Promoção desativada','ok');
+    showToast('Promoção excluída','ok');
     renderPromos();
   } catch(e) { showToast(e.message,'error'); }
 }
