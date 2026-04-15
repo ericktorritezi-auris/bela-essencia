@@ -157,15 +157,17 @@ h1,h2,h3,h4{font-family:'Cormorant Garamond',serif}
 @keyframes skel{from{background-position:200% 0}to{background-position:-200% 0}}
 
 /* ── COMMEMORATIVE POPUP ── */
-.comm-overlay{position:fixed;inset:0;background:rgba(26,18,20,.7);z-index:9998;display:flex;align-items:center;justify-content:center;padding:20px;animation:fadeIn .35s ease}
-.comm-card{background:white;border-radius:var(--r-lg);padding:0;max-width:380px;width:100%;box-shadow:var(--sh-lg);overflow:hidden;animation:fsUp .4s ease}
-.comm-top{background:linear-gradient(135deg,var(--rose),var(--rose-deep));padding:28px 24px 22px;text-align:center;color:white}
-.comm-emoji{font-size:46px;margin-bottom:10px}
-.comm-title{font-family:'Cormorant Garamond',serif;font-size:26px;font-weight:600;line-height:1.2}
-.comm-body{padding:20px 24px 26px;text-align:center}
-.comm-msg{font-size:14px;color:var(--text);line-height:1.8;margin-bottom:22px}
-.comm-btn{background:var(--rose);color:white;border:none;padding:12px 32px;border-radius:var(--r-xl);font-family:'Nunito',sans-serif;font-size:14px;font-weight:700;cursor:pointer;transition:var(--tr);box-shadow:0 4px 14px rgba(155,77,106,.3)}
-.comm-btn:hover{background:var(--rose-deep);transform:translateY(-1px)}
+.comm-overlay{position:fixed;inset:0;background:rgba(26,18,20,.72);z-index:9998;display:flex;align-items:center;justify-content:center;padding:20px;animation:fadeIn .35s ease}
+.comm-card{background:white;border-radius:var(--r-lg);padding:0;max-width:360px;width:100%;box-shadow:var(--sh-lg);overflow:hidden;animation:fsUp .4s ease}
+.comm-top{background:linear-gradient(145deg,var(--rose-deep),var(--rose));padding:36px 28px 30px;text-align:center;color:white;position:relative}
+.comm-top::after{content:'';position:absolute;bottom:0;left:0;right:0;height:40px;background:white;border-radius:50% 50% 0 0/30px 30px 0 0}
+.comm-title{font-family:'Cormorant Garamond',serif;font-size:32px;font-weight:600;line-height:1.2;position:relative;z-index:1}
+.comm-subtitle{font-size:12px;opacity:.8;margin-top:6px;letter-spacing:.08em;font-weight:600;text-transform:uppercase;position:relative;z-index:1}
+.comm-body{padding:16px 28px 30px;text-align:center}
+.comm-divider{width:48px;height:3px;background:linear-gradient(90deg,var(--rose),var(--gold));border-radius:2px;margin:0 auto 18px}
+.comm-msg{font-size:14px;color:var(--text);line-height:1.9;margin-bottom:24px}
+.comm-btn{background:var(--rose);color:white;border:none;padding:13px 34px;border-radius:var(--r-xl);font-family:'Nunito',sans-serif;font-size:14px;font-weight:700;cursor:pointer;transition:var(--tr);box-shadow:0 4px 14px rgba(155,77,106,.3);letter-spacing:.02em}
+.comm-btn:hover{background:var(--rose-deep);transform:translateY(-1px);box-shadow:0 6px 18px rgba(155,77,106,.4)}
 
 /* ── PROMO BANNER ── */
 .promo-banner{background:linear-gradient(135deg,var(--rose),var(--rose-deep));border-radius:var(--r-md);padding:13px 16px;margin-bottom:16px;display:flex;align-items:center;gap:11px;color:white;animation:fsUp .3s ease}
@@ -730,12 +732,13 @@ tr:hover td{background:#FAF3F6}
 <div id="comm-overlay" class="comm-overlay hidden">
   <div class="comm-card">
     <div class="comm-top">
-      <div class="comm-emoji">🌸</div>
       <div class="comm-title" id="comm-title">Feliz Dia!</div>
+      <div class="comm-subtitle" id="comm-subtitle">Bela Essência</div>
     </div>
     <div class="comm-body">
+      <div class="comm-divider"></div>
       <div class="comm-msg" id="comm-msg"></div>
-      <button class="comm-btn" onclick="closeCommem()">Fazer meu agendamento ✨</button>
+      <button class="comm-btn" onclick="closeCommem()">Agendar agora</button>
     </div>
   </div>
 </div>
@@ -752,7 +755,7 @@ tr:hover td{background:#FAF3F6}
 // ══════════════════════════════════════════════════
 // VERSÃO — altere APENAS aqui; atualiza todos os rodapés
 // ══════════════════════════════════════════════════
-const APP_VERSION  = '1.5.1';
+const APP_VERSION  = '1.5.2';
 const APP_COPY     = `Versão: ${APP_VERSION} | Clínica Bela Essência © ${new Date().getFullYear()}`;
 
 function renderFooters() {
@@ -1897,12 +1900,14 @@ async function checkCommemorative() {
   try {
     const data = await GET('/api/commemorative');
     if (!data) return;
-    document.getElementById('comm-title').textContent = data.title;
-    document.getElementById('comm-msg').textContent   = data.message;
-    // Pick emoji based on month
-    const emojis = ['🎆','💕','🌸','🐣','🌹','💛','⛱️','🌻','🍂','🎃','🍂','🎄'];
-    document.querySelector('.comm-emoji').textContent = emojis[(data.month-1)] || '🌸';
+    const seen = sessionStorage.getItem('be_commem_seen');
+    const key  = `${data.id}_${new Date().toISOString().slice(0,10)}`;
+    if (seen === key) return; // já exibiu hoje
+    document.getElementById('comm-title').textContent    = data.title;
+    document.getElementById('comm-subtitle').textContent = 'Uma mensagem especial para você';
+    document.getElementById('comm-msg').textContent      = data.message;
     document.getElementById('comm-overlay').classList.remove('hidden');
+    sessionStorage.setItem('be_commem_seen', key); // não exibe de novo na mesma sessão
   } catch {}
 }
 
@@ -2122,7 +2127,7 @@ async function renderSchedules() {
           const brk = (cfg.breaks||[]).filter(Boolean);
           const b0 = brk[0]||{s:'12:00:00',e:'13:00:00'};
           return `
-            <div style="background:${cfg.is_active?'var(--cream)':'#F5F5F5'};border:1.5px solid var(--border);border-radius:var(--r-sm);padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <div data-cfg-id="${cfg.id}" style="background:${cfg.is_active?'var(--cream)':'#F5F5F5'};border:1.5px solid var(--border);border-radius:var(--r-sm);padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
               <label style="display:flex;align-items:center;gap:6px;cursor:pointer;flex-shrink:0;min-width:110px">
                 <input type="checkbox" ${cfg.is_active?'checked':''} onchange="updateScheduleActive(${cfg.id},this.checked)" style="accent-color:var(--rose);width:16px;height:16px">
                 <span style="font-weight:700;font-size:13px;color:var(--dark)">${DAY_LABELS[cfg.day_of_week]}</span>
@@ -2189,15 +2194,15 @@ function updateScheduleBreak(id, type, val) {
 async function flushScheduleSave(id) {
   const p = _schPending[id]; if(!p || !Object.keys(p).length) return;
   delete _schPending[id];
-  // Get current values from DOM
-  const row = document.querySelector(`input[onchange*="updateScheduleActive(${id}"]`);
-  const inputs = document.querySelectorAll(`input[onchange*="${id},"]`);
-  const is_active = p.is_active !== undefined ? p.is_active : (row ? row.checked : true);
-  const times = [...inputs].map(i=>i.value);
-  const work_start = p.work_start || (times[0]||'08:00');
-  const work_end   = p.work_end   || (times[1]||'18:00');
-  const bs         = p.breaks?.[0]?.s || (times[2]||'12:00');
-  const be         = p.breaks?.[0]?.e || (times[3]||'13:00');
+  // Read from dedicated data-attributes to avoid mixing checkbox + time inputs
+  const rowEl  = document.querySelector(`[data-cfg-id="${id}"]`);
+  const is_active = p.is_active !== undefined ? p.is_active
+    : (rowEl ? rowEl.querySelector('input[type="checkbox"]').checked : true);
+  const timeInputs = rowEl ? [...rowEl.querySelectorAll('input[type="time"]')] : [];
+  const work_start = p.work_start || (timeInputs[0]?.value || '08:00');
+  const work_end   = p.work_end   || (timeInputs[1]?.value || '18:00');
+  const bs         = p.breaks?.[0]?.s || (timeInputs[2]?.value || '12:00');
+  const be         = p.breaks?.[0]?.e || (timeInputs[3]?.value || '13:00');
   try {
     await PUT(`/api/work-configs/${id}`, {
       is_active, work_start, work_end,
