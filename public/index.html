@@ -216,16 +216,16 @@ h1,h2,h3,h4{font-family:'Cormorant Garamond',serif}
 .adm-login-bg{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:linear-gradient(145deg,#1A1214,#3D2B35)}
 .adm-login-card{background:white;border-radius:var(--r-lg);padding:38px 30px;width:100%;max-width:340px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3)}
 .adm-layout{display:flex;min-height:100vh}
-.adm-sidebar{width:230px;background:linear-gradient(180deg,#1A1214,#3D2B35);color:white;padding:22px 0 70px;position:fixed;top:0;left:0;height:100vh;overflow-y:auto;z-index:200;transition:transform .28s ease}
-.sb-brand{padding:0 20px 20px;border-bottom:1px solid rgba(255,255,255,.08);margin-bottom:14px}
+.adm-sidebar{width:220px;background:linear-gradient(180deg,#1A1214,#3D2B35);color:white;padding:18px 0 60px;position:fixed;top:0;left:0;height:100vh;overflow-y:auto;z-index:200;transition:transform .28s ease;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.1) transparent}
+.sb-brand{padding:0 18px 12px;border-bottom:1px solid rgba(255,255,255,.08);margin-bottom:6px}
 .sb-sub{font-size:9px;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:.15em}
-.nav-sec-ttl{font-size:9px;text-transform:uppercase;letter-spacing:.16em;color:rgba(255,255,255,.28);padding:6px 20px 3px}
-.nav-item{display:flex;align-items:center;gap:9px;padding:9px 20px;color:rgba(255,255,255,.6);cursor:pointer;transition:var(--tr);font-size:13px;font-weight:600;border-left:3px solid transparent}
+.nav-sec-ttl{font-size:8.5px;text-transform:uppercase;letter-spacing:.16em;color:rgba(255,255,255,.28);padding:10px 18px 2px}
+.nav-item{display:flex;align-items:center;gap:8px;padding:7px 18px;color:rgba(255,255,255,.6);cursor:pointer;transition:var(--tr);font-size:12px;font-weight:600;border-left:3px solid transparent;line-height:1.3}
 .nav-item:hover{background:rgba(255,255,255,.07);color:white}
 .nav-item.active{background:rgba(155,77,106,.28);color:white;border-left-color:var(--rose-mid)}
-.nav-icon{font-size:15px;width:18px;text-align:center;flex-shrink:0}
-.sb-foot{position:absolute;bottom:0;left:0;right:0;padding:12px 0;border-top:1px solid rgba(255,255,255,.08)}
-.adm-main{margin-left:230px;flex:1;background:#F4EEF2;min-height:100vh}
+.nav-icon{font-size:13px;width:16px;text-align:center;flex-shrink:0}
+.sb-foot{padding:10px 0;border-top:1px solid rgba(255,255,255,.08);margin-top:6px}
+.adm-main{margin-left:220px;flex:1;background:#F4EEF2;min-height:100vh}
 .adm-topbar{background:white;padding:14px 24px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);box-shadow:var(--sh-sm);position:sticky;top:0;z-index:100;gap:12px}
 .adm-ttl{font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:600;color:var(--dark)}
 .mob-menu{display:none;background:var(--rose);border:none;color:white;padding:7px 11px;border-radius:var(--r-sm);cursor:pointer;font-size:17px}
@@ -452,7 +452,7 @@ tr:hover td{background:#FAF3F6}
     <div class="adm-layout">
       <aside class="adm-sidebar" id="adm-sb">
         <div class="sb-brand">
-          <div class="brand-name" style="font-size:20px;color:var(--rose-mid)">Bela <em>Essência</em></div>
+          <div class="brand-name" style="font-size:18px;color:var(--rose-mid)">Bela <em>Essência</em></div>
           <div class="sb-sub">Painel Admin</div>
         </div>
         <div>
@@ -460,16 +460,16 @@ tr:hover td{background:#FAF3F6}
           <div class="nav-item active" id="nav-agenda" onclick="showSec('agenda')"><span class="nav-icon">📅</span> Agenda</div>
           <div class="nav-item" id="nav-blocked" onclick="showSec('blocked')"><span class="nav-icon">🚫</span> Bloquear Datas</div>
         </div>
-        <div style="margin-top:8px">
+        <div style="margin-top:2px">
           <div class="nav-sec-ttl">Financeiro</div>
           <div class="nav-item" id="nav-revenue" onclick="showSec('revenue')"><span class="nav-icon">💰</span> Receita</div>
         </div>
-        <div style="margin-top:8px">
+        <div style="margin-top:2px">
           <div class="nav-sec-ttl">Marketing</div>
           <div class="nav-item" id="nav-promos" onclick="showSec('promos')"><span class="nav-icon">🏷</span> Promoções</div>
           <div class="nav-item" id="nav-commem" onclick="showSec('commem')"><span class="nav-icon">🎉</span> Datas Comemorativas</div>
         </div>
-        <div style="margin-top:8px">
+        <div style="margin-top:2px">
           <div class="nav-sec-ttl">Configurações</div>
           <div class="nav-item" id="nav-cities" onclick="showSec('cities')"><span class="nav-icon">📍</span> Cidades</div>
           <div class="nav-item" id="nav-schedules" onclick="showSec('schedules')"><span class="nav-icon">🕐</span> Horários</div>
@@ -752,7 +752,7 @@ tr:hover td{background:#FAF3F6}
 // ══════════════════════════════════════════════════
 // VERSÃO — altere APENAS aqui; atualiza todos os rodapés
 // ══════════════════════════════════════════════════
-const APP_VERSION  = '1.5.0';
+const APP_VERSION  = '1.5.1';
 const APP_COPY     = `Versão: ${APP_VERSION} | Clínica Bela Essência © ${new Date().getFullYear()}`;
 
 function renderFooters() {
