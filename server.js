@@ -921,6 +921,30 @@ app.get('/api/cities/all', requireAdmin, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// Admin: get city with ALL procedures (enabled + disabled) for editing
+app.get('/api/cities/:id/procedures', requireAdmin, async (req, res) => {
+  try {
+    const cityId = req.params.id;
+    // Check if this city has any proc overrides at all
+    const { rowCount } = await pool.query(
+      'SELECT 1 FROM city_procedures WHERE city_id=$1 LIMIT 1', [cityId]
+    );
+    const hasOverrides = rowCount > 0;
+    const { rows } = await pool.query(
+      `SELECT p.id, p.name, p.dur, p.price, p.pt,
+              CASE
+                WHEN $2 THEN COALESCE(cp.enabled, TRUE)
+                ELSE TRUE
+              END as enabled
+       FROM procedures p
+       LEFT JOIN city_procedures cp ON cp.proc_id=p.id AND cp.city_id=$1
+       WHERE p.active=TRUE ORDER BY p.id`,
+      [cityId, hasOverrides]
+    );
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.post('/api/cities', requireAdmin, async (req, res) => {
   const { name, uf, local_name, address, number, complement, neighborhood, cep, proc_ids } = req.body;
   if (!name||!uf||!local_name||!address||!number||!neighborhood||!cep)
