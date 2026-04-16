@@ -138,6 +138,10 @@ async function initDB() {
     await client.query(`ALTER TABLE promotions ADD COLUMN IF NOT EXISTS apply_to_all BOOLEAN NOT NULL DEFAULT TRUE`);
     await client.query(`ALTER TABLE promotions ADD COLUMN IF NOT EXISTS proc_ids INTEGER[] NOT NULL DEFAULT '{}'`);
 
+    // Migração v1.6.1: city_ids nos bloqueios (vazio = todas as cidades)
+    await client.query(`ALTER TABLE blocked_dates ADD COLUMN IF NOT EXISTS city_ids INTEGER[] NOT NULL DEFAULT '{}'`);
+    await client.query(`ALTER TABLE blocked_slots ADD COLUMN IF NOT EXISTS city_ids INTEGER[] NOT NULL DEFAULT '{}'`);
+
     // Tabela de horários específicos bloqueados (agendamentos manuais / ausências parciais)
     await client.query(`
       CREATE TABLE IF NOT EXISTS blocked_slots (
@@ -594,14 +598,18 @@ app.get('/api/blocked', async (req, res) => {
 });
 
 app.post('/api/blocked', requireAdmin, async (req, res) => {
-  const { date, reason } = req.body;
+  const { date, reason, city_ids } = req.body;
   if (!date) return res.status(400).json({ error: 'Data obrigatória' });
+  const ids = Array.isArray(city_ids) ? city_ids.map(Number) : [];
   try {
     const { rows } = await pool.query(
-      'INSERT INTO blocked_dates (date, reason) VALUES ($1, $2) ON CONFLICT(date) DO NOTHING RETURNING *',
-      [date, reason || null]
+      `INSERT INTO blocked_dates (date, reason, city_ids)
+       VALUES ($1, $2, $3)
+       ON CONFLICT(date) DO UPDATE SET reason=EXCLUDED.reason, city_ids=EXCLUDED.city_ids
+       RETURNING *`,
+      [date, reason || null, ids]
     );
-    res.status(201).json(rows[0] || { date, reason });
+    res.status(201).json(rows[0]);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -670,8 +678,12 @@ app.get('/api/availability', async (req, res) => {
   }
 
   try {
-    // Verifica data bloqueada
-    const blk = await pool.query('SELECT 1 FROM blocked_dates WHERE date=$1', [date]);
+    // Verifica data bloqueada (city_ids vazio = todas as cidades; senão, verifica se inclui esta cidade)
+    const blk = await pool.query(
+      `SELECT 1 FROM blocked_dates
+       WHERE date=$1 AND (cardinality(city_ids)=0 OR $2=ANY(city_ids))`,
+      [date, Number(cityId)]
+    );
     if (blk.rowCount > 0) return res.json([]);
 
     // Resolve config de horário para esta cidade+dia
@@ -701,7 +713,11 @@ app.get('/api/availability', async (req, res) => {
     // Agendamentos e horários bloqueados
     const [aRes, sRes] = await Promise.all([
       pool.query(`SELECT st, et FROM appointments WHERE date=$1 AND status!='cancelled'`, [date]),
-      pool.query(`SELECT st, et FROM blocked_slots WHERE date=$1`, [date]),
+      pool.query(
+        `SELECT st, et FROM blocked_slots
+         WHERE date=$1 AND (cardinality(city_ids)=0 OR $2=ANY(city_ids))`,
+        [date, Number(cityId)]
+      ),
     ]);
     const busy = [...aRes.rows, ...sRes.rows].map(r => ({
       s: timeToMin(r.st), e: timeToMin(r.et),
@@ -833,13 +849,14 @@ app.get('/api/blocked-slots', async (req, res) => {
 });
 
 app.post('/api/blocked-slots', requireAdmin, async (req, res) => {
-  const { date, st, et, reason } = req.body;
+  const { date, st, et, reason, city_ids } = req.body;
   if (!date || !st || !et) return res.status(400).json({ error: 'Data, início e fim são obrigatórios' });
   if (timeToMin(st) >= timeToMin(et)) return res.status(400).json({ error: 'Horário de início deve ser antes do fim' });
+  const ids = Array.isArray(city_ids) ? city_ids.map(Number) : [];
   try {
     const { rows } = await pool.query(
-      'INSERT INTO blocked_slots (date, st, et, reason) VALUES ($1,$2,$3,$4) RETURNING *',
-      [date, st, et, reason || null]
+      'INSERT INTO blocked_slots (date, st, et, reason, city_ids) VALUES ($1,$2,$3,$4,$5) RETURNING *',
+      [date, st, et, reason || null, ids]
     );
     res.status(201).json(rows[0]);
   } catch (err) { res.status(500).json({ error: err.message }); }
