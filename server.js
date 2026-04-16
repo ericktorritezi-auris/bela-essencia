@@ -858,10 +858,20 @@ app.get('/api/availability', async (req, res) => {
       s: timeToMin(r.st), e: timeToMin(r.et),
     }));
 
+    // Horário atual em Brasília para filtrar slots passados no dia de hoje
+    const nowBRT = new Date(
+      new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' })
+    );
+    const todayBRT = `${nowBRT.getFullYear()}-${String(nowBRT.getMonth()+1).padStart(2,'0')}-${String(nowBRT.getDate()).padStart(2,'0')}`;
+    const isToday   = (date === todayBRT);
+    const nowMinBRT = isToday ? nowBRT.getHours() * 60 + nowBRT.getMinutes() : 0;
+
     // Calcula slots livres respeitando configuração dinâmica
     const slots = [];
     for (let s = wStart; s <= wEnd; s += SLOT) {
       const e = s + dur;
+      // Filtra horários que já passaram no dia de hoje (fuso Brasília)
+      if (isToday && s <= nowMinBRT) continue;
       // Verificar pausas
       const inBreak = breaks.some(b => s < b.e && e > b.s);
       if (inBreak) continue;
