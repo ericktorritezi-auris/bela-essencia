@@ -839,7 +839,7 @@ tr:hover td{background:#FAF3F6}
 // ══════════════════════════════════════════════════
 // VERSÃO — altere APENAS aqui; atualiza todos os rodapés
 // ══════════════════════════════════════════════════
-const APP_VERSION  = '1.6.4';
+const APP_VERSION  = '1.7.1';
 const APP_COPY     = `Versão: ${APP_VERSION} | Clínica Bela Essência © ${new Date().getFullYear()}`;
 
 function renderFooters() {
@@ -1332,7 +1332,7 @@ async function confirmBooking() {
     }
 
     // POST com timeout de 12s — evita travar para sempre
-    await withTimeout(POST('/api/appointments', {
+    const apptResult = await withTimeout(POST('/api/appointments', {
       cityId:  Number(BK.cityId),
       cityName: c.name,
       procId:  Number(BK.procId),
@@ -1349,6 +1349,8 @@ async function confirmBooking() {
     // Sucesso — salva dados para próximo agendamento na mesma sessão
     sessionStorage.setItem('be_client_name',  BK.name);
     sessionStorage.setItem('be_client_phone', BK.phone);
+    // Solicita permissão de push e vincula ao agendamento
+    subscribePush('client', apptResult?.id || null).catch(()=>{});
 
     const sc = CITIES.find(x => Number(x.id) === Number(BK.cityId));
 
@@ -1396,6 +1398,8 @@ async function doLogin() {
     document.getElementById('adm-dash').classList.remove('hidden');
     initAdmin();
     loadProfProfile(); // atualiza nome no topbar do admin
+    // Inscreve profissional para receber push de novos agendamentos
+    setTimeout(() => subscribePush('admin').catch(()=>{}), 2000);
   } catch {
     const err=document.getElementById('login-err');
     err.classList.remove('hidden');
@@ -2667,6 +2671,64 @@ async function manSave() {
 
 // ── MODAL ─────────────────────────────────────────
 function closeModal(){document.getElementById('modal-bg').classList.add('hidden')}
+
+// ══════════════════════════════════════════════════
+// PUSH NOTIFICATIONS
+// ══════════════════════════════════════════════════
+let _vapidKey = null;
+
+async function getVapidKey() {
+  if (_vapidKey !== null) return _vapidKey;
+  try {
+    const r = await fetch('/api/push/vapid-key');
+    const d = await r.json();
+    _vapidKey = d.key || null;
+  } catch { _vapidKey = null; }
+  return _vapidKey;
+}
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64  = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw     = atob(base64);
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
+
+async function subscribePush(role, appointmentId = null) {
+  try {
+    const vapidKey = await getVapidKey();
+    if (!vapidKey) return; // push not configured on server
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+
+    const reg = await navigator.serviceWorker.ready;
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') return;
+
+    const subscription = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(vapidKey),
+    });
+
+    const endpoint = role === 'admin'
+      ? '/api/push/subscribe/admin'
+      : '/api/push/subscribe/client';
+
+    await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        endpoint:      subscription.endpoint,
+        keys:          { p256dh: btoa(String.fromCharCode(...new Uint8Array(subscription.getKey('p256dh')))),
+                         auth:   btoa(String.fromCharCode(...new Uint8Array(subscription.getKey('auth')))) },
+        appointmentId,
+      }),
+    });
+    console.log('[Push] Inscrito como', role);
+  } catch (e) {
+    console.warn('[Push] Não foi possível inscrever:', e.message);
+  }
+}
 
 // ══════════════════════════════════════════════════
 // PWA INSTALL PROMPT
