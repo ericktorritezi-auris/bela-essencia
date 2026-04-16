@@ -877,7 +877,7 @@ tr:hover td{background:#FAF3F6}
 // ══════════════════════════════════════════════════
 // VERSÃO — altere APENAS aqui; atualiza todos os rodapés
 // ══════════════════════════════════════════════════
-const APP_VERSION  = '1.8.0';
+const APP_VERSION  = '1.8.1';
 const APP_COPY     = `Versão: ${APP_VERSION} | Clínica Bela Essência © ${new Date().getFullYear()}`;
 
 function renderFooters() {
@@ -2936,6 +2936,20 @@ async function subscribePush(role, appointmentId = null) {
   }
 }
 
+// Re-inscreve silenciosamente se a permissão de notificação já foi concedida.
+// Corrige subscriptions com encoding incorreto salvas antes da v1.7.2.
+async function resubscribeIfPermitted() {
+  try {
+    if (!('Notification' in window) || !('serviceWorker' in navigator)) return;
+    if (Notification.permission !== 'granted') return;
+    // Permissão já foi dada — re-inscreve para garantir chaves corretas
+    // Não pede permissão de novo (já está granted), só renova a subscription
+    await subscribePush('client', null);
+  } catch(e) {
+    // Silencioso — não interrompe o carregamento da página
+  }
+}
+
 // ══════════════════════════════════════════════════
 // PWA INSTALL PROMPT
 // ══════════════════════════════════════════════════
@@ -3022,6 +3036,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   renderFooters();
   loadProfProfile(); // carrega nome/contato do profissional do banco
   renderCities(); // async — carrega do banco
+  // Re-inscreve silenciosamente se a permissão já foi concedida antes
+  // Garante que subscriptions com encoding antigo (pré-v1.7.2) sejam atualizadas
+  resubscribeIfPermitted();
 
   setTimeout(() => {
     document.getElementById('page-loader').classList.add('hidden');
