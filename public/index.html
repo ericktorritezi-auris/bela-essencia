@@ -839,7 +839,7 @@ tr:hover td{background:#FAF3F6}
 // ══════════════════════════════════════════════════
 // VERSÃO — altere APENAS aqui; atualiza todos os rodapés
 // ══════════════════════════════════════════════════
-const APP_VERSION  = '1.7.1';
+const APP_VERSION  = '1.7.2';
 const APP_COPY     = `Versão: ${APP_VERSION} | Clínica Bela Essência © ${new Date().getFullYear()}`;
 
 function renderFooters() {
@@ -2694,37 +2694,72 @@ function urlBase64ToUint8Array(base64String) {
   return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
 }
 
+// Converte ArrayBuffer para base64url (formato exigido pelo web-push)
+function bufToBase64Url(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
 async function subscribePush(role, appointmentId = null) {
   try {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      console.warn('[Push] Browser não suporta Push API');
+      return;
+    }
+
     const vapidKey = await getVapidKey();
-    if (!vapidKey) return; // push not configured on server
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+    if (!vapidKey) {
+      console.warn('[Push] VAPID key não disponível no servidor');
+      return;
+    }
 
     const reg = await navigator.serviceWorker.ready;
+    console.log('[Push] SW pronto, solicitando permissão...');
+
     const permission = await Notification.requestPermission();
+    console.log('[Push] Permissão:', permission);
     if (permission !== 'granted') return;
 
-    const subscription = await reg.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(vapidKey),
-    });
+    // Verifica se já existe subscription ativa
+    let subscription = await reg.pushManager.getSubscription();
+    if (!subscription) {
+      console.log('[Push] Criando nova subscription...');
+      subscription = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(vapidKey),
+      });
+    } else {
+      console.log('[Push] Reutilizando subscription existente');
+    }
+
+    const p256dh = bufToBase64Url(subscription.getKey('p256dh'));
+    const auth   = bufToBase64Url(subscription.getKey('auth'));
+
+    console.log('[Push] Enviando subscription para servidor, role:', role);
 
     const endpoint = role === 'admin'
       ? '/api/push/subscribe/admin'
       : '/api/push/subscribe/client';
 
-    await fetch(endpoint, {
+    const resp = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
       body: JSON.stringify({
         endpoint:      subscription.endpoint,
-        keys:          { p256dh: btoa(String.fromCharCode(...new Uint8Array(subscription.getKey('p256dh')))),
-                         auth:   btoa(String.fromCharCode(...new Uint8Array(subscription.getKey('auth')))) },
+        keys:          { p256dh, auth },
         appointmentId,
       }),
     });
-    console.log('[Push] Inscrito como', role);
+
+    if (resp.ok) {
+      console.log('[Push] ✅ Inscrito como', role, '- appointmentId:', appointmentId);
+    } else {
+      const err = await resp.json().catch(()=>({}));
+      console.error('[Push] Erro ao salvar subscription:', err.error);
+    }
   } catch (e) {
     console.warn('[Push] Não foi possível inscrever:', e.message);
   }
