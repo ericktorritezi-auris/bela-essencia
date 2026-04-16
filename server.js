@@ -508,11 +508,8 @@ app.get('/api/appointments', requireAdmin, async (req, res) => {
   if (date) {
     // Filtro exato por data
     sql += ` AND date = $${params.push(date)}`;
-  } else {
-    // Padrão: exibe da data atual em diante
-    const today = new Date().toISOString().slice(0, 10);
-    sql += ` AND date >= $${params.push(today)}`;
   }
+  // Sem filtro de data = mostra todos os agendamentos (passados e futuros)
   if (city)   { sql += ` AND city_id = $${params.push(city)}`; }
   if (status) { sql += ` AND status = $${params.push(status)}`; }
   sql += ' ORDER BY date, st';
