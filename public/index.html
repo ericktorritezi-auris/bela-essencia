@@ -161,6 +161,28 @@ h1,h2,h3,h4{font-family:'Cormorant Garamond',serif}
 .man-step.active{color:var(--rose);border-bottom-color:var(--rose)}
 .man-step.done{color:var(--rose-mid);border-bottom-color:var(--rose-mid)}
 
+/* ── NPS POPUP ── */
+.nps-overlay{position:fixed;inset:0;background:rgba(26,18,20,.68);z-index:9996;display:flex;align-items:flex-end;justify-content:center;padding:0;animation:fadeIn .35s ease}
+.nps-card{background:white;border-radius:var(--r-lg) var(--r-lg) 0 0;padding:28px 24px 40px;width:100%;max-width:480px;animation:slideUp .35s ease;max-height:90vh;overflow-y:auto}
+.nps-header{text-align:center;margin-bottom:20px}
+.nps-header h3{font-family:'Cormorant Garamond',serif;font-size:24px;font-weight:600;color:var(--dark);margin-bottom:6px}
+.nps-header p{font-size:13px;color:var(--text-light);line-height:1.6}
+.nps-scores{display:grid;grid-template-columns:repeat(11,1fr);gap:4px;margin-bottom:8px}
+.nps-score{aspect-ratio:1;border-radius:var(--r-sm);border:1.5px solid var(--border);background:var(--cream);font-size:12px;font-weight:700;color:var(--text-light);cursor:pointer;transition:var(--tr);display:flex;align-items:center;justify-content:center}
+.nps-score:hover{transform:scale(1.1)}
+.nps-score.sel{color:white;border-color:transparent;transform:scale(1.12)}
+.nps-score.det{background:#FEE2E2;color:#B91C1C;border-color:#FCA5A5}
+.nps-score.det.sel{background:#EF4444}
+.nps-score.neu{background:#FEF9C3;color:#92400E;border-color:#FDE68A}
+.nps-score.neu.sel{background:#F59E0B;color:white}
+.nps-score.pro{background:#DCFCE7;color:#166534;border-color:#86EFAC}
+.nps-score.pro.sel{background:#22C55E;color:white}
+.nps-labels{display:flex;justify-content:space-between;font-size:10px;color:var(--text-light);margin-bottom:18px;font-weight:600}
+.nps-comment{width:100%;background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:12px 14px;font-family:'Nunito',sans-serif;font-size:13px;color:var(--dark);outline:none;resize:none;transition:var(--tr);margin-bottom:14px}
+.nps-comment:focus{border-color:var(--rose);background:white}
+.nps-skip{background:none;border:none;color:var(--text-light);font-size:12px;font-family:'Nunito',sans-serif;cursor:pointer;padding:4px;display:block;margin:8px auto 0;transition:var(--tr);font-weight:600}
+.nps-skip:hover{color:var(--rose)}
+
 /* ── WELCOME POPUP ── */
 .welcome-overlay{position:fixed;inset:0;background:rgba(26,18,20,.65);z-index:9997;display:flex;align-items:center;justify-content:center;padding:20px;animation:fadeIn .4s ease}
 .welcome-card{background:white;border-radius:var(--r-lg);max-width:360px;width:100%;box-shadow:var(--sh-lg);overflow:hidden;animation:fsUp .45s ease}
@@ -490,6 +512,7 @@ tr:hover td{background:#FAF3F6}
           <div class="nav-item active" id="nav-agenda" onclick="showSec('agenda')"><span class="nav-icon">📅</span> Agenda</div>
           <div class="nav-item" id="nav-manual" onclick="showSec('manual')"><span class="nav-icon">✏️</span> Agenda Manual</div>
           <div class="nav-item" id="nav-blocked" onclick="showSec('blocked')"><span class="nav-icon">🚫</span> Bloquear Datas</div>
+          <div class="nav-item" id="nav-nps" onclick="showSec('nps')"><span class="nav-icon">⭐</span> NPS</div>
         </div>
         <div style="margin-top:2px">
           <div class="nav-sec-ttl">Financeiro</div>
@@ -535,6 +558,11 @@ tr:hover td{background:#FAF3F6}
               <div class="appt-cards" id="appt-cards"></div>
             </div>
           </div>
+          <!-- SEC: NPS DASHBOARD -->
+          <div id="sec-nps" class="hidden">
+            <div id="nps-dashboard-wrap"></div>
+          </div>
+
           <!-- SEC: AGENDA MANUAL -->
           <div id="sec-manual" class="hidden">
             <div class="tbl-wrap">
@@ -867,6 +895,30 @@ tr:hover td{background:#FAF3F6}
   </div>
 </div>
 
+<!-- NPS POPUP -->
+<div id="nps-overlay" class="nps-overlay hidden">
+  <div class="nps-card">
+    <div class="nps-header">
+      <h3>O quanto você recomendaria<br>nossa agenda? 😊</h3>
+      <p id="nps-proc-label">Baseado no seu último procedimento</p>
+    </div>
+    <div class="nps-scores" id="nps-scores"></div>
+    <div class="nps-labels">
+      <span>😞 Não recomendo</span>
+      <span>😍 Recomendo muito!</span>
+    </div>
+    <div id="nps-comment-wrap" class="hidden">
+      <textarea class="nps-comment" id="nps-comment" rows="3" maxlength="300"
+        placeholder="Nos conte o que podemos melhorar... (opcional)"></textarea>
+      <div style="text-align:right;font-size:11px;color:var(--text-light);margin-top:-10px;margin-bottom:10px">
+        <span id="nps-ccount">0</span>/300
+      </div>
+    </div>
+    <button class="btn btn-primary" id="nps-submit" onclick="submitNPS()" disabled>Enviar avaliação</button>
+    <button class="nps-skip" onclick="closeNPS()">Agora não</button>
+  </div>
+</div>
+
 <!-- WELCOME / PWA INSTALL POPUP -->
 <div id="welcome-overlay" class="welcome-overlay hidden">
   <div class="welcome-card">
@@ -925,7 +977,7 @@ tr:hover td{background:#FAF3F6}
 // ══════════════════════════════════════════════════
 // VERSÃO — altere APENAS aqui; atualiza todos os rodapés
 // ══════════════════════════════════════════════════
-const APP_VERSION  = '1.8.4';
+const APP_VERSION  = '1.9.0';
 const APP_COPY     = `Versão: ${APP_VERSION} | Clínica Bela Essência © ${new Date().getFullYear()}`;
 
 function renderFooters() {
@@ -1435,6 +1487,7 @@ async function confirmBooking() {
     // Sucesso — salva dados para próximo agendamento na mesma sessão
     sessionStorage.setItem('be_client_name',  BK.name);
     sessionStorage.setItem('be_client_phone', BK.phone);
+    saveClientPhoneLocal(BK.phone); // persiste para NPS em visitas futuras
     // Solicita permissão de push e vincula ao agendamento
     subscribePush('client', apptResult?.id || null).catch(()=>{});
 
@@ -1512,12 +1565,12 @@ async function initAdmin() {
 }
 
 const SEC_TITLES={
-  agenda:'Agenda',manual:'Agenda Manual',blocked:'Bloquear Datas',revenue:'Receita',
-  promos:'Promoções',commem:'Datas Comemorativas',webpush:'Web Push',
+  agenda:'Agenda',manual:'Agenda Manual',blocked:'Bloquear Datas',nps:'NPS — Satisfação',
+  revenue:'Receita',promos:'Promoções',commem:'Datas Comemorativas',webpush:'Web Push',
   cities:'Cidades',schedules:'Configuração de Horários',
   procs:'Procedimentos',profile:'Perfil & Senha',backup:'Backup'
 };
-const ALL_SECS = ['agenda','manual','blocked','revenue','promos','commem','webpush','cities','schedules','procs','profile','backup'];
+const ALL_SECS = ['agenda','manual','blocked','nps','revenue','promos','commem','webpush','cities','schedules','procs','profile','backup'];
 
 function showSec(name){
   ALL_SECS.forEach(s=>{
@@ -1527,6 +1580,7 @@ function showSec(name){
   document.getElementById('adm-ttl').textContent=SEC_TITLES[name]||name;
   if(name==='agenda'){renderStats();renderAgenda()}
   if(name==='manual') initManualBooking();
+  if(name==='nps') renderNPSDashboard();
   if(name==='blocked'){renderBlocked();renderBlockedSlots();renderBlockCityCheckboxes()}
   if(name==='revenue'){renderRevCards();renderRevTable()}
   if(name==='promos') renderPromos();
@@ -2985,6 +3039,186 @@ async function subscribePush(role, appointmentId = null) {
 }
 
 // ══════════════════════════════════════════════════
+// NPS — CLIENT POPUP
+// ══════════════════════════════════════════════════
+const NPS_STORAGE_KEY = 'be_nps_last';
+let _npsData = { score: null, apptId: null };
+
+async function checkNPS() {
+  try {
+    const phone = sessionStorage.getItem('be_client_phone') || localStorage.getItem('be_client_phone');
+    if (!phone) return;
+
+    // Cooldown local: não mostra na mesma sessão
+    if (sessionStorage.getItem('be_nps_shown')) return;
+
+    const r = await fetch(`/api/nps/check?phone=${encodeURIComponent(phone)}`);
+    const data = await r.json();
+    if (!data.eligible) return;
+
+    _npsData.apptId = data.appt_id;
+    if (data.proc_name) {
+      document.getElementById('nps-proc-label').textContent =
+        `Baseado no seu procedimento: ${data.proc_name}`;
+    }
+
+    // Renderiza os scores (0-10)
+    const grid = document.getElementById('nps-scores');
+    grid.innerHTML = Array.from({length: 11}, (_, i) => {
+      const cls = i <= 6 ? 'det' : i <= 8 ? 'neu' : 'pro';
+      return `<div class="nps-score ${cls}" onclick="selectNPSScore(${i})">${i}</div>`;
+    }).join('');
+
+    sessionStorage.setItem('be_nps_shown', '1');
+    document.getElementById('nps-overlay').classList.remove('hidden');
+  } catch {}
+}
+
+function selectNPSScore(score) {
+  _npsData.score = score;
+  // Update visual
+  document.querySelectorAll('.nps-score').forEach((el, i) => {
+    el.classList.toggle('sel', i === score);
+  });
+  // Show comment for non-promoters (0-8)
+  const commentWrap = document.getElementById('nps-comment-wrap');
+  if (score <= 8) {
+    commentWrap.classList.remove('hidden');
+    document.getElementById('nps-comment').oninput = function() {
+      document.getElementById('nps-ccount').textContent = this.value.length;
+    };
+  } else {
+    commentWrap.classList.add('hidden');
+  }
+  document.getElementById('nps-submit').disabled = false;
+}
+
+async function submitNPS() {
+  if (_npsData.score === null) return;
+  const phone   = sessionStorage.getItem('be_client_phone') || localStorage.getItem('be_client_phone');
+  const comment = document.getElementById('nps-comment').value.trim();
+  const btn     = document.getElementById('nps-submit');
+  btn.textContent = 'Enviando...'; btn.disabled = true;
+  try {
+    await fetch('/api/nps', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone, appt_id: _npsData.apptId, score: _npsData.score, comment }),
+    });
+    closeNPS();
+    // Feedback de agradecimento
+    const msg = _npsData.score >= 9
+      ? 'Obrigada pela avaliação! 😍 Sua opinião nos motiva muito!'
+      : _npsData.score >= 7
+      ? 'Obrigada pelo feedback! Vamos continuar melhorando. 💪'
+      : 'Obrigada por nos contar! Suas observações são muito importantes. 🙏';
+    showToast(msg, 'ok', 5000);
+  } catch {
+    btn.textContent = 'Enviar avaliação'; btn.disabled = false;
+  }
+}
+
+function closeNPS() {
+  document.getElementById('nps-overlay').classList.add('hidden');
+}
+
+// Persiste phone em localStorage ao confirmar agendamento para NPS futuro
+function saveClientPhoneLocal(phone) {
+  if (phone) localStorage.setItem('be_client_phone', phone);
+}
+
+// ══════════════════════════════════════════════════
+// NPS — ADMIN DASHBOARD
+// ══════════════════════════════════════════════════
+async function renderNPSDashboard() {
+  const wrap = document.getElementById('nps-dashboard-wrap');
+  wrap.innerHTML = '<div style="padding:20px;color:var(--text-light)">Carregando...</div>';
+  try {
+    const d = await api('GET', '/api/nps/dashboard');
+
+    if (!d.total) {
+      wrap.innerHTML = `
+        <div class="tbl-wrap" style="padding:40px;text-align:center">
+          <div style="font-size:40px;margin-bottom:12px">⭐</div>
+          <div style="font-family:'Cormorant Garamond',serif;font-size:22px;color:var(--dark);margin-bottom:8px">Nenhuma avaliação ainda</div>
+          <div style="font-size:13px;color:var(--text-light)">As avaliações aparecerão aqui assim que os clientes responderem ao NPS.</div>
+        </div>`;
+      return;
+    }
+
+    const npsColor = d.nps >= 70 ? 'var(--success)' : d.nps >= 50 ? 'var(--warn)' : 'var(--error)';
+    const npsLabel = d.nps >= 70 ? '🏆 Excelente' : d.nps >= 50 ? '⚠️ Bom' : '🔴 Crítico';
+    const pPct = Math.round((d.promoters / d.total) * 100);
+    const nPct = Math.round((d.neutrals  / d.total) * 100);
+    const dPct = Math.round((d.detractors/ d.total) * 100);
+
+    // Distribuição visual (barras)
+    const maxCount = Math.max(...d.distribution.map(x => x.count), 1);
+    const distBars = d.distribution.map(x => {
+      const cls = x.score <= 6 ? 'var(--error)' : x.score <= 8 ? 'var(--warn)' : 'var(--success)';
+      const h = Math.max(4, Math.round((x.count / maxCount) * 60));
+      return `
+        <div style="display:flex;flex-direction:column;align-items:center;gap:3px">
+          <div style="font-size:10px;font-weight:700;color:var(--text-light)">${x.count||''}</div>
+          <div style="width:22px;height:${h}px;background:${cls};border-radius:3px 3px 0 0;transition:height .3s"></div>
+          <div style="font-size:10px;font-weight:700;color:var(--text-light)">${x.score}</div>
+        </div>`;
+    }).join('');
+
+    // Comments from non-promoters
+    const comments = d.responses.filter(r => r.comment).slice(0, 20);
+
+    wrap.innerHTML = `
+      <!-- Score principal -->
+      <div style="display:grid;grid-template-columns:auto 1fr;gap:16px;margin-bottom:16px;align-items:stretch">
+        <div class="tbl-wrap" style="padding:24px 28px;text-align:center;min-width:160px;display:flex;flex-direction:column;align-items:center;justify-content:center">
+          <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:var(--text-light);margin-bottom:8px">NPS Atual</div>
+          <div style="font-family:'Cormorant Garamond',serif;font-size:72px;font-weight:600;color:${npsColor};line-height:1">${d.nps}</div>
+          <div style="font-size:13px;font-weight:700;margin-top:4px;color:${npsColor}">${npsLabel}</div>
+          <div style="font-size:10px;color:var(--text-light);margin-top:6px">Meta: ≥ 70</div>
+          <div style="width:100%;background:var(--border);border-radius:4px;height:6px;margin-top:12px">
+            <div style="background:${npsColor};height:6px;border-radius:4px;width:${Math.min(100,Math.max(0,d.nps+100)/2)}%"></div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="stat-card"><div class="stat-lbl">📊 Total</div><div class="stat-val">${d.total}</div><div class="stat-sub">respostas</div></div>
+          <div class="stat-card"><div class="stat-lbl" style="color:var(--success)">😍 Promotores</div><div class="stat-val" style="color:var(--success)">${d.promoters}</div><div class="stat-sub">${pPct}% · notas 9-10</div></div>
+          <div class="stat-card"><div class="stat-lbl" style="color:var(--warn)">😐 Neutros</div><div class="stat-val" style="color:var(--warn)">${d.neutrals}</div><div class="stat-sub">${nPct}% · notas 7-8</div></div>
+          <div class="stat-card"><div class="stat-lbl" style="color:var(--error)">😞 Detratores</div><div class="stat-val" style="color:var(--error)">${d.detractors}</div><div class="stat-sub">${dPct}% · notas 0-6</div></div>
+        </div>
+      </div>
+
+      <!-- Distribuição -->
+      <div class="tbl-wrap" style="margin-bottom:16px">
+        <div style="padding:18px">
+          <div class="tbl-ttl" style="margin-bottom:16px">Distribuição de notas</div>
+          <div style="display:flex;align-items:flex-end;gap:4px;height:80px">${distBars}</div>
+        </div>
+      </div>
+
+      <!-- Comentários -->
+      ${comments.length ? `
+      <div class="tbl-wrap">
+        <div style="padding:18px">
+          <div class="tbl-ttl" style="margin-bottom:14px">Comentários recentes</div>
+          ${comments.map(r => `
+            <div style="border-left:3px solid ${r.category==='promoter'?'var(--success)':r.category==='neutral'?'var(--warn)':'var(--error)'};padding:10px 14px;margin-bottom:10px;background:var(--cream);border-radius:0 var(--r-sm) var(--r-sm) 0">
+              <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+                <span class="badge badge-${r.category==='promoter'?'ok':'cancel'}" style="${r.category==='neutral'?'background:var(--gold-light);color:var(--gold-deep)':''}">${r.category==='promoter'?'Promotor':r.category==='neutral'?'Neutro':'Detrator'} · Nota ${r.score}</span>
+                <span style="font-size:11px;color:var(--text-light)">${fmtDate(String(r.created_at).slice(0,10))}</span>
+              </div>
+              <div style="font-size:13px;color:var(--text);line-height:1.6">${r.comment}</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>` : ''}
+    `;
+  } catch(e) {
+    wrap.innerHTML = `<div style="padding:20px;color:var(--error)">Erro: ${e.message}</div>`;
+  }
+}
+
+// ══════════════════════════════════════════════════
 // WELCOME / PWA INSTALL POPUP
 // ══════════════════════════════════════════════════
 function showWelcomePopup() {
@@ -3148,6 +3382,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('page-loader').classList.add('hidden');
     document.getElementById('booking-app').classList.remove('hidden');
   }, 600);
+
+  // Verifica NPS após 2s (após tudo carregar)
+  setTimeout(async () => {
+    const phone = sessionStorage.getItem('be_client_phone') || localStorage.getItem('be_client_phone');
+    if (phone) checkNPS().catch(()=>{});
+  }, 2000);
 
   // Exibe welcome popup após 1s se app não estiver instalado
   setTimeout(async () => {
