@@ -255,8 +255,11 @@ td{padding:11px 14px;font-size:12.5px;color:var(--text);border-bottom:1px solid 
 tr:last-child td{border-bottom:none}
 tr:hover td{background:#FAF3F6}
 .badge{display:inline-flex;align-items:center;padding:3px 9px;border-radius:20px;font-size:10px;font-weight:800;letter-spacing:.04em}
-.badge-ok{background:var(--success-bg);color:var(--success)}
+.badge-confirmed{background:#E8F0FE;color:#1A56DB}
+.badge-realizado{background:var(--success-bg);color:var(--success)}
 .badge-cancel{background:var(--error-bg);color:var(--error)}
+/* legacy alias */
+.badge-ok{background:#E8F0FE;color:#1A56DB}
 .act-btn{background:none;border:1px solid var(--border);border-radius:5px;padding:4px 9px;cursor:pointer;font-size:11px;font-family:'Nunito',sans-serif;color:var(--text-light);transition:var(--tr);font-weight:600;margin-right:3px;text-decoration:none;display:inline-block}
 .act-btn:hover{border-color:var(--rose);color:var(--rose)}
 .act-btn.danger:hover{border-color:var(--error);color:var(--error)}
@@ -504,7 +507,7 @@ tr:hover td{background:#FAF3F6}
                 <div class="tbl-filters">
                   <input type="date" class="fi" id="fl-date" onchange="renderAgenda()">
                   <select class="fs" id="fl-city" onchange="renderAgenda()"><option value="">Todas as cidades</option></select>
-                  <select class="fs" id="fl-status" onchange="renderAgenda()"><option value="">Todos os status</option><option value="confirmed">Confirmados</option><option value="cancelled">Cancelados</option></select>
+                  <select class="fs" id="fl-status" onchange="renderAgenda()"><option value="">Todos os status</option><option value="confirmed">Confirmados</option><option value="realizado">Realizados</option><option value="cancelled">Cancelados</option></select>
                 </div>
               </div>
               <div class="agenda-table-wrap" style="overflow-x:auto"><table><thead><tr><th>Data / Hora</th><th>Cliente</th><th>Procedimento</th><th>Cidade</th><th>Valor</th><th>Status</th><th>Ações</th></tr></thead><tbody id="agenda-body"></tbody></table></div>
@@ -836,7 +839,7 @@ tr:hover td{background:#FAF3F6}
 // ══════════════════════════════════════════════════
 // VERSÃO — altere APENAS aqui; atualiza todos os rodapés
 // ══════════════════════════════════════════════════
-const APP_VERSION  = '1.6.1';
+const APP_VERSION  = '1.6.3';
 const APP_COPY     = `Versão: ${APP_VERSION} | Clínica Bela Essência © ${new Date().getFullYear()}`;
 
 function renderFooters() {
@@ -1473,6 +1476,18 @@ function getCheckedCityIds(containerId) {
     .map(el => Number(el.value));
 }
 
+// ── STATUS HELPERS ──────────────────────────────
+function statusBadge(status) {
+  if (status === 'confirmed') return '<span class="badge badge-confirmed">Confirmado</span>';
+  if (status === 'realizado') return '<span class="badge badge-realizado">Realizado</span>';
+  return '<span class="badge badge-cancel">Cancelado</span>';
+}
+function statusLabel(status) {
+  if (status === 'confirmed') return 'Confirmado';
+  if (status === 'realizado') return 'Realizado';
+  return 'Cancelado';
+}
+
 // ── STATS ────────────────────────────────────────
 async function renderStats() {
   try {
@@ -1489,8 +1504,9 @@ async function renderStats() {
 // Stats calculados a partir de uma lista já filtrada (frontend)
 function renderStatsFromList(list, filterLabel) {
   const confirmed  = list.filter(a => a.status === 'confirmed');
+  const realizado  = list.filter(a => a.status === 'realizado');
   const cancelled  = list.filter(a => a.status === 'cancelled');
-  const revenue    = confirmed.reduce((s,a) => s + (Number(a.price)||0), 0);
+  const revenue    = [...confirmed,...realizado].reduce((s,a) => s + (Number(a.price)||0), 0);
   document.getElementById('today-stats').innerHTML=`
     <div class="stat-card">
       <div class="stat-lbl">📋 ${filterLabel}</div>
@@ -1498,12 +1514,17 @@ function renderStatsFromList(list, filterLabel) {
       <div class="stat-sub">total no filtro</div>
     </div>
     <div class="stat-card">
-      <div class="stat-lbl">✅ Confirmados</div>
+      <div class="stat-lbl" style="color:#1A56DB">✅ Confirmados</div>
       <div class="stat-val">${confirmed.length}</div>
       <div class="stat-sub">${fmtCurr(revenue)}</div>
     </div>
     <div class="stat-card">
-      <div class="stat-lbl">❌ Cancelados</div>
+      <div class="stat-lbl" style="color:var(--success)">✔ Realizados</div>
+      <div class="stat-val">${realizado.length}</div>
+      <div class="stat-sub">no filtro</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-lbl" style="color:var(--error)">❌ Cancelados</div>
       <div class="stat-val">${cancelled.length}</div>
       <div class="stat-sub">no filtro</div>
     </div>
@@ -1553,12 +1574,12 @@ async function renderAgenda() {
         <td style="max-width:160px">${a.proc_name}</td>
         <td style="font-size:11px">${CITIES.find(c=>c.id===a.city_id)?.short||a.city_name}</td>
         <td style="color:var(--gold);font-weight:700">${a.pt==='none'?'—':a.pt==='eval'?'Avaliação':a.price?fmtCurr(a.price):'—'}</td>
-        <td><span class="badge badge-${a.status==='confirmed'?'ok':'cancel'}">${a.status==='confirmed'?'Confirmado':'Cancelado'}</span></td>
+        <td>${statusBadge(a.status)}</td>
         <td>
           <button class="act-btn" onclick="openEditModal('${a.id}',${a.dur||60})">Editar</button>
-          ${a.status==='confirmed'
+          ${a.status==='confirmed'||a.status==='realizado'
             ? `<button class="act-btn danger" onclick="cancelAppt('${a.id}')">Cancelar</button>`
-            : `<button class="act-btn danger" onclick="deleteAppt('${a.id}')" style="border-color:var(--error);color:var(--error)">🗑 Excluir</button>`
+            : `<button class="act-btn danger" onclick="deleteAppt('${a.id}')" style="color:var(--error);border-color:var(--error)">🗑 Excluir</button>`
           }
           <a href="${phoneToWA(a.phone)}" target="_blank" class="act-btn">WA</a>
         </td>
@@ -1577,7 +1598,7 @@ async function renderAgenda() {
               <div class="appt-card-date">${fmtDate(a.date)}</div>
               <div class="appt-card-time">${String(a.st).slice(0,5)} – ${String(a.et).slice(0,5)}</div>
             </div>
-            <span class="badge badge-${isCnf?'ok':'cancel'}">${isCnf?'Confirmado':'Cancelado'}</span>
+            ${statusBadge(a.status)}
           </div>
           <div class="appt-card-body">
             <div><span class="appt-card-lbl">Cliente</span><span class="appt-card-val">${a.name}</span></div>
@@ -1588,7 +1609,7 @@ async function renderAgenda() {
           </div>
           <div class="appt-card-actions">
             <button class="act-btn" onclick="openEditModal('${a.id}',${a.dur||60})">Editar</button>
-            ${isCnf
+            ${a.status==='confirmed'||a.status==='realizado'
               ? `<button class="act-btn danger" onclick="cancelAppt('${a.id}')" style="color:var(--warn);border-color:var(--warn)">Cancelar</button>`
               : `<button class="act-btn danger" onclick="deleteAppt('${a.id}')" style="color:var(--error);border-color:var(--error)">🗑 Excluir da base</button>`
             }
