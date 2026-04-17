@@ -19,7 +19,6 @@ const cors       = require('cors');
 const path       = require('path');
 const { Pool }   = require('pg');
 const webpush    = require('web-push');
-const nodemailer = require('nodemailer');
 const cron       = require('node-cron');
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -1944,29 +1943,40 @@ app.get('*', (req, res) => {
 // ══════════════════════════════════════════════════════════════════════════════
 // 6. INICIALIZAÇÃO
 // ══════════════════════════════════════════════════════════════════════════════
-// ── E-mail diário da agenda ──────────────────────────────────────────────────
-function createMailTransporter() {
-  const user = process.env.MAIL_USER;
-  const pass = process.env.MAIL_PASS;
-  if (!user || !pass) return null;
-  return nodemailer.createTransport({
-    host:   'smtp.gmail.com',
-    port:   587,
-    secure: false,           // STARTTLS
-    auth:   { user, pass },
-    tls:    { rejectUnauthorized: false },
-    connectionTimeout: 30000,
-    greetingTimeout:   15000,
-    socketTimeout:     30000,
+// ── E-mail diário da agenda (via Resend API — HTTPS, nunca bloqueado) ──────────
+// Resend: https://resend.com — grátis até 3.000 emails/mês
+// Variável necessária no Railway: RESEND_API_KEY
+async function sendEmail({ to, bcc, subject, html }) {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    console.log('[Email] RESEND_API_KEY não configurada. Pulando envio.');
+    return null;
+  }
+  const resp = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type':  'application/json',
+    },
+    body: JSON.stringify({
+      from:    'Belle Planner <noreply@belaessencia.app.br>',
+      to:      Array.isArray(to) ? to : [to],
+      bcc:     bcc ? (Array.isArray(bcc) ? bcc : [bcc]) : undefined,
+      subject,
+      html,
+    }),
   });
+  const data = await resp.json();
+  if (!resp.ok) throw new Error(data.message || `Resend error ${resp.status}`);
+  return data;
 }
 
 async function sendDailyAgendaEmail() {
-  const transporter = createMailTransporter();
-  if (!transporter) {
-    console.log('[Email] MAIL_USER/MAIL_PASS não configurados. Pulando envio.');
+  if (!process.env.RESEND_API_KEY) {
+    console.log('[Email] RESEND_API_KEY não configurada. Pulando envio.');
     return;
   }
+  console.log('[Email] RESEND_API_KEY: ✓ configurada');
 
   try {
     // Dados do profissional
@@ -2062,33 +2072,24 @@ async function sendDailyAgendaEmail() {
         </div>
       </div>`;
 
-    // Verifica conexão SMTP antes de enviar
-    await new Promise((resolve, reject) => {
-      transporter.verify((err) => {
-        if (err) { console.error('[Email] Falha SMTP verify:', err.message); reject(err); }
-        else { console.log('[Email] SMTP OK, enviando...'); resolve(); }
-      });
-    });
-
     const firstName = prof.name.split(' ')[0];
-    const mailResult = await transporter.sendMail({
-      from:    `"Belle Planner" <${process.env.MAIL_USER}>`,
+    console.log(`[Email] Enviando via Resend para ${prof.email}...`);
+    const result = await sendEmail({
       to:      prof.email,
       bcc:     'erick.torritezi@gmail.com',
       subject: `${firstName}, veja sua agenda do dia! 📅`,
       html,
     });
-    console.log(`[Email] ✓ Enviado para ${prof.email} + BCC erick.torritezi@gmail.com | messageId: ${mailResult.messageId}`);
+    console.log(`[Email] ✓ Enviado! id: ${result?.id} | para: ${prof.email} | BCC: erick.torritezi@gmail.com`);
   } catch (err) {
-    console.error('[Email] Erro ao enviar:', err.message);
+    console.error('[Email] Erro ao enviar via Resend:', err.message);
   }
 }
 
 // Admin: disparar e-mail manualmente (para teste)
 app.post('/api/admin/send-daily-email', requireAdmin, async (req, res) => {
   console.log('[Email] Disparo manual solicitado pelo admin...');
-  console.log('[Email] MAIL_USER:', process.env.MAIL_USER ? '✓ ' + process.env.MAIL_USER : '✗ NÃO configurado');
-  console.log('[Email] MAIL_PASS:', process.env.MAIL_PASS ? '✓ configurado' : '✗ NÃO configurado');
+  console.log('[Email] RESEND_API_KEY:', process.env.RESEND_API_KEY ? '✓ configurada' : '✗ NÃO configurada');
   try {
     await sendDailyAgendaEmail();
     res.json({ ok: true, message: 'E-mail enviado. Verifique os logs do servidor.' });
@@ -2114,8 +2115,7 @@ async function start() {
       console.log('[Email] Agendando e-mail inicial para 15s após start...');
       setTimeout(async () => {
         console.log('[Email] Iniciando disparo do e-mail de deploy...');
-        console.log('[Email] MAIL_USER:', process.env.MAIL_USER ? '✓ configurado' : '✗ NÃO configurado');
-        console.log('[Email] MAIL_PASS:', process.env.MAIL_PASS ? '✓ configurado' : '✗ NÃO configurado');
+        console.log('[Email] RESEND_API_KEY:', process.env.RESEND_API_KEY ? '✓ configurada' : '✗ NÃO configurada');
         await sendDailyAgendaEmail();
       }, 15000); // 15s para garantir que tudo está pronto
     });
