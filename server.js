@@ -2144,13 +2144,7 @@ async function start() {
     await initVapid(); // gera/carrega chaves VAPID automaticamente
     app.listen(PORT, () => {
       console.log(`✅  Bela Essência rodando na porta ${PORT}`);
-      // Disparo imediato no primeiro deploy — após isso segue o cron das 06h30
-      console.log('[Email] Agendando e-mail inicial para 15s após start...');
-      setTimeout(async () => {
-        console.log('[Email] Iniciando disparo do e-mail de deploy...');
-        console.log('[Email] RESEND_API_KEY:', process.env.RESEND_API_KEY ? '✓ configurada' : '✗ NÃO configurada');
-        await sendDailyAgendaEmail();
-      }, 15000); // 15s para garantir que tudo está pronto
+      // E-mail diário configurado via cron às 06h30 BRT (ver abaixo)
     });
   } catch (err) {
     console.error('❌  Falha ao iniciar servidor:', err.message);
