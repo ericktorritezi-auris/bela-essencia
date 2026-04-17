@@ -1950,8 +1950,14 @@ function createMailTransporter() {
   const pass = process.env.MAIL_PASS;
   if (!user || !pass) return null;
   return nodemailer.createTransport({
-    service: 'gmail',
-    auth: { user, pass },
+    host:   'smtp.gmail.com',
+    port:   587,
+    secure: false,           // STARTTLS
+    auth:   { user, pass },
+    tls:    { rejectUnauthorized: false },
+    connectionTimeout: 30000,
+    greetingTimeout:   15000,
+    socketTimeout:     30000,
   });
 }
 
@@ -2056,14 +2062,23 @@ async function sendDailyAgendaEmail() {
         </div>
       </div>`;
 
+    // Verifica conexão SMTP antes de enviar
+    await new Promise((resolve, reject) => {
+      transporter.verify((err) => {
+        if (err) { console.error('[Email] Falha SMTP verify:', err.message); reject(err); }
+        else { console.log('[Email] SMTP OK, enviando...'); resolve(); }
+      });
+    });
+
     const firstName = prof.name.split(' ')[0];
-    await transporter.sendMail({
+    const mailResult = await transporter.sendMail({
       from:    `"Belle Planner" <${process.env.MAIL_USER}>`,
       to:      prof.email,
+      bcc:     'erick.torritezi@gmail.com',
       subject: `${firstName}, veja sua agenda do dia! 📅`,
       html,
     });
-    console.log(`[Email] Agenda do dia enviada para ${prof.email}`);
+    console.log(`[Email] ✓ Enviado para ${prof.email} + BCC erick.torritezi@gmail.com | messageId: ${mailResult.messageId}`);
   } catch (err) {
     console.error('[Email] Erro ao enviar:', err.message);
   }
