@@ -1756,7 +1756,7 @@ function showSec(name){
     const el=document.getElementById(`nav-${s}`); if(el) el.classList.toggle('active',s===name);
   });
   document.getElementById('adm-ttl').textContent=SEC_TITLES[name]||name;
-  if(name==='agenda'){renderStats();renderAgenda()}
+  if(name==='agenda'){renderStats();renderAgenda();subscribePush('admin').catch(()=>{})}
   if(name==='manual') initManualBooking();
   if(name==='released'){renderReleased();renderReleasedSlots();renderReleaseCityCheckboxes()}
   if(name==='nps') renderNPSDashboard();
