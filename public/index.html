@@ -1075,7 +1075,7 @@ tr:hover td{background:#FAF3F6}
 // ══════════════════════════════════════════════════
 // VERSÃO — altere APENAS aqui; atualiza todos os rodapés
 // ══════════════════════════════════════════════════
-const APP_VERSION  = '1.9.4';
+const APP_VERSION  = '1.9.5';
 const APP_COPY     = `Versão: ${APP_VERSION} | Clínica Bela Essência © ${new Date().getFullYear()}`;
 
 function renderFooters() {
@@ -1815,7 +1815,7 @@ async function renderAgenda() {
         <td style="color:var(--gold);font-weight:700">${a.pt==='none'?'—':a.pt==='eval'?'Avaliação':a.price?fmtCurr(a.price):'—'}</td>
         <td>${statusBadge(a.status)}</td>
         <td>
-          <button class="act-btn" onclick="openEditModal('${a.id}',${a.dur||60})">Editar</button>
+          <button class="act-btn" onclick="openEditModal('${a.id}')">Editar</button>
           ${a.status==='confirmed'||a.status==='realizado'
             ? `<button class="act-btn danger" onclick="cancelAppt('${a.id}')">Cancelar</button>`
             : `<button class="act-btn danger" onclick="deleteAppt('${a.id}')" style="color:var(--error);border-color:var(--error)">🗑 Excluir</button>`
@@ -1847,7 +1847,7 @@ async function renderAgenda() {
             <div><span class="appt-card-lbl">Valor</span><span class="appt-card-val" style="color:var(--gold)">${valor}</span></div>
           </div>
           <div class="appt-card-actions">
-            <button class="act-btn" onclick="openEditModal('${a.id}',${a.dur||60})">Editar</button>
+            <button class="act-btn" onclick="openEditModal('${a.id}')">Editar</button>
             ${a.status==='confirmed'||a.status==='realizado'
               ? `<button class="act-btn danger" onclick="cancelAppt('${a.id}')" style="color:var(--warn);border-color:var(--warn)">Cancelar</button>`
               : `<button class="act-btn danger" onclick="deleteAppt('${a.id}')" style="color:var(--error);border-color:var(--error)">🗑 Excluir da base</button>`
@@ -1877,42 +1877,156 @@ async function deleteAppt(id) {
     renderAgenda(); renderStats();
   } catch(e) { showToast(e.message,'error'); }
 }
-function openEditModal(id, dur) {
-  // Get current row data from the rendered table - simplest approach
+async function openEditModal(apptId) {
+  // Carrega dados do agendamento direto do servidor
+  let appt;
+  try {
+    const list = await GET('/api/appointments');
+    appt = list.find(x => String(x.id) === String(apptId));
+    if (!appt) { showToast('Agendamento não encontrado','error'); return; }
+  } catch(e) { showToast('Erro ao carregar dados: ' + e.message,'error'); return; }
+
+  await loadCities(); // garante que CITIES está carregado
+  const allProcs = await getProcs();
+
+  // Procedimentos disponíveis para a cidade atual
+  const cityObj = CITIES.find(c => Number(c.id) === Number(appt.city_id));
+  let cityProcs = allProcs;
+  if (cityObj && cityObj.procedures && cityObj.procedures.length) {
+    const ids = new Set(cityObj.procedures.map(p => Number(p.id)));
+    cityProcs = allProcs.filter(p => ids.has(Number(p.id)));
+  }
+
+  const cityOptions = CITIES.map(c =>
+    `<option value="${c.id}" ${Number(c.id)===Number(appt.city_id)?'selected':''}>${c.short}</option>`
+  ).join('');
+
+  const procOptions = cityProcs.map(p =>
+    `<option value="${p.id}" data-price="${p.price||''}" data-pt="${p.pt}" ${Number(p.id)===Number(appt.proc_id)?'selected':''}>${p.name}</option>`
+  ).join('');
+
+  const currentPrice = appt.price ? Number(appt.price) : '';
+
   document.getElementById('modal-card').innerHTML=`
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
       <div class="modal-ttl">Editar Agendamento</div>
       <button class="modal-close" onclick="closeModal()">✕</button>
     </div>
-    <div class="fg"><label>Nome do cliente</label><input type="text" id="ed-name"></div>
-    <div class="fg"><label>WhatsApp</label><input type="tel" id="ed-phone"></div>
-    <div class="fg"><label>Data</label><input type="date" id="ed-date"></div>
-    <div class="fg"><label>Horário de início</label><input type="time" id="ed-time" step="1800"></div>
+    <div class="fg">
+      <label>Cidade</label>
+      <select id="ed-city" onchange="onEditCityChange('${apptId}')" style="width:100%;background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:13px 15px;font-family:inherit;font-size:14px;color:var(--dark);outline:none">
+        ${cityOptions}
+      </select>
+    </div>
+    <div class="fg">
+      <label>Procedimento</label>
+      <select id="ed-proc" onchange="onEditProcChange()" style="width:100%;background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:13px 15px;font-family:inherit;font-size:14px;color:var(--dark);outline:none">
+        ${procOptions}
+      </select>
+    </div>
+    <div class="fg"><label>Nome do cliente</label><input type="text" id="ed-name" value="${appt.name||''}"></div>
+    <div class="fg"><label>WhatsApp</label><input type="tel" id="ed-phone" value="${appt.phone||''}"></div>
+    <div class="fg"><label>Data</label><input type="date" id="ed-date" value="${String(appt.date).slice(0,10)}" onchange="onEditDateChange('${apptId}')"></div>
+    <div class="fg">
+      <label>Horário</label>
+      <select id="ed-time" style="width:100%;background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:13px 15px;font-family:inherit;font-size:14px;color:var(--dark);outline:none">
+        <option value="${String(appt.st).slice(0,5)}" selected>${String(appt.st).slice(0,5)}</option>
+      </select>
+    </div>
+    <div class="fg">
+      <label>Valor (R$) <small style="font-weight:400;color:var(--text-light)">— altera só este agendamento</small></label>
+      <input type="number" id="ed-price" value="${currentPrice}" min="0" step="0.01" placeholder="0.00">
+    </div>
     <div style="display:flex;gap:9px;margin-top:8px">
-      <button class="btn btn-primary" onclick="saveEdit('${id}',${dur})" style="flex:1">Salvar</button>
+      <button class="btn btn-primary" onclick="saveEdit('${apptId}')" style="flex:1">Salvar</button>
       <button class="btn btn-secondary" onclick="closeModal()" style="flex:1;width:auto">Cancelar</button>
     </div>
   `;
-  // Pre-fill from API
-  GET(`/api/appointments?`).then(list=>{
-    const a=list.find(x=>x.id===id); if(!a) return;
-    document.getElementById('ed-name').value=a.name;
-    document.getElementById('ed-phone').value=a.phone;
-    document.getElementById('ed-date').value=String(a.date).slice(0,10);
-    document.getElementById('ed-time').value=String(a.st).slice(0,5);
-  });
   document.getElementById('modal-bg').classList.remove('hidden');
+
+  // Carrega horários disponíveis para a data atual
+  onEditDateChange(apptId);
 }
-async function saveEdit(id, dur) {
-  const name=document.getElementById('ed-name').value.trim();
-  const phone=document.getElementById('ed-phone').value.trim();
-  const date=document.getElementById('ed-date').value;
-  const st=document.getElementById('ed-time').value;
-  if(!name||!phone||!date||!st){showToast('Preencha todos os campos','error');return}
+
+async function onEditCityChange(apptId) {
+  const cityId = document.getElementById('ed-city').value;
+  const allProcs = await getProcs();
+  const cityObj = CITIES.find(c => Number(c.id) === Number(cityId));
+  let cityProcs = allProcs;
+  if (cityObj && cityObj.procedures && cityObj.procedures.length) {
+    const ids = new Set(cityObj.procedures.map(p => Number(p.id)));
+    cityProcs = allProcs.filter(p => ids.has(Number(p.id)));
+  }
+  const sel = document.getElementById('ed-proc');
+  sel.innerHTML = cityProcs.map(p =>
+    `<option value="${p.id}" data-price="${p.price||''}" data-pt="${p.pt}">${p.name}</option>`
+  ).join('');
+  onEditProcChange();
+  onEditDateChange(apptId);
+}
+
+function onEditProcChange() {
+  const sel = document.getElementById('ed-proc');
+  const opt = sel.options[sel.selectedIndex];
+  if (!opt) return;
+  const pt = opt.dataset.pt;
+  const price = opt.dataset.price;
+  const priceInput = document.getElementById('ed-price');
+  if (priceInput && pt === 'fixed' && price) priceInput.value = price;
+}
+
+async function onEditDateChange(apptId) {
+  const date   = document.getElementById('ed-date')?.value;
+  const cityId = document.getElementById('ed-city')?.value;
+  const procId = document.getElementById('ed-proc')?.value;
+  const timeSel = document.getElementById('ed-time');
+  if (!date || !cityId || !procId || !timeSel) return;
+
+  const prevTime = timeSel.value;
+  timeSel.innerHTML = '<option>Carregando...</option>';
   try {
-    await PUT(`/api/appointments/${id}`,{name,phone,date,st,procDur:dur});
-    showToast('Agendamento atualizado','ok'); closeModal(); renderAgenda();
-  } catch(e){ showToast(e.message,'error'); }
+    const slots = await GET(`/api/availability?date=${date}&procId=${procId}&cityId=${cityId}`);
+    if (!slots.length) {
+      timeSel.innerHTML = '<option value="">Sem horários disponíveis</option>';
+      return;
+    }
+    timeSel.innerHTML = slots.map(s =>
+      `<option value="${s}" ${s===prevTime?'selected':''}>${s}</option>`
+    ).join('');
+  } catch {
+    timeSel.innerHTML = `<option value="${prevTime}" selected>${prevTime}</option>`;
+  }
+}
+
+async function saveEdit(apptId) {
+  const name   = document.getElementById('ed-name').value.trim();
+  const phone  = document.getElementById('ed-phone').value.trim();
+  const date   = document.getElementById('ed-date').value;
+  const st     = document.getElementById('ed-time').value;
+  const cityId = document.getElementById('ed-city').value;
+  const procId = document.getElementById('ed-proc').value;
+  const price  = document.getElementById('ed-price').value;
+  if (!name||!phone||!date||!st) { showToast('Preencha todos os campos','error'); return; }
+
+  const allProcs = await getProcs();
+  const p = allProcs.find(x => Number(x.id) === Number(procId));
+  const et = p ? m2t(t2m(st) + Number(p.dur)) : st;
+  const cityObj = CITIES.find(c => Number(c.id) === Number(cityId));
+
+  try {
+    await PUT(`/api/appointments/${apptId}`, {
+      name, phone, date, st, et,
+      cityId:   Number(cityId),
+      cityName: cityObj?.name || '',
+      procId:   Number(procId),
+      procName: p?.name || '',
+      price:    price ? Number(price) : null,
+      procDur:  p?.dur || 60,
+    });
+    showToast('Agendamento atualizado','ok');
+    closeModal();
+    renderAgenda();
+  } catch(e) { showToast(e.message,'error'); }
 }
 
 // ── BLOCKED ──────────────────────────────────────
@@ -2106,19 +2220,19 @@ function openProcModal(id) {
       <div class="modal-ttl">${id?'Editar':'Novo'} Procedimento</div>
       <button class="modal-close" onclick="closeModal()">✕</button>
     </div>
-    <div class="fg"><label>Nome</label><input type="text" id="pm-name" placeholder="Nome do procedimento"></div>
-    <div class="fg"><label>Duração (minutos)</label><input type="number" id="pm-dur" value="60" min="15" step="15"></div>
+    <div class="fg"><label>Nome</label><input type="text" id="proc-modal-name" placeholder="Nome do procedimento"></div>
+    <div class="fg"><label>Duração (minutos)</label><input type="number" id="proc-modal-dur" value="60" min="15" step="15"></div>
     <div class="fg">
       <label>Tipo de valor</label>
-      <select id="pm-pt" onchange="togglePF()" style="width:100%;background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:13px 15px;font-family:inherit;font-size:14px;color:var(--dark);outline:none">
+      <select id="proc-modal-pt" onchange="togglePF()" style="width:100%;background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:13px 15px;font-family:inherit;font-size:14px;color:var(--dark);outline:none">
         <option value="fixed">Valor fixo</option>
         <option value="eval">Sob avaliação</option>
         <option value="none">Sem exibir valor</option>
       </select>
     </div>
-    <div class="fg" id="pm-pf">
+    <div class="fg" id="proc-modal-pf">
       <label>Valor (R$)</label>
-      <input type="number" id="pm-price" min="0" step="0.01" placeholder="0.00">
+      <input type="number" id="proc-modal-price" min="0" step="0.01" placeholder="0.00">
     </div>
     <div style="display:flex;gap:9px;margin-top:8px">
       <button class="btn btn-primary" onclick="saveProc(${id||'null'})" style="flex:1">Salvar</button>
@@ -2128,25 +2242,25 @@ function openProcModal(id) {
   if (id) {
     getProcs().then(list=>{
       const p=list.find(x=>x.id===id); if(!p) return;
-      document.getElementById('pm-name').value=p.name;
-      document.getElementById('pm-dur').value=p.dur;
-      document.getElementById('pm-pt').value=p.pt;
-      if(p.price) document.getElementById('pm-price').value=p.price;
+      document.getElementById('proc-modal-name').value=p.name;
+      document.getElementById('proc-modal-dur').value=p.dur;
+      document.getElementById('proc-modal-pt').value=p.pt;
+      if(p.price) document.getElementById('proc-modal-price').value=p.price;
       togglePF();
     });
   }
   document.getElementById('modal-bg').classList.remove('hidden');
 }
 function togglePF(){
-  const t=document.getElementById('pm-pt')?.value;
-  const el=document.getElementById('pm-pf');
+  const t=document.getElementById('proc-modal-pt')?.value;
+  const el=document.getElementById('proc-modal-pf');
   if(el) el.style.display=t==='fixed'?'':'none';
 }
 async function saveProc(id) {
-  const name=document.getElementById('pm-name').value.trim();
-  const dur=parseInt(document.getElementById('pm-dur').value);
-  const pt=document.getElementById('pm-pt').value;
-  const price=pt==='fixed'?parseFloat(document.getElementById('pm-price').value)||null:null;
+  const name=document.getElementById('proc-modal-name').value.trim();
+  const dur=parseInt(document.getElementById('proc-modal-dur').value);
+  const pt=document.getElementById('proc-modal-pt').value;
+  const price=pt==='fixed'?parseFloat(document.getElementById('proc-modal-price').value)||null:null;
   if(!name||!dur){showToast('Preencha nome e duração','error');return}
   try {
     if(id) await PUT(`/api/procedures/${id}`,{name,dur,price,pt});
@@ -2256,7 +2370,7 @@ async function renderPromos() {
 }
 
 async function createPromo() {
-  const name  = document.getElementById('pm-name').value.trim();
+  const name  = document.getElementById('proc-modal-name').value.trim();
   const start = document.getElementById('pm-start').value;
   const end   = document.getElementById('pm-end').value;
   const disc  = document.getElementById('pm-disc').value;
@@ -2274,7 +2388,7 @@ async function createPromo() {
 
   try {
     await POST('/api/promotions', { name, start_date:start, end_date:end, discount:Number(disc), apply_to_all, proc_ids });
-    document.getElementById('pm-name').value='';
+    document.getElementById('proc-modal-name').value='';
     document.getElementById('pm-start').value='';
     document.getElementById('pm-end').value='';
     document.getElementById('pm-disc').value='';
