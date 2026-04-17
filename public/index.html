@@ -1075,7 +1075,7 @@ tr:hover td{background:#FAF3F6}
 // ══════════════════════════════════════════════════
 // VERSÃO — altere APENAS aqui; atualiza todos os rodapés
 // ══════════════════════════════════════════════════
-const APP_VERSION  = '1.9.5';
+const APP_VERSION  = '1.9.6';
 const APP_COPY     = `Versão: ${APP_VERSION} | Clínica Bela Essência © ${new Date().getFullYear()}`;
 
 function renderFooters() {
@@ -1920,7 +1920,7 @@ async function openEditModal(apptId) {
     </div>
     <div class="fg">
       <label>Procedimento</label>
-      <select id="ed-proc" onchange="onEditProcChange()" style="width:100%;background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:13px 15px;font-family:inherit;font-size:14px;color:var(--dark);outline:none">
+      <select id="ed-proc" onchange="onEditProcChange(true)" style="width:100%;background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:13px 15px;font-family:inherit;font-size:14px;color:var(--dark);outline:none">
         ${procOptions}
       </select>
     </div>
@@ -1934,8 +1934,8 @@ async function openEditModal(apptId) {
       </select>
     </div>
     <div class="fg">
-      <label>Valor (R$) <small style="font-weight:400;color:var(--text-light)">— altera só este agendamento</small></label>
-      <input type="number" id="ed-price" value="${currentPrice}" min="0" step="0.01" placeholder="0.00">
+      <label>Valor (R$) <small style="font-weight:400;color:var(--text-light)">— altera só este agendamento, não o cadastro do procedimento</small></label>
+      <input type="number" id="ed-price" value="${currentPrice}" min="0" step="0.01" placeholder="0.00 (deixe vazio para sem valor)">
     </div>
     <div style="display:flex;gap:9px;margin-top:8px">
       <button class="btn btn-primary" onclick="saveEdit('${apptId}')" style="flex:1">Salvar</button>
@@ -1965,36 +1965,48 @@ async function onEditCityChange(apptId) {
   onEditDateChange(apptId);
 }
 
-function onEditProcChange() {
+function onEditProcChange(userInitiated) {
+  // Só atualiza o preço se foi uma mudança manual do usuário (não no carregamento inicial)
+  if (!userInitiated) return;
   const sel = document.getElementById('ed-proc');
   const opt = sel.options[sel.selectedIndex];
   if (!opt) return;
-  const pt = opt.dataset.pt;
+  const pt    = opt.dataset.pt;
   const price = opt.dataset.price;
   const priceInput = document.getElementById('ed-price');
   if (priceInput && pt === 'fixed' && price) priceInput.value = price;
 }
 
 async function onEditDateChange(apptId) {
-  const date   = document.getElementById('ed-date')?.value;
-  const cityId = document.getElementById('ed-city')?.value;
-  const procId = document.getElementById('ed-proc')?.value;
+  const date    = document.getElementById('ed-date')?.value;
+  const cityId  = document.getElementById('ed-city')?.value;
+  const procId  = document.getElementById('ed-proc')?.value;
   const timeSel = document.getElementById('ed-time');
   if (!date || !cityId || !procId || !timeSel) return;
 
   const prevTime = timeSel.value;
   timeSel.innerHTML = '<option>Carregando...</option>';
   try {
-    const slots = await GET(`/api/availability?date=${date}&procId=${procId}&cityId=${cityId}`);
+    // excludeApptId garante que o horário atual do agendamento apareça disponível
+    const exclude = apptId ? `&excludeApptId=${apptId}` : '';
+    const slots = await GET(`/api/availability?date=${date}&procId=${procId}&cityId=${cityId}${exclude}`);
     if (!slots.length) {
-      timeSel.innerHTML = '<option value="">Sem horários disponíveis</option>';
+      // Se sem slots mas tinha prevTime, mantém ele (pode ser horário fora do padrão)
+      if (prevTime && prevTime !== 'Carregando...') {
+        timeSel.innerHTML = `<option value="${prevTime}" selected>${prevTime} (horário atual)</option>`;
+      } else {
+        timeSel.innerHTML = '<option value="">Sem horários disponíveis</option>';
+      }
       return;
     }
-    timeSel.innerHTML = slots.map(s =>
-      `<option value="${s}" ${s===prevTime?'selected':''}>${s}</option>`
+    // Inclui o horário atual no select (pode não estar na lista de "disponíveis")
+    const hasCurrentTime = slots.includes(prevTime);
+    const allSlots = hasCurrentTime || !prevTime ? slots : [prevTime, ...slots];
+    timeSel.innerHTML = allSlots.map(s =>
+      `<option value="${s}" ${s===prevTime?'selected':''}>${s}${s===prevTime&&!hasCurrentTime?' (horário atual)':''}</option>`
     ).join('');
   } catch {
-    timeSel.innerHTML = `<option value="${prevTime}" selected>${prevTime}</option>`;
+    if (prevTime) timeSel.innerHTML = `<option value="${prevTime}" selected>${prevTime}</option>`;
   }
 }
 
@@ -2020,7 +2032,7 @@ async function saveEdit(apptId) {
       cityName: cityObj?.name || '',
       procId:   Number(procId),
       procName: p?.name || '',
-      price:    price ? Number(price) : null,
+      price:    price !== '' ? Number(price) : null,
       procDur:  p?.dur || 60,
     });
     showToast('Agendamento atualizado','ok');
@@ -2149,7 +2161,7 @@ async function renderRevTable() {
       <tr>
         <td><div style="font-weight:700">${fmtDate(a.date)}</div><div style="font-size:11px;color:var(--text-light)">${String(a.st).slice(0,5)}</div></td>
         <td>${a.name}</td><td>${a.proc_name}</td>
-        <td style="color:var(--gold);font-weight:700">${a.pt==='none'?'—':a.pt==='eval'?'Sob avaliação':a.price?fmtCurr(a.price):'—'}</td>
+        <td style="color:var(--gold);font-weight:700">${a.price?fmtCurr(a.price):a.pt==='eval'?'Sob avaliação':'—'}</td>
       </tr>
     `).join('');
   } catch(e){ tbody.innerHTML=`<tr><td colspan="4" style="color:var(--error);padding:24px">${e.message}</td></tr>`; }
