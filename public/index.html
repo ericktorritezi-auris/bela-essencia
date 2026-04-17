@@ -1075,7 +1075,7 @@ tr:hover td{background:#FAF3F6}
 // ══════════════════════════════════════════════════
 // VERSÃO — altere APENAS aqui; atualiza todos os rodapés
 // ══════════════════════════════════════════════════
-const APP_VERSION  = '1.9.6';
+const APP_VERSION  = '1.9.7';
 const APP_COPY     = `Versão: ${APP_VERSION} | Clínica Bela Essência © ${new Date().getFullYear()}`;
 
 function renderFooters() {
@@ -1812,7 +1812,7 @@ async function renderAgenda() {
         <td><div style="font-weight:700">${a.name}</div><a href="${phoneToWA(a.phone)}" target="_blank" style="font-size:11px;color:var(--rose);text-decoration:none">${fmtPhone(a.phone)} 💬</a></td>
         <td style="max-width:160px">${a.proc_name}</td>
         <td style="font-size:11px">${CITIES.find(c=>c.id===a.city_id)?.short||a.city_name}</td>
-        <td style="color:var(--gold);font-weight:700">${a.pt==='none'?'—':a.pt==='eval'?'Avaliação':a.price?fmtCurr(a.price):'—'}</td>
+        <td style="color:var(--gold);font-weight:700">${a.price?fmtCurr(a.price):a.pt==='eval'?'Avaliação':'—'}</td>
         <td>${statusBadge(a.status)}</td>
         <td>
           <button class="act-btn" onclick="openEditModal('${a.id}')">Editar</button>
@@ -1828,7 +1828,7 @@ async function renderAgenda() {
     // ── Cards (mobile) — todos os botões sempre visíveis ──────
     document.getElementById('appt-cards').innerHTML=list.map(a=>{
       const city = CITIES.find(c=>c.id===a.city_id)?.short||a.city_name;
-      const valor = a.pt==='none'?'—':a.pt==='eval'?'Sob avaliação':a.price?fmtCurr(a.price):'—';
+      const valor = a.price?fmtCurr(a.price):a.pt==='eval'?'Sob avaliação':'—';
       const isCnf = a.status==='confirmed';
       return `
         <div class="appt-card">
