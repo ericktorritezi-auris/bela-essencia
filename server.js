@@ -679,15 +679,24 @@ app.get('/api/appointments/month/:month', requireAdmin, async (req, res) => {
 
 // Admin: editar agendamento
 app.put('/api/appointments/:id', requireAdmin, async (req, res) => {
-  const { name, phone, date, st, procDur } = req.body;
+  const { name, phone, date, st, et: etBody, procDur, cityId, cityName, procId, procName, price } = req.body;
   const dur = parseInt(procDur) || 60;
   const stMin = timeToMin(st);
-  const et = minToTime(stMin + dur);
+  const et = etBody || minToTime(stMin + dur);
   try {
     const { rows } = await pool.query(
-      `UPDATE appointments SET name=$1, phone=$2, date=$3, st=$4, et=$5, updated_at=NOW()
+      `UPDATE appointments
+       SET name=$1, phone=$2, date=$3, st=$4, et=$5,
+           city_id=COALESCE($7, city_id),
+           city_name=COALESCE($8, city_name),
+           proc_id=COALESCE($9, proc_id),
+           proc_name=COALESCE($10, proc_name),
+           price=COALESCE($11::numeric, price),
+           updated_at=NOW()
        WHERE id=$6 RETURNING *`,
-      [name, phone, date, st, et, req.params.id]
+      [name, phone, date, st, et, req.params.id,
+       cityId||null, cityName||null, procId||null, procName||null,
+       price!=null&&price!==''?price:null]
     );
     if (!rows.length) return res.status(404).json({ error: 'Agendamento não encontrado' });
     const edited = rows[0];
