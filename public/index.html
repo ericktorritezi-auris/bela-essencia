@@ -609,6 +609,7 @@ tr:hover td{background:#FAF3F6}
           <div class="nav-item active" id="nav-agenda" onclick="showSec('agenda')"><span class="nav-icon">📅</span> Agenda</div>
           <div class="nav-item" id="nav-manual" onclick="showSec('manual')"><span class="nav-icon">✏️</span> Agenda Manual</div>
           <div class="nav-item" id="nav-blocked" onclick="showSec('blocked')"><span class="nav-icon">🚫</span> Bloquear Datas</div>
+          <div class="nav-item" id="nav-released" onclick="showSec('released')"><span class="nav-icon">✅</span> Liberar Datas</div>
           <div class="nav-item" id="nav-nps" onclick="showSec('nps')"><span class="nav-icon">⭐</span> NPS</div>
         </div>
         <div style="margin-top:2px">
@@ -655,6 +656,72 @@ tr:hover td{background:#FAF3F6}
               <div class="appt-cards" id="appt-cards"></div>
             </div>
           </div>
+          <!-- SEC: LIBERAR DATAS -->
+          <div id="sec-released" class="hidden">
+            <div class="tbl-wrap" style="margin-bottom:16px">
+              <div style="padding:18px 18px 0">
+                <div class="tbl-ttl" style="margin-bottom:6px">Liberar Datas</div>
+                <p style="font-size:12px;color:var(--text-light);margin-bottom:14px;line-height:1.7">
+                  Permite agendamentos em dias normalmente fechados — como um sábado extra ou uma data especial.
+                </p>
+                <div class="btab-wrap">
+                  <button class="btab active" id="rltab-day" onclick="switchRLTab('day')">📅 Dia Inteiro</button>
+                  <button class="btab" id="rltab-slot" onclick="switchRLTab('slot')">⏰ Horário Específico</button>
+                </div>
+              </div>
+
+              <!-- TAB: Dia inteiro -->
+              <div id="rlpanel-day" style="padding:0 18px 18px">
+                <p style="font-size:12px;color:var(--text-light);margin-bottom:12px">Abre o dia inteiro com horário personalizado.</p>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+                  <div class="fg" style="margin:0;grid-column:1/-1"><label>Data</label><input type="date" class="fi" id="rl-date" style="width:100%"></div>
+                  <div class="fg" style="margin:0"><label>Início</label><input type="time" class="fi" id="rl-start" value="08:00" step="1800" style="width:100%"></div>
+                  <div class="fg" style="margin:0"><label>Fim</label><input type="time" class="fi" id="rl-end" value="18:00" step="1800" style="width:100%"></div>
+                  <div class="fg" style="margin:0"><label>Pausa início <small style="font-weight:400">(opcional)</small></label><input type="time" class="fi" id="rl-bstart" step="1800" style="width:100%"></div>
+                  <div class="fg" style="margin:0"><label>Pausa fim <small style="font-weight:400">(opcional)</small></label><input type="time" class="fi" id="rl-bend" step="1800" style="width:100%"></div>
+                  <div class="fg" style="margin:0;grid-column:1/-1"><label>Motivo <small style="font-weight:400">(opcional)</small></label><input type="text" class="fi" id="rl-reason" placeholder="Ex: Atendimento especial de sábado" style="width:100%"></div>
+                </div>
+                <div style="margin-bottom:12px">
+                  <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:var(--text-light);margin-bottom:7px">Cidades liberadas</div>
+                  <div id="rl-cities" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+                </div>
+                <button class="btn btn-primary" onclick="addReleased()" style="width:auto;padding:8px 18px">✅ Liberar dia</button>
+              </div>
+
+              <!-- TAB: Horário específico -->
+              <div id="rlpanel-slot" class="hidden" style="padding:0 18px 18px">
+                <p style="font-size:12px;color:var(--text-light);margin-bottom:12px">Abre apenas um intervalo de horário específico.</p>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+                  <div class="fg" style="margin:0;grid-column:1/-1"><label>Data</label><input type="date" class="fi" id="rls-date" style="width:100%"></div>
+                  <div class="fg" style="margin:0"><label>Início</label><input type="time" class="fi" id="rls-st" step="1800" style="width:100%"></div>
+                  <div class="fg" style="margin:0"><label>Fim</label><input type="time" class="fi" id="rls-et" step="1800" style="width:100%"></div>
+                  <div class="fg" style="margin:0;grid-column:1/-1"><label>Motivo <small style="font-weight:400">(opcional)</small></label><input type="text" class="fi" id="rls-reason" placeholder="Ex: Horário extra para retorno" style="width:100%"></div>
+                </div>
+                <div style="margin-bottom:12px">
+                  <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:var(--text-light);margin-bottom:7px">Cidades liberadas</div>
+                  <div id="rls-cities" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+                </div>
+                <button class="btn btn-primary" onclick="addReleasedSlot()" style="width:auto;padding:8px 18px">✅ Liberar horário</button>
+              </div>
+            </div>
+
+            <!-- Dias liberados -->
+            <div class="tbl-wrap" style="margin-bottom:12px">
+              <div style="padding:16px 18px">
+                <div style="font-size:13px;font-weight:700;color:var(--dark);margin-bottom:10px">Dias Liberados</div>
+                <div id="rl-list" style="min-height:24px"></div>
+              </div>
+            </div>
+
+            <!-- Horários liberados -->
+            <div class="tbl-wrap">
+              <div style="padding:16px 18px">
+                <div style="font-size:13px;font-weight:700;color:var(--dark);margin-bottom:10px">Horários Liberados</div>
+                <div id="rls-list"></div>
+              </div>
+            </div>
+          </div>
+
           <!-- SEC: NPS DASHBOARD -->
           <div id="sec-nps" class="hidden">
             <div id="nps-dashboard-wrap"></div>
@@ -1075,7 +1142,7 @@ tr:hover td{background:#FAF3F6}
 // ══════════════════════════════════════════════════
 // VERSÃO — altere APENAS aqui; atualiza todos os rodapés
 // ══════════════════════════════════════════════════
-const APP_VERSION  = '1.9.7';
+const APP_VERSION  = '2.0.0';
 const APP_COPY     = `Versão: ${APP_VERSION} | Clínica Bela Essência © ${new Date().getFullYear()}`;
 
 function renderFooters() {
@@ -1663,12 +1730,12 @@ async function initAdmin() {
 }
 
 const SEC_TITLES={
-  agenda:'Agenda',manual:'Agenda Manual',blocked:'Bloquear Datas',nps:'NPS — Satisfação',
+  agenda:'Agenda',manual:'Agenda Manual',blocked:'Bloquear Datas',released:'Liberar Datas',nps:'NPS — Satisfação',
   revenue:'Receita',promos:'Promoções',commem:'Datas Comemorativas',webpush:'Web Push',
   cities:'Cidades',schedules:'Configuração de Horários',
   procs:'Procedimentos',profile:'Perfil & Senha',backup:'Backup'
 };
-const ALL_SECS = ['agenda','manual','blocked','nps','revenue','promos','commem','webpush','cities','schedules','procs','profile','backup'];
+const ALL_SECS = ['agenda','manual','blocked','released','nps','revenue','promos','commem','webpush','cities','schedules','procs','profile','backup'];
 
 function showSec(name){
   ALL_SECS.forEach(s=>{
@@ -1678,6 +1745,7 @@ function showSec(name){
   document.getElementById('adm-ttl').textContent=SEC_TITLES[name]||name;
   if(name==='agenda'){renderStats();renderAgenda()}
   if(name==='manual') initManualBooking();
+  if(name==='released'){renderReleased();renderReleasedSlots();renderReleaseCityCheckboxes()}
   if(name==='nps') renderNPSDashboard();
   if(name==='blocked'){renderBlocked();renderBlockedSlots();renderBlockCityCheckboxes()}
   if(name==='revenue'){renderRevCards();renderRevTable()}
@@ -3214,6 +3282,161 @@ async function deleteTemplate(id) {
     await DEL(`/api/push/templates/${id}`);
     showToast('Template excluído','ok'); loadPushTemplates();
   } catch(e){showToast(e.message,'error')}
+}
+
+// ══════════════════════════════════════════════════
+// LIBERAR DATAS (ADMIN)
+// ══════════════════════════════════════════════════
+function switchRLTab(tab) {
+  document.getElementById('rlpanel-day').classList.toggle('hidden', tab !== 'day');
+  document.getElementById('rlpanel-slot').classList.toggle('hidden', tab !== 'slot');
+  document.getElementById('rltab-day').classList.toggle('active', tab === 'day');
+  document.getElementById('rltab-slot').classList.toggle('active', tab === 'slot');
+  renderReleaseCityCheckboxes();
+}
+
+function renderReleaseCityCheckboxes() {
+  const html = CITIES.map(c => `
+    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:6px 11px;font-size:12px;font-weight:600;color:var(--dark);transition:var(--tr)">
+      <input type="checkbox" name="rl-city" value="${c.id}" checked style="accent-color:var(--rose);width:14px;height:14px">
+      ${c.short}
+    </label>
+  `).join('');
+  const html2 = CITIES.map(c => `
+    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:6px 11px;font-size:12px;font-weight:600;color:var(--dark);transition:var(--tr)">
+      <input type="checkbox" name="rls-city" value="${c.id}" checked style="accent-color:var(--rose);width:14px;height:14px">
+      ${c.short}
+    </label>
+  `).join('');
+  const d1 = document.getElementById('rl-cities');
+  const d2 = document.getElementById('rls-cities');
+  if (d1) d1.innerHTML = html;
+  if (d2) d2.innerHTML = html2;
+}
+
+function getRLCheckedCityIds(name) {
+  return [...document.querySelectorAll(`input[name="${name}"]:checked`)].map(el => Number(el.value));
+}
+
+async function addReleased() {
+  const date   = document.getElementById('rl-date').value;
+  const start  = document.getElementById('rl-start').value;
+  const end    = document.getElementById('rl-end').value;
+  const bstart = document.getElementById('rl-bstart').value;
+  const bend   = document.getElementById('rl-bend').value;
+  const reason = document.getElementById('rl-reason').value.trim();
+  if (!date || !start || !end) { showToast('Preencha data, início e fim','error'); return; }
+  if (start >= end) { showToast('Início deve ser antes do fim','error'); return; }
+  const city_ids = getRLCheckedCityIds('rl-city');
+  if (!city_ids.length) { showToast('Selecione ao menos uma cidade','error'); return; }
+  const allSelected = city_ids.length === CITIES.length;
+  try {
+    await POST('/api/released', {
+      date, work_start: start, work_end: end,
+      break_start: bstart || null, break_end: bend || null,
+      reason, city_ids: allSelected ? [] : city_ids
+    });
+    document.getElementById('rl-date').value = '';
+    document.getElementById('rl-bstart').value = '';
+    document.getElementById('rl-bend').value = '';
+    document.getElementById('rl-reason').value = '';
+    showToast('Dia liberado!', 'ok');
+    renderReleased();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+async function removeReleased(date) {
+  if (!confirm(`Remover liberação de ${fmtDate(date)}?`)) return;
+  try {
+    await DEL(`/api/released/${date}`);
+    showToast('Liberação removida', 'ok');
+    renderReleased();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+async function renderReleased() {
+  const el = document.getElementById('rl-list');
+  if (!el) return;
+  try {
+    const list = await GET('/api/released');
+    if (!list.length) {
+      el.innerHTML = '<div style="color:var(--text-light);font-size:12px">Nenhum dia liberado</div>';
+      return;
+    }
+    el.innerHTML = [...list].sort((a,b) => a.date < b.date ? -1 : 1).map(r => {
+      const cityTag = r.city_ids && r.city_ids.length
+        ? r.city_ids.map(id => CITIES.find(c=>c.id===id)?.short||'').filter(Boolean).join(', ')
+        : 'Todas as cidades';
+      const breakInfo = r.break_start && r.break_end
+        ? ` · Pausa ${String(r.break_start).slice(0,5)}–${String(r.break_end).slice(0,5)}`
+        : '';
+      return `
+        <div class="bl-chip" style="background:#E8F5EE;color:#166534;border:1px solid #86EFAC">
+          ✅ ${fmtDate(r.date)} · ${String(r.work_start).slice(0,5)}–${String(r.work_end).slice(0,5)}${breakInfo}
+          ${r.reason ? ` · ${r.reason}` : ''}
+          <em style="font-weight:400;font-style:normal;opacity:.75">(${cityTag})</em>
+          <button onclick="removeReleased('${r.date}')" style="color:#166534">✕</button>
+        </div>
+      `;
+    }).join('');
+  } catch(e) { el.innerHTML = `<div style="color:var(--error);font-size:12px">Erro: ${e.message}</div>`; }
+}
+
+async function addReleasedSlot() {
+  const date   = document.getElementById('rls-date').value;
+  const st     = document.getElementById('rls-st').value;
+  const et     = document.getElementById('rls-et').value;
+  const reason = document.getElementById('rls-reason').value.trim();
+  if (!date || !st || !et) { showToast('Preencha data, início e fim','error'); return; }
+  if (st >= et) { showToast('Início deve ser antes do fim','error'); return; }
+  const city_ids = getRLCheckedCityIds('rls-city');
+  if (!city_ids.length) { showToast('Selecione ao menos uma cidade','error'); return; }
+  const allSelected = city_ids.length === CITIES.length;
+  try {
+    await POST('/api/released-slots', { date, st, et, reason, city_ids: allSelected ? [] : city_ids });
+    document.getElementById('rls-date').value = '';
+    document.getElementById('rls-st').value = '';
+    document.getElementById('rls-et').value = '';
+    document.getElementById('rls-reason').value = '';
+    showToast('Horário liberado!', 'ok');
+    renderReleasedSlots();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+async function removeReleasedSlot(id) {
+  if (!confirm('Remover este horário liberado?')) return;
+  try {
+    await DEL(`/api/released-slots/${id}`);
+    showToast('Horário removido', 'ok');
+    renderReleasedSlots();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+async function renderReleasedSlots() {
+  const el = document.getElementById('rls-list');
+  if (!el) return;
+  try {
+    const list = await GET('/api/released-slots');
+    if (!list.length) {
+      el.innerHTML = '<div style="color:var(--text-light);font-size:12px">Nenhum horário liberado</div>';
+      return;
+    }
+    el.innerHTML = [...list].sort((a,b) => a.date < b.date ? -1 : 1).map(s => {
+      const cityTag = s.city_ids && s.city_ids.length
+        ? s.city_ids.map(id => CITIES.find(c=>c.id===id)?.short||'').filter(Boolean).join(', ')
+        : 'Todas as cidades';
+      return `
+        <div class="slot-chip" style="background:#E8F5EE;color:#166534;border:1px solid #86EFAC">
+          <div class="slot-chip-info">
+            <div class="slot-chip-date">${fmtDate(s.date)}</div>
+            <div class="slot-chip-time">${String(s.st).slice(0,5)} – ${String(s.et).slice(0,5)}</div>
+            <div class="slot-chip-reason">${cityTag}${s.reason ? ' · ' + s.reason : ''}</div>
+          </div>
+          <button class="slot-chip-del" onclick="removeReleasedSlot(${s.id})" style="color:#166534">✕</button>
+        </div>
+      `;
+    }).join('');
+  } catch(e) { el.innerHTML = `<div style="color:var(--error);font-size:12px">Erro: ${e.message}</div>`; }
 }
 
 // ── MODAL ─────────────────────────────────────────
