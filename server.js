@@ -251,6 +251,15 @@ async function initDB() {
     // Migração v1.7.0: push_auth nos agendamentos (liga subscription ao agendamento)
     await client.query(`ALTER TABLE appointments ADD COLUMN IF NOT EXISTS push_auth TEXT`);
 
+    // Migração: atualiza texto do template "Agendamento alterado" no banco
+    await client.query(`
+      UPDATE push_templates
+      SET body = 'Seu agendamento sofreu alterações. Verifique os detalhes.'
+      WHERE is_system = TRUE
+        AND title = '📅 Agendamento alterado'
+        AND body = 'Seu agendamento teve o horário alterado. Verifique os detalhes.'
+    `);
+
     // Tabela de horários específicos bloqueados (agendamentos manuais / ausências parciais)
     await client.query(`
       CREATE TABLE IF NOT EXISTS blocked_slots (
