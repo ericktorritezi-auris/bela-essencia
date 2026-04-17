@@ -167,8 +167,8 @@ h1,h2,h3,h4{font-family:'Cormorant Garamond',serif}
 .nps-header{text-align:center;margin-bottom:20px}
 .nps-header h3{font-family:'Cormorant Garamond',serif;font-size:24px;font-weight:600;color:var(--dark);margin-bottom:6px}
 .nps-header p{font-size:13px;color:var(--text-light);line-height:1.6}
-.nps-scores{display:grid;grid-template-columns:repeat(11,1fr);gap:4px;margin-bottom:8px}
-.nps-score{aspect-ratio:1;border-radius:var(--r-sm);border:1.5px solid var(--border);background:var(--cream);font-size:12px;font-weight:700;color:var(--text-light);cursor:pointer;transition:var(--tr);display:flex;align-items:center;justify-content:center}
+.nps-scores{display:grid;grid-template-columns:repeat(11,1fr);gap:3px;margin-bottom:8px;width:100%}
+.nps-score{aspect-ratio:1;border-radius:6px;border:1.5px solid var(--border);background:var(--cream);font-size:12px;font-weight:700;color:var(--text-light);cursor:pointer;transition:var(--tr);display:flex;align-items:center;justify-content:center;min-width:0;min-height:0}
 .nps-score:hover{transform:scale(1.1)}
 .nps-score.sel{color:white;border-color:transparent;transform:scale(1.12)}
 .nps-score.det{background:#FEE2E2;color:#B91C1C;border-color:#FCA5A5}
@@ -355,6 +355,18 @@ tr:hover td{background:#FAF3F6}
 .appt-card-actions{display:flex;gap:7px;flex-wrap:wrap;border-top:1px solid var(--border-light);padding-top:10px}
 .appt-card-actions .act-btn{flex:1;text-align:center;padding:9px 6px;font-size:12px;margin:0}
 
+/* ── PROC CARDS (mobile) ── */
+.proc-card{background:white;border:1px solid var(--border);border-radius:var(--r-md);padding:14px 15px;margin-bottom:10px;box-shadow:var(--sh-sm)}
+.proc-card-name{font-weight:700;font-size:14px;color:var(--dark);margin-bottom:6px}
+.proc-card-meta{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.proc-card-actions{display:flex;gap:7px;border-top:1px solid var(--border-light);padding-top:10px}
+.proc-card-actions .act-btn{flex:1;text-align:center;padding:9px 6px;font-size:12px;margin:0}
+.proc-table-wrap{display:block}
+@media(max-width:768px){
+  .proc-table-wrap{display:none}
+  .proc-cards-wrap{display:block}
+}
+
 @media(max-width:768px){
   .adm-sidebar{transform:translateX(-100%)}
   .adm-sidebar.open{transform:translateX(0)}
@@ -374,6 +386,95 @@ tr:hover td{background:#FAF3F6}
   .booking-wrap{padding:16px 12px 80px}
   .step-card{padding:22px 16px}
   .stats-grid{grid-template-columns:repeat(2,1fr)}
+}
+
+/* ── MOBILE OVERFLOW FIXES ── */
+@media(max-width:600px){
+  /* Prevent any element from overflowing viewport */
+  body{overflow-x:hidden}
+  #app{overflow-x:hidden;max-width:100vw}
+
+  /* NPS scores - tighter on small screens */
+  .nps-scores{gap:2px}
+  .nps-score{font-size:10px;border-radius:4px}
+  .nps-card{padding:20px 16px 32px}
+
+  /* NPS labels smaller */
+  .nps-labels{font-size:9px}
+
+  /* Manual booking steps - scroll horizontal suave */
+  #man-steps{overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:2px}
+  .man-step{font-size:10px;padding:7px 10px;white-space:nowrap}
+
+  /* Manual booking slots - 3 cols */
+  #man-slots{grid-template-columns:repeat(3,1fr)!important}
+
+  /* Schedule rows - stack vertically */
+  .sch-time-wrap{flex-direction:column!important;align-items:flex-start!important;gap:6px!important}
+
+  /* Commemorative date form grid */
+  #cd-day, #cd-month{width:100%!important}
+  .commem-date-grid{grid-template-columns:1fr 1fr!important}
+
+  /* Block date row */
+  #bl-date,#bl-reason,#bs-date,#bs-reason,#bs-st,#bs-et{min-width:0!important;width:100%!important}
+
+  /* City modal grids */
+  .modal-card [style*="grid-template-columns:1fr 80px"],
+  .modal-card [style*="grid-template-columns:80px 80px 1fr"],
+  .modal-card [style*="grid-template-columns:1fr 1fr"]{
+    display:flex!important;flex-direction:column!important
+  }
+
+  /* Admin topbar */
+  .adm-topbar{padding:10px 14px!important}
+  .adm-ttl{font-size:18px!important}
+  .adm-content{padding:12px!important}
+
+  /* Revenue cards */
+  .rev-grid{grid-template-columns:1fr 1fr!important}
+
+  /* Promo card */
+  .promo-card{grid-template-columns:1fr!important}
+  .promo-disc{text-align:left!important;margin-top:8px}
+
+  /* Stats grid mobile */
+  .stats-grid{grid-template-columns:1fr 1fr!important}
+
+  /* Slot chips - wrap text */
+  .slot-chip{flex-wrap:wrap}
+  .slot-chip-info{min-width:0}
+
+  /* Block city checkboxes */
+  #bl-cities,#bs-cities{gap:6px!important}
+  #bl-cities label,#bs-cities label{font-size:11px!important;padding:5px 9px!important}
+
+  /* Welcome popup */
+  .welcome-card{margin:0 8px}
+  .welcome-body{padding:16px 18px 24px}
+
+  /* Location card */
+  .lc-body{padding:12px 14px 14px}
+  .lc-venue{font-size:17px}
+  .lc-map{font-size:11px;padding:8px 14px}
+
+  /* Proc bar */
+  .proc-bar{flex-direction:column!important;align-items:flex-start!important;gap:6px!important}
+  .pb-price{font-size:20px!important}
+
+  /* Promo banner */
+  .promo-banner{flex-wrap:wrap!important}
+
+  /* Comm popup */
+  .comm-card{margin:0 8px}
+
+  /* Tables inside tbl-wrap - allow scroll */
+  .tbl-wrap{overflow-x:auto}
+
+  /* NPS dashboard grid */
+  #nps-dashboard-wrap [style*="grid-template-columns:auto 1fr"]{
+    display:flex!important;flex-direction:column!important
+  }
 }
 </style>
 </head>
@@ -574,7 +675,7 @@ tr:hover td{background:#FAF3F6}
               </div>
 
               <!-- Step indicator -->
-              <div id="man-steps" style="display:flex;gap:0;border-bottom:1px solid var(--border);margin:0 20px 20px;overflow-x:auto">
+              <div id="man-steps" style="display:flex;gap:0;border-bottom:1px solid var(--border);margin:0 20px 20px;flex-wrap:wrap">
                 <div class="man-step active" id="mstep-1">1. Cidade</div>
                 <div class="man-step" id="mstep-2">2. Procedimento</div>
                 <div class="man-step" id="mstep-3">3. Data & Hora</div>
@@ -604,7 +705,7 @@ tr:hover td{background:#FAF3F6}
                   <div id="man-cal" style="border:1.5px solid var(--border);border-radius:var(--r-md);overflow:hidden;margin-bottom:18px"></div>
                   <div id="man-slots-wrap" class="hidden">
                     <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:var(--text-light);margin-bottom:10px">Horários disponíveis</div>
-                    <div id="man-slots" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px"></div>
+                    <div id="man-slots" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px"></div>
                   </div>
                   <div class="btn-actions hidden" id="man-s3-next" style="margin-top:16px">
                     <button class="btn btn-primary" onclick="manGoStep4()">Continuar →</button>
@@ -652,11 +753,11 @@ tr:hover td{background:#FAF3F6}
               <!-- TAB: Horário específico -->
               <div id="bpanel-slot" class="hidden" style="padding:0 18px 18px">
                 <p style="font-size:12px;color:var(--text-light);margin-bottom:12px">Bloqueia um horário específico. Use para atendimentos feitos diretamente.</p>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
-                  <input type="date" class="fi" id="bs-date" placeholder="Data">
-                  <input type="text" class="fi" id="bs-reason" placeholder="Motivo (ex: Atendimento presencial)">
-                  <input type="time" class="fi" id="bs-st" step="1800" placeholder="Início">
-                  <input type="time" class="fi" id="bs-et" step="1800" placeholder="Fim">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;width:100%">
+                  <input type="date" class="fi" id="bs-date" placeholder="Data" style="min-width:0">
+                  <input type="text" class="fi" id="bs-reason" placeholder="Motivo (ex: Atendimento presencial)" style="min-width:0">
+                  <input type="time" class="fi" id="bs-st" step="1800" placeholder="Início" style="min-width:0">
+                  <input type="time" class="fi" id="bs-et" step="1800" placeholder="Fim" style="min-width:0">
                 </div>
                 <div style="margin-bottom:12px">
                   <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:var(--text-light);margin-bottom:7px">Cidades afetadas</div>
@@ -690,7 +791,8 @@ tr:hover td{background:#FAF3F6}
           <div id="sec-procs" class="hidden">
             <div class="tbl-wrap">
               <div class="tbl-head"><div class="tbl-ttl">Procedimentos</div><button class="btn btn-primary" onclick="openProcModal(null)" style="width:auto;padding:8px 16px">+ Novo</button></div>
-              <div style="overflow-x:auto"><table><thead><tr><th>Procedimento</th><th>Duração</th><th>Valor</th><th>Ações</th></tr></thead><tbody id="procs-body"></tbody></table></div>
+              <div class="proc-table-wrap" style="overflow-x:auto"><table><thead><tr><th>Procedimento</th><th>Duração</th><th>Valor</th><th>Ações</th></tr></thead><tbody id="procs-body"></tbody></table></div>
+              <div class="proc-cards-wrap" id="proc-cards-mobile" style="display:none;padding:4px 0"></div>
             </div>
           </div>
           <!-- SEC: PROMOÇÕES -->
@@ -762,7 +864,7 @@ tr:hover td{background:#FAF3F6}
                 <p style="font-size:12px;color:var(--text-light);line-height:1.7;margin-bottom:14px">
                   Defina horários de trabalho por cidade e dia da semana. Intervalos fixos de 30 minutos.
                 </p>
-                <select class="fs" id="sch-city-filter" onchange="renderSchedules()" style="min-width:200px">
+                <select class="fs" id="sch-city-filter" onchange="renderSchedules()" style="width:100%;max-width:300px">
                   <option value="">Todas as cidades</option>
                 </select>
               </div>
@@ -805,7 +907,7 @@ tr:hover td{background:#FAF3F6}
                 <p style="font-size:12px;color:var(--text-light);margin-bottom:14px;line-height:1.7">
                   Quando a data chegar, o cliente vê um pop-up especial ao abrir o sistema.
                 </p>
-                <div style="display:grid;grid-template-columns:80px 80px 1fr;gap:10px;margin-bottom:10px">
+                <div style="display:grid;grid-template-columns:80px 80px 1fr;gap:10px;margin-bottom:10px" class="commem-date-grid">
                   <div class="fg" style="margin:0"><label>Dia</label><input type="number" class="fi" id="cd-day" min="1" max="31" placeholder="15" style="width:100%"></div>
                   <div class="fg" style="margin:0"><label>Mês</label>
                     <select class="fs" id="cd-month" style="width:100%;padding:12px 10px">
@@ -977,7 +1079,7 @@ tr:hover td{background:#FAF3F6}
 // ══════════════════════════════════════════════════
 // VERSÃO — altere APENAS aqui; atualiza todos os rodapés
 // ══════════════════════════════════════════════════
-const APP_VERSION  = '1.9.0';
+const APP_VERSION  = '1.9.1';
 const APP_COPY     = `Versão: ${APP_VERSION} | Clínica Bela Essência © ${new Date().getFullYear()}`;
 
 function renderFooters() {
@@ -1946,11 +2048,14 @@ async function renderRevTable() {
 // ── PROCEDURES (ADMIN) ────────────────────────────
 async function renderProcsAdmin() {
   clearProcsCache();
-  const tbody=document.getElementById('procs-body');
-  tbody.innerHTML='<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-light)">Carregando...</td></tr>';
+  const tbody = document.getElementById('procs-body');
+  const mobileCards = document.getElementById('proc-cards-mobile');
+  tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-light)">Carregando...</td></tr>';
   try {
-    const list=await getProcs();
-    tbody.innerHTML=list.map(p=>`
+    const list = await getProcs();
+
+    // Desktop table
+    tbody.innerHTML = list.map(p => `
       <tr>
         <td style="font-weight:700">${p.name}</td>
         <td>${fmtDur(p.dur)}</td>
@@ -1961,7 +2066,24 @@ async function renderProcsAdmin() {
         </td>
       </tr>
     `).join('');
-  } catch{}
+
+    // Mobile cards
+    if (mobileCards) {
+      mobileCards.innerHTML = list.map(p => `
+        <div class="proc-card">
+          <div class="proc-card-name">${p.name}</div>
+          <div class="proc-card-meta">
+            <span class="badge-dur">⏱ ${fmtDur(p.dur)}</span>
+            ${p.pt !== 'none' ? `<span class="badge-price">${fmtPrice(p)}</span>` : ''}
+          </div>
+          <div class="proc-card-actions">
+            <button class="act-btn" onclick="openProcModal(${p.id})">Editar</button>
+            <button class="act-btn danger" onclick="deleteProc(${p.id})" style="color:var(--error);border-color:var(--error)">Remover</button>
+          </div>
+        </div>
+      `).join('');
+    }
+  } catch {}
 }
 function openProcModal(id) {
   document.getElementById('modal-card').innerHTML=`
@@ -2459,33 +2581,35 @@ async function renderSchedules() {
           const brk = (cfg.breaks||[]).filter(Boolean);
           const b0 = brk[0]||{s:'12:00:00',e:'13:00:00'};
           return `
-            <div data-cfg-id="${cfg.id}" style="background:${cfg.is_active?'var(--cream)':'#F5F5F5'};border:1.5px solid var(--border);border-radius:var(--r-sm);padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;flex-shrink:0;min-width:110px">
-                <input type="checkbox" ${cfg.is_active?'checked':''} onchange="updateScheduleActive(${cfg.id},this.checked)" style="accent-color:var(--rose);width:16px;height:16px">
+            <div data-cfg-id="${cfg.id}" style="background:${cfg.is_active?'var(--cream)':'#F5F5F5'};border:1.5px solid var(--border);border-radius:var(--r-sm);padding:12px 14px;margin-bottom:8px">
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:${cfg.is_active?'10px':'0'}">
+                <input type="checkbox" ${cfg.is_active?'checked':''} onchange="updateScheduleActive(${cfg.id},this.checked)" style="accent-color:var(--rose);width:16px;height:16px;flex-shrink:0">
                 <span style="font-weight:700;font-size:13px;color:var(--dark)">${DAY_LABELS[cfg.day_of_week]}</span>
               </label>
-              <div class="sch-time-wrap" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;${!cfg.is_active?'opacity:.4;pointer-events:none':''}">
-                <div style="display:flex;align-items:center;gap:5px">
-                  <span style="font-size:11px;color:var(--text-light);font-weight:800;text-transform:uppercase">Início</span>
+              <div class="sch-time-wrap" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;${!cfg.is_active?'opacity:.4;pointer-events:none;display:none':''}">
+                <div style="display:flex;flex-direction:column;gap:3px">
+                  <span style="font-size:10px;color:var(--text-light);font-weight:800;text-transform:uppercase;letter-spacing:.06em">Início</span>
                   <input type="time" value="${cfg.work_start?String(cfg.work_start).slice(0,5):'08:00'}" step="1800"
                     onchange="updateScheduleTime(${cfg.id},'start',this.value)"
-                    style="border:1.5px solid var(--border);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;font-family:'Nunito',sans-serif;background:white;outline:none">
+                    style="border:1.5px solid var(--border);border-radius:var(--r-sm);padding:7px 10px;font-size:13px;font-family:'Nunito',sans-serif;background:white;outline:none;width:100%">
                 </div>
-                <div style="display:flex;align-items:center;gap:5px">
-                  <span style="font-size:11px;color:var(--text-light);font-weight:800;text-transform:uppercase">Fim</span>
+                <div style="display:flex;flex-direction:column;gap:3px">
+                  <span style="font-size:10px;color:var(--text-light);font-weight:800;text-transform:uppercase;letter-spacing:.06em">Fim</span>
                   <input type="time" value="${cfg.work_end?String(cfg.work_end).slice(0,5):'18:00'}" step="1800"
                     onchange="updateScheduleTime(${cfg.id},'end',this.value)"
-                    style="border:1.5px solid var(--border);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;font-family:'Nunito',sans-serif;background:white;outline:none">
+                    style="border:1.5px solid var(--border);border-radius:var(--r-sm);padding:7px 10px;font-size:13px;font-family:'Nunito',sans-serif;background:white;outline:none;width:100%">
                 </div>
-                <div style="display:flex;align-items:center;gap:5px">
-                  <span style="font-size:11px;color:var(--text-light);font-weight:800;text-transform:uppercase">Pausa</span>
+                <div style="display:flex;flex-direction:column;gap:3px">
+                  <span style="font-size:10px;color:var(--text-light);font-weight:800;text-transform:uppercase;letter-spacing:.06em">Pausa início</span>
                   <input type="time" value="${String(b0.s).slice(0,5)}" step="1800"
                     onchange="updateScheduleBreak(${cfg.id},'start',this.value)"
-                    style="border:1.5px solid var(--border);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;font-family:'Nunito',sans-serif;background:white;outline:none">
-                  <span style="font-size:11px;color:var(--text-light)">até</span>
+                    style="border:1.5px solid var(--border);border-radius:var(--r-sm);padding:7px 10px;font-size:13px;font-family:'Nunito',sans-serif;background:white;outline:none;width:100%">
+                </div>
+                <div style="display:flex;flex-direction:column;gap:3px">
+                  <span style="font-size:10px;color:var(--text-light);font-weight:800;text-transform:uppercase;letter-spacing:.06em">Pausa fim</span>
                   <input type="time" value="${String(b0.e).slice(0,5)}" step="1800"
                     onchange="updateScheduleBreak(${cfg.id},'end',this.value)"
-                    style="border:1.5px solid var(--border);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;font-family:'Nunito',sans-serif;background:white;outline:none">
+                    style="border:1.5px solid var(--border);border-radius:var(--r-sm);padding:7px 10px;font-size:13px;font-family:'Nunito',sans-serif;background:white;outline:none;width:100%">
                 </div>
               </div>
             </div>
@@ -2515,8 +2639,12 @@ function updateScheduleActive(id, active) {
     rowEl.style.background = active ? 'var(--cream)' : '#F5F5F5';
     const wrap = rowEl.querySelector('.sch-time-wrap');
     if (wrap) {
-      wrap.style.opacity = active ? '1' : '.4';
+      wrap.style.display  = active ? 'grid' : 'none';
+      wrap.style.opacity  = active ? '1' : '.4';
       wrap.style.pointerEvents = active ? '' : 'none';
+      // Update margin on label
+      const label = rowEl.querySelector('label');
+      if (label) label.style.marginBottom = active ? '10px' : '0';
     }
   }
   scheduleDebounce(id, ()=>flushScheduleSave(id));
