@@ -1061,6 +1061,16 @@ app.get('/api/availability', async (req, res) => {
     const isToday   = (date === todayBRT);
     const nowMinBRT = isToday ? nowBRT.getHours() * 60 + nowBRT.getMinutes() : 0;
 
+    // Horários liberados para esta cidade (override de blocked_slots)
+    const relRes = await pool.query(
+      `SELECT st, et FROM released_slots
+       WHERE date=$1 AND (cardinality(city_ids)=0 OR $2=ANY(city_ids))`,
+      [date, Number(cityId)]
+    );
+    const released = relRes.rows.map(r => ({
+      s: timeToMin(r.st), e: timeToMin(r.et)
+    }));
+
     // Calcula slots livres respeitando configuração dinâmica
     const slots = [];
     for (let s = wStart; s <= wEnd; s += SLOT) {
@@ -1070,8 +1080,18 @@ app.get('/api/availability', async (req, res) => {
       // Verificar pausas
       const inBreak = breaks.some(b => s < b.e && e > b.s);
       if (inBreak) continue;
-      // Verificar sobreposição com agendamentos
-      const overlap = busy.some(b => s < b.e && e > b.s);
+      // Verificar sobreposição com agendamentos/bloqueios
+      // Se o slot está dentro de uma janela LIBERADA, ignora blocked_slots
+      const inReleasedWindow = released.some(r => s >= r.s && e <= r.e);
+      const overlap = busy.some(b => {
+        if (!inReleasedWindow) return s < b.e && e > b.s; // bloqueios valem normalmente
+        // Dentro de janela liberada: só agendamentos reais bloqueiam (não blocked_slots)
+        // aRes.rows são os agendamentos; sRes.rows são blocked_slots — ignoramos sRes aqui
+        const isAppt = aRes.rows.some(a =>
+          timeToMin(a.st) === b.s && timeToMin(a.et) === b.e
+        );
+        return isAppt && s < b.e && e > b.s;
+      });
       if (!overlap) slots.push(minToTime(s));
     }
 
