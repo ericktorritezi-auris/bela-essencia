@@ -945,6 +945,7 @@ tr:hover td{background:#FAF3F6}
                 <div class="fg"><label>E-mail</label><input type="email" id="pf-email" placeholder="email@exemplo.com"></div>
                 <div class="fg"><label>Login</label><input type="text" value="admin" disabled style="opacity:.5;cursor:not-allowed"></div>
                 <button class="btn btn-primary" onclick="saveProfile()" style="width:auto;padding:10px 24px">Salvar dados</button>
+                <button class="btn btn-secondary" onclick="testSendEmail()" style="width:auto;padding:10px 20px;margin-left:8px">📧 Testar e-mail agora</button>
               </div>
             </div>
             <div class="tbl-wrap">
@@ -1142,7 +1143,7 @@ tr:hover td{background:#FAF3F6}
 // ══════════════════════════════════════════════════
 // VERSÃO — altere APENAS aqui; atualiza todos os rodapés
 // ══════════════════════════════════════════════════
-const APP_VERSION  = '2.0.1';
+const APP_VERSION  = '2.0.2';
 const APP_COPY     = `Versão: ${APP_VERSION} | Clínica Bela Essência © ${new Date().getFullYear()}`;
 
 function renderFooters() {
@@ -2017,21 +2018,24 @@ async function openEditModal(apptId) {
 }
 
 async function onEditCityChange(apptId) {
-  const cityId = document.getElementById('ed-city').value;
-  const allProcs = await getProcs();
-  const cityObj = CITIES.find(c => Number(c.id) === Number(cityId));
-  let cityProcs = allProcs;
-  if (cityObj && cityObj.procedures && cityObj.procedures.length) {
-    const ids = new Set(cityObj.procedures.map(p => Number(p.id)));
-    cityProcs = allProcs.filter(p => ids.has(Number(p.id)));
+  const cityId     = document.getElementById('ed-city').value;
+  const procSel    = document.getElementById('ed-proc');
+  const currentProcId = procSel ? procSel.value : null; // preserva seleção atual
+  const allProcs   = await getProcs();
+
+  // Reconstrói o select com TODOS os procedimentos ativos
+  // Não filtra por cidade aqui — validação acontece só no save
+  if (procSel) {
+    procSel.innerHTML = allProcs.map(p =>
+      `<option value="${p.id}" data-price="${p.price||''}" data-pt="${p.pt}"
+        ${String(p.id) === String(currentProcId) ? 'selected' : ''}>${p.name}</option>`
+    ).join('');
   }
-  const sel = document.getElementById('ed-proc');
-  sel.innerHTML = cityProcs.map(p =>
-    `<option value="${p.id}" data-price="${p.price||''}" data-pt="${p.pt}">${p.name}</option>`
-  ).join('');
-  onEditProcChange();
+
+  // Recarrega horários disponíveis para nova cidade
   onEditDateChange(apptId);
 }
+
 
 function onEditProcChange(userInitiated) {
   // Só atualiza o preço se foi uma mudança manual do usuário (não no carregamento inicial)
@@ -2092,6 +2096,16 @@ async function saveEdit(apptId) {
   const p = allProcs.find(x => Number(x.id) === Number(procId));
   const et = p ? m2t(t2m(st) + Number(p.dur)) : st;
   const cityObj = CITIES.find(c => Number(c.id) === Number(cityId));
+
+  // Valida se o procedimento está disponível para a cidade selecionada
+  if (cityObj && cityObj.procedures && cityObj.procedures.length > 0) {
+    const availIds = new Set(cityObj.procedures.map(x => Number(x.id)));
+    if (!availIds.has(Number(procId))) {
+      const procName = p?.name || 'Este procedimento';
+      showToast(`⚠️ ${procName} não está disponível em ${cityObj.short}. Altere o procedimento ou a cidade.`, 'error', 6000);
+      return;
+    }
+  }
 
   try {
     await PUT(`/api/appointments/${apptId}`, {
@@ -2901,6 +2915,19 @@ async function loadProfile() {
     if(p.phone) document.getElementById('pf-phone').value = p.phone;
     if(p.email) document.getElementById('pf-email').value = p.email;
   } catch(e){showToast('Erro ao carregar perfil','error')}
+}
+
+async function testSendEmail() {
+  const btn = event.target;
+  btn.textContent = 'Enviando...'; btn.disabled = true;
+  try {
+    const r = await POST('/api/admin/send-daily-email', {});
+    showToast('✓ ' + r.message, 'ok', 6000);
+  } catch(e) {
+    showToast('Erro: ' + e.message, 'error', 6000);
+  } finally {
+    btn.textContent = '📧 Testar e-mail agora'; btn.disabled = false;
+  }
 }
 
 async function saveProfile() {
