@@ -1079,7 +1079,7 @@ tr:hover td{background:#FAF3F6}
 // ══════════════════════════════════════════════════
 // VERSÃO — altere APENAS aqui; atualiza todos os rodapés
 // ══════════════════════════════════════════════════
-const APP_VERSION  = '1.9.1';
+const APP_VERSION  = '1.9.2';
 const APP_COPY     = `Versão: ${APP_VERSION} | Clínica Bela Essência © ${new Date().getFullYear()}`;
 
 function renderFooters() {
@@ -2734,8 +2734,12 @@ let MAN_CAL = { y:null, mo:null };
 
 function manReset() {
   MAN = { cityId:null, cityName:'', procId:null, procData:null, date:null, time:null };
-  document.getElementById('man-name').value = '';
-  document.getElementById('man-phone').value = '';
+  const nameEl  = document.getElementById('man-name');
+  const phoneEl = document.getElementById('man-phone');
+  const btn     = document.getElementById('man-save-btn');
+  if (nameEl)  nameEl.value  = '';
+  if (phoneEl) phoneEl.value = '';
+  if (btn) { btn.textContent = '✓ Confirmar Agendamento'; btn.disabled = false; }
 }
 
 function manGoStep(n) {
@@ -2901,6 +2905,7 @@ async function manSave() {
   if(phone.replace(/\D/g,'').length < 10) { showToast('Informe um WhatsApp válido','error'); return; }
 
   const btn = document.getElementById('man-save-btn');
+  if (!btn || btn.disabled) return; // evita duplo clique
   btn.textContent = 'Salvando...'; btn.disabled = true;
 
   const p  = MAN.procData;
@@ -2927,14 +2932,14 @@ async function manSave() {
       price: effectivePrice,
       pt:    p.pt || 'fixed',
     });
-    showToast(`✓ Agendamento de ${name} confirmado!`, 'ok', 5000);
-    // Reset and go back to agenda
+    // Reseta ANTES do redirect para estado ficar limpo
     manReset();
+    showToast(`✓ Agendamento de ${name} confirmado!`, 'ok', 5000);
     setTimeout(() => showSec('agenda'), 1200);
   } catch(e) {
     showToast(e.message || 'Erro ao salvar. Tente novamente.', 'error');
-    btn.textContent = '✓ Confirmar Agendamento';
-    btn.disabled = false;
+    // Em caso de erro, apenas reabilita o botão sem resetar o formulário
+    if (btn) { btn.textContent = '✓ Confirmar Agendamento'; btn.disabled = false; }
   }
 }
 
