@@ -587,7 +587,7 @@ tr:hover td{background:#FAF3F6}
         <h2>Agendado <em style="color:var(--rose)">com sucesso</em>! 🎉</h2>
         <p id="succ-txt"></p>
         <div id="succ-location"></div>
-        <a id="wa-link" href="#" target="_blank" class="btn btn-wa" style="margin:0 auto 14px"><span id="wa-link-label"><span id="wa-link-label">💬 Falar com Ana Paula Silva</span></span></a>
+        <a id="wa-link" href="#" target="_blank" class="btn btn-wa" style="margin:0 auto 14px"><span id="wa-link-label">💬 Falar com Ana Paula Silva</span></a>
         <button class="btn btn-secondary" onclick="resetBooking()">Fazer outro agendamento</button>
       </div>
     </div>
@@ -920,6 +920,19 @@ tr:hover td{background:#FAF3F6}
                   </div>
                   <div id="pm-proc-list" class="hidden" style="background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:7px;max-height:240px;overflow-y:auto"></div>
                 </div>
+                <!-- Seleção de cidades -->
+                <div style="margin-top:10px">
+                  <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:var(--text-light);margin-bottom:8px">Cidades participantes</div>
+                  <div style="display:flex;gap:10px;margin-bottom:10px">
+                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text)">
+                      <input type="radio" name="pm-city-scope" value="all" id="pm-city-all" checked onchange="togglePromoCityScope()" style="accent-color:var(--rose)"> Todas as cidades
+                    </label>
+                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text)">
+                      <input type="radio" name="pm-city-scope" value="select" id="pm-city-sel" onchange="togglePromoCityScope()" style="accent-color:var(--rose)"> Selecionar
+                    </label>
+                  </div>
+                  <div id="pm-city-list" class="hidden" style="background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:12px;display:flex;flex-direction:column;gap:7px"></div>
+                </div>
                 <button class="btn btn-primary" onclick="createPromo()" style="width:auto;padding:10px 24px;margin-top:16px">🏷 Criar Promoção</button>
               </div>
             </div>
@@ -1166,7 +1179,7 @@ tr:hover td{background:#FAF3F6}
 // ══════════════════════════════════════════════════
 // VERSÃO — altere APENAS aqui; atualiza todos os rodapés
 // ══════════════════════════════════════════════════
-const APP_VERSION  = '2.0.5';
+const APP_VERSION  = '2.0.7';
 const APP_COPY     = `Versão: ${APP_VERSION} | Clínica Bela Essência © ${new Date().getFullYear()}`;
 
 function renderFooters() {
@@ -2519,7 +2532,8 @@ let _activePromo = undefined; // undefined=não buscou, null=sem promoção
 
 async function getActivePromo(refresh=false) {
   if (_activePromo === undefined || refresh) {
-    _activePromo = await GET('/api/promotions/active').catch(() => null);
+    const cityParam = BK.cityId ? `?cityId=${BK.cityId}` : '';
+    _activePromo = await GET(`/api/promotions/active${cityParam}`).catch(() => null);
   }
   return _activePromo;
 }
@@ -2544,23 +2558,76 @@ function fmtPriceWithPromo(p, promo) {
 }
 
 // Admin: toggle procedure selection in promo form
+function togglePromoCityScope() {
+  const isSelect = document.getElementById('pm-city-sel').checked;
+  const wrap = document.getElementById('pm-city-list');
+  wrap.classList.toggle('hidden', !isSelect);
+  if (isSelect && !wrap.innerHTML.trim()) {
+    wrap.innerHTML = CITIES.map(c => `
+      <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:12.5px;font-weight:600;color:var(--text);padding:4px 0">
+        <input type="checkbox" name="pm-city" value="${c.id}" checked
+          onchange="reloadPromoProcs()"
+          style="accent-color:var(--rose);width:15px;height:15px;flex-shrink:0">
+        ${c.short}
+      </label>`
+    ).join('');
+  }
+  // Recarrega procedimentos quando cidades mudam
+  reloadPromoProcs();
+}
+
 async function togglePromoScope() {
   const isSelect = document.getElementById('pm-sel').checked;
   const wrap = document.getElementById('pm-proc-list');
   wrap.classList.toggle('hidden', !isSelect);
-  if (isSelect && !wrap.innerHTML.trim()) {
-    // Load procedures into checkboxes
-    try {
-      const procs = await getProcs();
-      wrap.innerHTML = procs.map(p =>
-        p.pt === 'fixed' && p.price ? `
-          <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:12.5px;font-weight:600;color:var(--text);padding:5px 0">
-            <input type="checkbox" name="pm-proc" value="${p.id}" style="accent-color:var(--rose);width:15px;height:15px;flex-shrink:0">
-            <span style="line-height:1.4">${p.name}<br><small style="color:var(--text-light);font-weight:400">${fmtPrice(p)}</small></span>
-          </label>` : ''
-      ).join('');
-    } catch(e) { wrap.innerHTML = '<div style="color:var(--error);font-size:12px">Erro ao carregar</div>'; }
-  }
+  if (isSelect) await reloadPromoProcs();
+}
+
+// Recarrega lista de procedimentos filtrando pelas cidades selecionadas na promoção
+async function reloadPromoProcs() {
+  const wrap = document.getElementById('pm-proc-list');
+  if (!wrap || wrap.classList.contains('hidden')) return;
+  try {
+    const allProcs = await getProcs();
+    // Identifica cidades selecionadas na promoção
+    const citySelActive = document.getElementById('pm-city-sel')?.checked;
+    let eligibleProcIds = null; // null = sem restrição
+    if (citySelActive) {
+      const selectedCityIds = [...document.querySelectorAll('input[name="pm-city"]:checked')]
+        .map(el => Number(el.value));
+      if (selectedCityIds.length > 0) {
+        // Pega procedimentos habilitados em TODAS as cidades selecionadas (interseção)
+        const sets = selectedCityIds.map(cid => {
+          const city = CITIES.find(c => Number(c.id) === cid);
+          if (!city || !city.procedures || !city.procedures.length) return null; // sem restrição = todos
+          return new Set(city.procedures.map(p => Number(p.id)));
+        }).filter(Boolean);
+        if (sets.length > 0) {
+          // Interseção: proc aparece só se está em todas as cidades selecionadas
+          eligibleProcIds = sets.reduce((a, b) => new Set([...a].filter(x => b.has(x))));
+        }
+      }
+    }
+    // Filtra procedimentos elegíveis
+    const filtered = eligibleProcIds
+      ? allProcs.filter(p => eligibleProcIds.has(Number(p.id)))
+      : allProcs;
+    // Preserva checkboxes já marcados
+    const previouslyChecked = new Set(
+      [...document.querySelectorAll('input[name="pm-proc"]:checked')].map(el => el.value)
+    );
+    wrap.innerHTML = filtered.map(p => `
+      <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:12.5px;font-weight:600;color:var(--text);padding:5px 0">
+        <input type="checkbox" name="pm-proc" value="${p.id}"
+          ${previouslyChecked.has(String(p.id)) ? 'checked' : ''}
+          style="accent-color:var(--rose);width:15px;height:15px;flex-shrink:0">
+        <span style="line-height:1.4">${p.name}<br><small style="color:var(--text-light);font-weight:400">${fmtPrice(p)}</small></span>
+      </label>`
+    ).join('');
+    if (!filtered.length) {
+      wrap.innerHTML = '<div style="font-size:12px;color:var(--text-light)">Nenhum procedimento disponível para as cidades selecionadas.</div>';
+    }
+  } catch(e) { wrap.innerHTML = '<div style="color:var(--error);font-size:12px">Erro ao carregar</div>'; }
 }
 
 // Admin: listar promoções
@@ -2580,13 +2647,14 @@ async function renderPromos() {
       const isExpired  = p.end_date < today;
       const statusClass = isActive?'ps-active':isUpcoming?'ps-upcoming':isExpired?'ps-expired':'ps-inactive';
       const statusLabel = isActive?'✓ Ativa agora':isUpcoming?'⏳ Agendada':isExpired?'Expirada':'Inativa';
-      const scopeLabel  = p.apply_to_all ? 'Todos os procedimentos' : `${(p.proc_ids||[]).length} procedimento(s) selecionado(s)`;
+      const scopeLabel  = p.apply_to_all ? 'Todos os procedimentos' : `${(p.proc_ids||[]).length} procedimento(s)`;
+      const cityLabel   = p.apply_to_all_cities !== false ? 'Todas as cidades' : `${(p.city_ids_promo||[]).length} cidade(s)`;
       return `
         <div class="promo-card ${isActive?'active-now':''}">
           <div>
             <div class="promo-name">${p.name}</div>
             <div class="promo-period">📅 ${fmtDate(p.start_date)} até ${fmtDate(p.end_date)}</div>
-            <div style="font-size:11px;color:var(--text-light);margin-top:3px">🎯 ${scopeLabel}</div>
+            <div style="font-size:11px;color:var(--text-light);margin-top:3px">🎯 ${scopeLabel} · 📍 ${cityLabel}</div>
             <span class="promo-status ${statusClass}">${statusLabel}</span>
           </div>
           <div style="text-align:right">
@@ -2621,8 +2689,16 @@ async function createPromo() {
     if (!proc_ids.length) { showToast('Selecione ao menos um procedimento','error'); return; }
   }
 
+  const isSelectCity = document.getElementById('pm-city-sel').checked;
+  let apply_to_all_cities = !isSelectCity;
+  let city_ids_promo = [];
+  if (isSelectCity) {
+    city_ids_promo = [...document.querySelectorAll('input[name="pm-city"]:checked')].map(el => Number(el.value));
+    if (!city_ids_promo.length) { showToast('Selecione ao menos uma cidade','error'); return; }
+  }
+
   try {
-    await POST('/api/promotions', { name, start_date:start, end_date:end, discount:Number(disc), apply_to_all, proc_ids });
+    await POST('/api/promotions', { name, start_date:start, end_date:end, discount:Number(disc), apply_to_all, proc_ids, apply_to_all_cities, city_ids_promo });
     document.getElementById('proc-modal-name').value='';
     document.getElementById('pm-start').value='';
     document.getElementById('pm-end').value='';
@@ -2630,6 +2706,9 @@ async function createPromo() {
     document.getElementById('pm-all').checked = true;
     document.getElementById('pm-proc-list').classList.add('hidden');
     document.getElementById('pm-proc-list').innerHTML='';
+    document.getElementById('pm-city-all').checked = true;
+    document.getElementById('pm-city-list').classList.add('hidden');
+    document.getElementById('pm-city-list').innerHTML='';
     _activePromo = undefined;
     clearProcsCache();
     showToast('Promoção criada com sucesso!','ok');
