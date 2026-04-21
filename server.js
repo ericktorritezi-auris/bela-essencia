@@ -929,6 +929,14 @@ app.get('/api/availability', async (req, res) => {
     // excludeId: exclui o próprio agendamento ao editar (evita conflito de horário)
     const excludeId = req.query.excludeApptId ? Number(req.query.excludeApptId) : null;
 
+    // Fuso Brasil — disponível em todos os branches abaixo
+    const nowBRT = new Date(
+      new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' })
+    );
+    const todayBRT  = `${nowBRT.getFullYear()}-${String(nowBRT.getMonth()+1).padStart(2,'0')}-${String(nowBRT.getDate()).padStart(2,'0')}`;
+    const isToday   = (date === todayBRT);
+    const nowMinBRT = isToday ? nowBRT.getHours() * 60 + nowBRT.getMinutes() : 0;
+
     // 1. Verifica data bloqueada para esta cidade (city_ids vazio = todas)
     const blk = await pool.query(
       `SELECT 1 FROM blocked_dates
@@ -1078,12 +1086,7 @@ app.get('/api/availability', async (req, res) => {
     }));
 
     // Horário atual em Brasília para filtrar slots passados no dia de hoje
-    const nowBRT = new Date(
-      new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' })
-    );
-    const todayBRT = `${nowBRT.getFullYear()}-${String(nowBRT.getMonth()+1).padStart(2,'0')}-${String(nowBRT.getDate()).padStart(2,'0')}`;
-    const isToday   = (date === todayBRT);
-    const nowMinBRT = isToday ? nowBRT.getHours() * 60 + nowBRT.getMinutes() : 0;
+    // nowBRT, todayBRT, isToday, nowMinBRT declarados no início do try block
 
     // Horários liberados para esta cidade (override de blocked_slots)
     const relRes = await pool.query(
