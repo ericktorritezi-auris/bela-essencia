@@ -1184,7 +1184,7 @@ tr:hover td{background:#FAF3F6}
 // ══════════════════════════════════════════════════
 // VERSÃO — altere APENAS aqui; atualiza todos os rodapés
 // ══════════════════════════════════════════════════
-const APP_VERSION  = '2.0.9';
+const APP_VERSION  = '2.1.0';
 const APP_COPY     = `Versão: ${APP_VERSION} | Clínica Bela Essência © ${new Date().getFullYear()}`;
 
 function renderFooters() {
@@ -1825,11 +1825,12 @@ function switchBTab(tab){
   renderBlockCityCheckboxes();
 }
 
-function renderBlockCityCheckboxes() {
-  const cityCheckHtml = CITIES.map(c => `
+async function renderBlockCityCheckboxes() {
+  const cities = await loadAdminCities();
+  const cityCheckHtml = cities.map(c => `
     <label style="display:flex;align-items:center;gap:6px;cursor:pointer;background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:6px 11px;font-size:12px;font-weight:600;color:var(--dark);transition:var(--tr)">
       <input type="checkbox" name="blk-city" value="${c.id}" checked style="accent-color:var(--rose);width:14px;height:14px">
-      ${c.short}
+      ${c.short || c.name}
     </label>
   `).join('');
   const d1 = document.getElementById('bl-cities');
@@ -1837,6 +1838,7 @@ function renderBlockCityCheckboxes() {
   if(d1) d1.innerHTML = cityCheckHtml;
   if(d2) d2.innerHTML = cityCheckHtml;
 }
+
 
 function getCheckedCityIds(containerId) {
   return [...document.querySelectorAll(`#${containerId} input[name="blk-city"]:checked`)]
@@ -3556,6 +3558,20 @@ async function deleteTemplate(id) {
 }
 
 // ══════════════════════════════════════════════════
+// ADMIN CITIES — todas as cidades ativas (sem filtro de horários)
+// ══════════════════════════════════════════════════
+let _adminCities = null;
+
+async function loadAdminCities() {
+  if (_adminCities) return _adminCities;
+  try {
+    const list = await GET('/api/cities/all');
+    _adminCities = list.filter(c => c.is_active);
+  } catch { _adminCities = CITIES; }
+  return _adminCities;
+}
+
+// ══════════════════════════════════════════════════
 // LIBERAR DATAS (ADMIN)
 // ══════════════════════════════════════════════════
 function switchRLTab(tab) {
@@ -3566,23 +3582,17 @@ function switchRLTab(tab) {
   renderReleaseCityCheckboxes();
 }
 
-function renderReleaseCityCheckboxes() {
-  const html = CITIES.map(c => `
+async function renderReleaseCityCheckboxes() {
+  const cities = await loadAdminCities();
+  const mkLabel = (name, c) => `
     <label style="display:flex;align-items:center;gap:6px;cursor:pointer;background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:6px 11px;font-size:12px;font-weight:600;color:var(--dark);transition:var(--tr)">
-      <input type="checkbox" name="rl-city" value="${c.id}" checked style="accent-color:var(--rose);width:14px;height:14px">
-      ${c.short}
-    </label>
-  `).join('');
-  const html2 = CITIES.map(c => `
-    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:6px 11px;font-size:12px;font-weight:600;color:var(--dark);transition:var(--tr)">
-      <input type="checkbox" name="rls-city" value="${c.id}" checked style="accent-color:var(--rose);width:14px;height:14px">
-      ${c.short}
-    </label>
-  `).join('');
+      <input type="checkbox" name="${name}" value="${c.id}" checked style="accent-color:var(--rose);width:14px;height:14px">
+      ${c.short || c.name}
+    </label>`;
   const d1 = document.getElementById('rl-cities');
   const d2 = document.getElementById('rls-cities');
-  if (d1) d1.innerHTML = html;
-  if (d2) d2.innerHTML = html2;
+  if (d1) d1.innerHTML = cities.map(c => mkLabel('rl-city', c)).join('');
+  if (d2) d2.innerHTML = cities.map(c => mkLabel('rls-city', c)).join('');
 }
 
 function getRLCheckedCityIds(name) {
