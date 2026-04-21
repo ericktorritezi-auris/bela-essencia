@@ -937,15 +937,12 @@ app.get('/api/availability', async (req, res) => {
     );
     if (blk.rowCount > 0) return res.json([]);
 
-    // 2. Exclusividade: outra cidade tem bloqueio ou liberação específica neste dia?
-    //    Se sim, a profissional está comprometida com aquela cidade → bloqueia esta.
+    // 2. Exclusividade: outra cidade tem LIBERAÇÃO específica neste dia?
+    //    Só released_dates cria exclusividade (profissional comprometida com aquela cidade).
+    //    blocked_dates NÃO cria exclusividade — bloquear Assaí não compromete a profissional lá.
     const exclusiveClaim = await pool.query(
-      `SELECT 1 FROM (
-        SELECT city_ids FROM blocked_dates  WHERE date=$1 AND cardinality(city_ids)>0
-        UNION ALL
-        SELECT city_ids FROM released_dates WHERE date=$1 AND cardinality(city_ids)>0
-       ) t
-       WHERE NOT ($2 = ANY(city_ids))
+      `SELECT 1 FROM released_dates
+       WHERE date=$1 AND cardinality(city_ids)>0 AND NOT ($2 = ANY(city_ids))
        LIMIT 1`,
       [date, Number(cityId)]
     );
@@ -981,13 +978,18 @@ app.get('/api/availability', async (req, res) => {
         );
         if (!pRes2.rowCount) return res.json([]);
         const dur2 = pRes2.rows[0].dur;
-        const [aRes2, bkSlots2] = await Promise.all([
+        const [aRes2, bkSlots2, excSlots2] = await Promise.all([
           excludeId
             ? pool.query(`SELECT st, et FROM appointments WHERE date=$1 AND status!='cancelled' AND id!=$2`, [date, excludeId])
             : pool.query(`SELECT st, et FROM appointments WHERE date=$1 AND status!='cancelled'`, [date]),
           pool.query(`SELECT st, et FROM blocked_slots WHERE date=$1 AND (cardinality(city_ids)=0 OR $2=ANY(city_ids))`, [date, Number(cityId)]),
+          pool.query(
+            `SELECT st, et FROM released_slots
+             WHERE date=$1 AND cardinality(city_ids)>0 AND NOT ($2 = ANY(city_ids))`,
+            [date, Number(cityId)]
+          ),
         ]);
-        const busy2 = [...aRes2.rows, ...bkSlots2.rows].map(r => ({ s: timeToMin(r.st), e: timeToMin(r.et) }));
+        const busy2 = [...aRes2.rows, ...bkSlots2.rows, ...excSlots2.rows].map(r => ({ s: timeToMin(r.st), e: timeToMin(r.et) }));
         const freeSlots = [];
         for (const row of relSlots.rows) {
           const slotS = timeToMin(row.st);
@@ -1013,13 +1015,18 @@ app.get('/api/availability', async (req, res) => {
       const rEnd   = timeToMin(rel.work_end);
       const rBreaks = (rel.break_start && rel.break_end)
         ? [{ s: timeToMin(rel.break_start), e: timeToMin(rel.break_end) }] : [];
-      const [aRes3, bkSlots3] = await Promise.all([
+      const [aRes3, bkSlots3, excSlots3] = await Promise.all([
         excludeId
           ? pool.query(`SELECT st, et FROM appointments WHERE date=$1 AND status!='cancelled' AND id!=$2`, [date, excludeId])
           : pool.query(`SELECT st, et FROM appointments WHERE date=$1 AND status!='cancelled'`, [date]),
         pool.query(`SELECT st, et FROM blocked_slots WHERE date=$1 AND (cardinality(city_ids)=0 OR $2=ANY(city_ids))`, [date, Number(cityId)]),
+        pool.query(
+          `SELECT st, et FROM released_slots
+           WHERE date=$1 AND cardinality(city_ids)>0 AND NOT ($2 = ANY(city_ids))`,
+          [date, Number(cityId)]
+        ),
       ]);
-      const busy3 = [...aRes3.rows, ...bkSlots3.rows, ...excSlots.rows].map(r => ({ s: timeToMin(r.st), e: timeToMin(r.et) }));
+      const busy3 = [...aRes3.rows, ...bkSlots3.rows, ...excSlots3.rows].map(r => ({ s: timeToMin(r.st), e: timeToMin(r.et) }));
       const relFreeSlots = [];
       for (let s = rStart; s <= rEnd; s += SLOT) {
         const e = s + dur3;
@@ -1048,7 +1055,7 @@ app.get('/api/availability', async (req, res) => {
 
     // Agendamentos e horários bloqueados (exclui o próprio agendamento ao editar)
     // excludeId já declarado no início do try block
-    const [aRes, sRes, excSlots] = await Promise.all([
+    const [aRes, sRes] = await Promise.all([
       excludeId
         ? pool.query(`SELECT st, et FROM appointments WHERE date=$1 AND status!='cancelled' AND id!=$2`, [date, excludeId])
         : pool.query(`SELECT st, et FROM appointments WHERE date=$1 AND status!='cancelled'`, [date]),
@@ -1058,17 +1065,14 @@ app.get('/api/availability', async (req, res) => {
          WHERE date=$1 AND (cardinality(city_ids)=0 OR $2=ANY(city_ids))`,
         [date, Number(cityId)]
       ),
-      // Horários exclusivos de OUTRAS cidades (bloqueados ou liberados especificamente para outra cidade)
-      pool.query(
-        `SELECT st, et FROM (
-           SELECT st, et, city_ids FROM blocked_slots  WHERE date=$1 AND cardinality(city_ids)>0
-           UNION ALL
-           SELECT st, et, city_ids FROM released_slots WHERE date=$1 AND cardinality(city_ids)>0
-         ) t
-         WHERE NOT ($2 = ANY(city_ids))`,
-        [date, Number(cityId)]
-      ),
     ]);
+    // Horários exclusivos de OUTRAS cidades via released_slots
+    // (só liberação cria exclusividade — bloquear não compromete a profissional lá)
+    const excSlots = await pool.query(
+      `SELECT st, et FROM released_slots
+       WHERE date=$1 AND cardinality(city_ids)>0 AND NOT ($2 = ANY(city_ids))`,
+      [date, Number(cityId)]
+    );
     const busy = [...aRes.rows, ...sRes.rows, ...excSlots.rows].map(r => ({
       s: timeToMin(r.st), e: timeToMin(r.et),
     }));
