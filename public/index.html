@@ -967,6 +967,11 @@ tr:hover td{background:#FAF3F6}
                   <option value="">Todas as cidades</option>
                 </select>
               </div>
+              <div id="schedules-hint" class="hidden" style="padding:0 18px 10px">
+                <div class="notice info" style="font-size:12px">
+                  💡 Todos os dias desta cidade estão desabilitados. Se ela opera por <strong>datas específicas</strong>, configure em <strong>Agenda → Liberar Datas</strong>.
+                </div>
+              </div>
               <div id="schedules-body" style="padding:0 18px 18px"></div>
             </div>
           </div>
@@ -1179,7 +1184,7 @@ tr:hover td{background:#FAF3F6}
 // ══════════════════════════════════════════════════
 // VERSÃO — altere APENAS aqui; atualiza todos os rodapés
 // ══════════════════════════════════════════════════
-const APP_VERSION  = '2.0.7';
+const APP_VERSION  = '2.0.9';
 const APP_COPY     = `Versão: ${APP_VERSION} | Clínica Bela Essência © ${new Date().getFullYear()}`;
 
 function renderFooters() {
@@ -1243,6 +1248,7 @@ async function loadCities() {
       cep: 'CEP: ' + c.cep,
       mapsUrl: c.maps_url || '',
       days: c.activeDays || [],
+      specificDates: c.specificDates || [],
     }));
     _citiesLoaded = true;
   } catch(e) { console.error('Error loading cities:', e); }
@@ -1284,6 +1290,16 @@ function showToast(msg, type='', dur=4000) {
 // UTILITIES
 // ══════════════════════════════════════════════════
 const t2m = t => { const[h,m]=String(t).slice(0,5).split(':').map(Number); return h*60+m; };
+
+// Retorna YYYY-MM-DD no fuso de Brasília para usar em <input type="date">
+function todayForInput() {
+  const now = new Date();
+  const brt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+  const y = brt.getFullYear();
+  const m = String(brt.getMonth()+1).padStart(2,'0');
+  const d = String(brt.getDate()).padStart(2,'0');
+  return `${y}-${m}-${d}`;
+}
 const m2t = m => `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
 const todayStr = () => new Date().toISOString().slice(0,10);
 const MONTHS = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
@@ -1481,8 +1497,11 @@ async function selProc(id) {
 function isValidDay(date, cityId) {
   const city = CITIES.find(c => Number(c.id) === Number(cityId));
   if (!city) return false;
+  // Verifica data específica liberada para esta cidade
+  if (city.specificDates && city.specificDates.includes(date)) return true;
+  // Verifica dia da semana configurado
   const [y,m,d] = date.split('-').map(Number);
-  return city.days.includes(new Date(y,m-1,d).getDay());
+  return (city.days || []).includes(new Date(y,m-1,d).getDay());
 }
 function renderCal() {
   const{y,mo}=CAL;
@@ -1760,7 +1779,7 @@ async function initAdmin() {
   await loadCities();
   document.getElementById('fl-city').innerHTML='<option value="">Todas as cidades</option>'+
     CITIES.map(c=>`<option value="${c.id}">${c.short}</option>`).join('');
-  document.getElementById('fl-date').value='';
+  document.getElementById('fl-date').value=todayForInput();
   const now=new Date();
   document.getElementById('fl-month').value=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
   showSec('agenda');
@@ -3016,6 +3035,11 @@ async function renderSchedules() {
       el.innerHTML='<div style="color:var(--text-light);font-size:13px;padding:12px 0">Nenhuma configuração encontrada para o filtro selecionado.</div>';
       return;
     }
+
+    // Mostra dica se alguma cidade tem todos os dias desabilitados
+    const allDisabled = Object.values(byCityMap).some(g => g.days.every(d => !d.is_active));
+    const hintEl = document.getElementById('schedules-hint');
+    if (hintEl) hintEl.classList.toggle('hidden', !allDisabled);
 
     el.innerHTML = Object.values(byCityMap).map(cityGroup=>`
       <div style="margin-bottom:20px">
