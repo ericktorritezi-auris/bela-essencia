@@ -737,7 +737,7 @@ app.get('/api/appointments', requireAdmin, async (req, res) => {
   // Sem filtro de data = mostra todos os agendamentos (passados e futuros)
   if (city)   { sql += ` AND city_id = $${params.push(city)}`; }
   if (status) { sql += ` AND status = $${params.push(status)}`; }
-  sql += ' ORDER BY date, st';
+  sql += ' ORDER BY date DESC, st DESC';
   try {
     const { rows } = await pool.query(sql, params);
     res.json(rows);
@@ -1309,8 +1309,25 @@ app.get('/api/cities', async (req, res) => {
         [city.id]
       );
       city.activeDays = wd.rows.filter(r=>r.is_active).map(r=>r.day_of_week);
+
+      // Datas específicas futuras liberadas para esta cidade
+      const today = todayBrasilia();
+      const rd = await pool.query(
+        `SELECT date::text, work_start::text, work_end::text
+         FROM released_dates
+         WHERE date >= $1 AND (cardinality(city_ids)=0 OR $2=ANY(city_ids))
+         ORDER BY date`,
+        [today, city.id]
+      );
+      city.specificDates = rd.rows.map(r => r.date.slice(0,10));
+      city.specificDateConfigs = rd.rows; // inclui horários para uso no motor
     }
-    res.json(rows);
+
+    // Filtra cidades sem dias ativos E sem datas futuras específicas
+    const filtered = rows.filter(c =>
+      c.activeDays.length > 0 || c.specificDates.length > 0
+    );
+    res.json(filtered);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
