@@ -926,6 +926,9 @@ app.get('/api/availability', async (req, res) => {
   }
 
   try {
+    // excludeId: exclui o próprio agendamento ao editar (evita conflito de horário)
+    const excludeId = req.query.excludeApptId ? Number(req.query.excludeApptId) : null;
+
     // 1. Verifica data bloqueada para esta cidade (city_ids vazio = todas)
     const blk = await pool.query(
       `SELECT 1 FROM blocked_dates
@@ -1044,7 +1047,7 @@ app.get('/api/availability', async (req, res) => {
     const dur = pRes.rows[0].dur;
 
     // Agendamentos e horários bloqueados (exclui o próprio agendamento ao editar)
-    const excludeId = req.query.excludeApptId ? Number(req.query.excludeApptId) : null;
+    // excludeId já declarado no início do try block
     const [aRes, sRes, excSlots] = await Promise.all([
       excludeId
         ? pool.query(`SELECT st, et FROM appointments WHERE date=$1 AND status!='cancelled' AND id!=$2`, [date, excludeId])
