@@ -592,7 +592,9 @@ tr:hover td{background:#FAF3F6}
       </div>
     </div>
   </div>
-  <div class="footer-bar">
+  <div class="footer-bar" style="display:flex;justify-content:center;align-items:center;gap:16px">
+    <a href="/manual-cliente.html" target="_blank" style="display:flex;align-items:center;gap:4px">📖 Como usar a agenda</a>
+    <span style="opacity:.3">·</span>
     <a href="#" onclick="showAdmin(event)">Área administrativa</a>
   </div>
   <div class="app-footer" id="footer-booking"></div>
@@ -987,6 +989,7 @@ tr:hover td{background:#FAF3F6}
                 <div class="fg"><label>Login</label><input type="text" value="admin" disabled style="opacity:.5;cursor:not-allowed"></div>
                 <button class="btn btn-primary" onclick="saveProfile()" style="width:auto;padding:10px 24px">Salvar dados</button>
                 <button class="btn btn-secondary" onclick="testSendEmail()" style="width:auto;padding:10px 20px;margin-left:8px">📧 Testar e-mail agora</button>
+                <a href="/manual-profissional.html" target="_blank" class="btn btn-secondary" style="width:auto;padding:10px 20px;margin-left:8px;text-decoration:none;display:inline-flex;align-items:center;gap:5px">📖 Manual da profissional</a>
               </div>
             </div>
             <div class="tbl-wrap">
@@ -1184,7 +1187,7 @@ tr:hover td{background:#FAF3F6}
 // ══════════════════════════════════════════════════
 // VERSÃO — altere APENAS aqui; atualiza todos os rodapés
 // ══════════════════════════════════════════════════
-const APP_VERSION  = '2.1.0';
+const APP_VERSION  = '2.1.1';
 const APP_COPY     = `Versão: ${APP_VERSION} | Clínica Bela Essência © ${new Date().getFullYear()}`;
 
 function renderFooters() {
