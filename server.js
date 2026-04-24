@@ -821,6 +821,9 @@ async function initDB() {
 // Railway usa proxy reverso (SSL termination) — obrigatório para cookies funcionarem
 app.set('trust proxy', 1);
 
+// Railway usa proxy reverso — necessário para secure cookies e req.ip correto
+app.set('trust proxy', 1);
+
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 
@@ -844,10 +847,10 @@ app.use(session({
   saveUninitialized: false,
   store: sessionStore,
   cookie: {
-    secure: process.env.NODE_ENV === 'production', // HTTPS via Railway proxy
+    secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-    maxAge: 8 * 60 * 60 * 1000, // 8 horas
+    sameSite: 'none', // necessário para cookies cross-domain (adminpanel + belaessencia)
+    maxAge: 24 * 60 * 60 * 1000, // 24 horas
   },
 }));
 
@@ -1902,7 +1905,11 @@ app.delete('/api/commemorative/:id', requireAdmin, async (req, res) => {
 const MASTER_PASS = process.env.MASTER_PASS || 'belleplanner@master2026';
 
 function requireMaster(req, res, next) {
+  // Check session (primary)
   if (req.session?.isMaster) return next();
+  // Check Authorization header as fallback (for cross-domain issues)
+  const auth = req.headers['x-master-token'];
+  if (auth && auth === process.env.MASTER_PASS) return next();
   return res.status(401).json({ error: 'Não autorizado' });
 }
 
