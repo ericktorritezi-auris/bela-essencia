@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Belle Planner — Master Panel</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg:      #0f1117;
+      --surface: #1a1d2e;
+      --card:    #1e2235;
+      --border:  #2a2d42;
+      --rose:    #9b4d6a;
+      --rose-l:  #c4728e;
+      --gold:    #C49A3C;
+      --gold-l:  #e8c060;
+      --green:   #2ecc71;
+      --red:     #e74c3c;
+      --yellow:  #f39c12;
+      --text:    #e8eaf0;
+      --muted:   #7a7d96;
+      --r:       10px;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:'Nunito',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+
+    /* LOGIN */
+    #login-screen {
+      min-height:100vh; display:flex; align-items:center; justify-content:center;
+      background: radial-gradient(ellipse at center, #1a0e18 0%, #0f1117 70%);
+    }
+    .login-card {
+      background:var(--card); border:1px solid var(--border); border-radius:16px;
+      padding:48px 40px; width:360px; text-align:center;
+    }
+    .login-logo { font-family:'Cormorant Garamond',serif; font-size:32px; color:var(--rose); margin-bottom:4px; }
+    .login-logo span { color:var(--gold); font-style:italic; }
+    .login-badge { font-size:10px; text-transform:uppercase; letter-spacing:.15em; color:var(--muted); margin-bottom:32px; }
+    .login-input {
+      width:100%; background:var(--surface); border:1.5px solid var(--border); border-radius:8px;
+      padding:12px 16px; color:var(--text); font-family:'Nunito',sans-serif; font-size:14px;
+      outline:none; margin-bottom:14px; transition:.2s;
+    }
+    .login-input:focus { border-color:var(--rose); }
+    .login-btn {
+      width:100%; background:var(--rose); border:none; border-radius:8px; padding:13px;
+      color:white; font-family:'Nunito',sans-serif; font-size:14px; font-weight:800;
+      cursor:pointer; transition:.2s;
+    }
+    .login-btn:hover { background:var(--rose-l); }
+    .login-err { color:var(--red); font-size:12px; margin-top:10px; }
+
+    /* LAYOUT */
+    #app { display:none; min-height:100vh; }
+    .sidebar {
+      width:220px; background:var(--surface); border-right:1px solid var(--border);
+      position:fixed; top:0; left:0; height:100vh; overflow-y:auto; z-index:50;
+      display:flex; flex-direction:column;
+    }
+    .sidebar-brand {
+      padding:20px 18px 16px; border-bottom:1px solid var(--border);
+    }
+    .brand-logo { font-family:'Cormorant Garamond',serif; font-size:20px; color:var(--rose); }
+    .brand-logo span { color:var(--gold); font-style:italic; }
+    .brand-tag { font-size:9px; text-transform:uppercase; letter-spacing:.12em; color:var(--muted); margin-top:2px; }
+    .nav { padding:12px 10px; flex:1; }
+    .nav-item {
+      display:flex; align-items:center; gap:9px; padding:9px 12px; border-radius:8px;
+      font-size:13px; font-weight:700; color:var(--muted); cursor:pointer; transition:.15s; margin-bottom:3px;
+    }
+    .nav-item:hover { background:rgba(155,77,106,.12); color:var(--rose-l); }
+    .nav-item.active { background:rgba(155,77,106,.18); color:var(--rose); }
+    .nav-icon { font-size:16px; width:20px; text-align:center; }
+    .nav-sep { height:1px; background:var(--border); margin:10px 4px; }
+    .nav-section { font-size:9px; font-weight:800; text-transform:uppercase; letter-spacing:.12em; color:var(--muted); padding:6px 12px 4px; }
+    .sidebar-footer { padding:14px 16px; border-top:1px solid var(--border); }
+    .logout-btn {
+      width:100%; background:rgba(231,76,60,.12); border:1px solid rgba(231,76,60,.3);
+      border-radius:7px; padding:8px; color:var(--red); font-family:'Nunito',sans-serif;
+      font-size:12px; font-weight:700; cursor:pointer; transition:.2s;
+    }
+    .logout-btn:hover { background:rgba(231,76,60,.22); }
+
+    .main { margin-left:220px; min-height:100vh; }
+    .topbar {
+      background:var(--surface); border-bottom:1px solid var(--border);
+      padding:14px 28px; display:flex; align-items:center; justify-content:space-between;
+      position:sticky; top:0; z-index:40;
+    }
+    .page-title { font-family:'Cormorant Garamond',serif; font-size:22px; color:var(--text); }
+    .topbar-right { font-size:12px; color:var(--muted); }
+    .content { padding:24px 28px 60px; }
+
+    /* CARDS */
+    .stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:16px; margin-bottom:24px; }
+    .stat-card {
+      background:var(--card); border:1px solid var(--border); border-radius:var(--r);
+      padding:20px; position:relative; overflow:hidden;
+    }
+    .stat-card::before {
+      content:''; position:absolute; top:0; left:0; right:0; height:3px;
+      background:var(--accent,var(--rose));
+    }
+    .stat-lbl { font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.1em; color:var(--muted); margin-bottom:8px; }
+    .stat-val { font-family:'Cormorant Garamond',serif; font-size:36px; font-weight:600; color:var(--text); line-height:1; margin-bottom:4px; }
+    .stat-sub { font-size:11px; color:var(--muted); }
+
+    /* TABLES */
+    .table-card { background:var(--card); border:1px solid var(--border); border-radius:var(--r); overflow:hidden; margin-bottom:20px; }
+    .table-head { padding:16px 20px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--border); }
+    .table-title { font-size:14px; font-weight:800; color:var(--text); }
+    table { width:100%; border-collapse:collapse; }
+    th { padding:10px 16px; text-align:left; font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); border-bottom:1px solid var(--border); }
+    td { padding:12px 16px; font-size:13px; border-bottom:1px solid rgba(255,255,255,.04); }
+    tr:last-child td { border-bottom:none; }
+    tr:hover td { background:rgba(255,255,255,.02); }
+
+    /* BADGES */
+    .badge { display:inline-flex; align-items:center; gap:4px; padding:3px 9px; border-radius:50px; font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.06em; }
+    .badge-active  { background:rgba(46,204,113,.15); color:var(--green); }
+    .badge-expiring{ background:rgba(243,156,18,.15); color:var(--yellow); }
+    .badge-blocked { background:rgba(231,76,60,.15); color:var(--red); }
+    .badge-setup   { background:rgba(196,154,60,.15); color:var(--gold); }
+    .badge-monthly { background:rgba(155,77,106,.15); color:var(--rose-l); }
+    .badge-paid    { background:rgba(46,204,113,.12); color:var(--green); }
+    .badge-pending { background:rgba(243,156,18,.12); color:var(--yellow); }
+
+    /* BUTTONS */
+    .btn { padding:7px 14px; border-radius:7px; font-family:'Nunito',sans-serif; font-size:12px; font-weight:800; cursor:pointer; border:none; transition:.15s; }
+    .btn-primary  { background:var(--rose); color:white; }
+    .btn-primary:hover { background:var(--rose-l); }
+    .btn-ghost  { background:transparent; border:1px solid var(--border); color:var(--muted); }
+    .btn-ghost:hover { border-color:var(--rose); color:var(--rose-l); }
+    .btn-green  { background:rgba(46,204,113,.15); color:var(--green); border:1px solid rgba(46,204,113,.3); }
+    .btn-green:hover  { background:rgba(46,204,113,.3); }
+    .btn-red    { background:rgba(231,76,60,.15); color:var(--red); border:1px solid rgba(231,76,60,.3); }
+    .btn-red:hover    { background:rgba(231,76,60,.3); }
+    .btn-sm { padding:5px 10px; font-size:11px; }
+
+    /* MODAL */
+    .modal-bg { position:fixed; inset:0; background:rgba(0,0,0,.7); z-index:200; display:flex; align-items:center; justify-content:center; padding:20px; }
+    .modal-bg.hidden { display:none; }
+    .modal { background:var(--card); border:1px solid var(--border); border-radius:14px; width:100%; max-width:560px; max-height:90vh; overflow-y:auto; }
+    .modal-header { padding:20px 24px 16px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; }
+    .modal-title { font-family:'Cormorant Garamond',serif; font-size:22px; color:var(--text); }
+    .modal-close { background:none; border:none; color:var(--muted); font-size:18px; cursor:pointer; padding:4px; }
+    .modal-body { padding:20px 24px 24px; }
+    .fg { margin-bottom:14px; }
+    .fg label { display:block; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin-bottom:5px; }
+    .fi {
+      width:100%; background:var(--surface); border:1.5px solid var(--border); border-radius:7px;
+      padding:10px 13px; color:var(--text); font-family:'Nunito',sans-serif; font-size:13px;
+      outline:none; transition:.15s;
+    }
+    .fi:focus { border-color:var(--rose); }
+    .fg-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .modal-footer { display:flex; gap:10px; justify-content:flex-end; padding-top:8px; }
+
+    /* CHARTS */
+    .charts-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:24px; }
+    @media(max-width:900px) { .charts-grid { grid-template-columns:1fr; } }
+    .chart-card { background:var(--card); border:1px solid var(--border); border-radius:var(--r); padding:20px; }
+    .chart-title { font-size:13px; font-weight:800; color:var(--text); margin-bottom:16px; }
+
+    /* ALERTS */
+    .alert { display:flex; gap:12px; padding:14px 16px; border-radius:9px; margin-bottom:10px; align-items:flex-start; }
+    .alert-warn { background:rgba(243,156,18,.1); border:1px solid rgba(243,156,18,.3); }
+    .alert-danger { background:rgba(231,76,60,.1); border:1px solid rgba(231,76,60,.3); }
+    .alert-info { background:rgba(155,77,106,.1); border:1px solid rgba(155,77,106,.3); }
+    .alert p { font-size:13px; line-height:1.5; }
+    .alert strong { color:var(--text); }
+
+    /* COLOR PREVIEW */
+    .color-preview { display:inline-block; width:24px; height:24px; border-radius:5px; border:2px solid var(--border); vertical-align:middle; margin-right:6px; }
+
+    /* SECTIONS */
+    .sec { display:none; }
+    .sec.active { display:block; }
+
+    /* RESPONSIVE */
+    @media(max-width:768px) {
+      .sidebar { transform:translateX(-100%); transition:.3s; }
+      .sidebar.open { transform:translateX(0); }
+      .main { margin-left:0; }
+      .mobile-menu { display:flex!important; }
+      .stats-grid { grid-template-columns:1fr 1fr; }
+      .fg-row { grid-template-columns:1fr; }
+    }
+    .mobile-menu { display:none; align-items:center; gap:10px; }
+    .ham { background:none; border:none; color:var(--text); font-size:22px; cursor:pointer; }
+
+    /* TOAST */
+    #toast { position:fixed; bottom:24px; right:24px; background:var(--card); border:1px solid var(--border); border-radius:9px; padding:12px 18px; font-size:13px; font-weight:700; z-index:999; transform:translateY(80px); opacity:0; transition:.3s; }
+    #toast.show { transform:translateY(0); opacity:1; }
+    #toast.ok { border-left:4px solid var(--green); color:var(--green); }
+    #toast.err { border-left:4px solid var(--red); color:var(--red); }
+
+    .empty { text-align:center; padding:48px; color:var(--muted); font-size:13px; }
+    .dot { width:8px; height:8px; border-radius:50%; display:inline-block; margin-right:6px; }
+    .dot-green { background:var(--green); }
+    .dot-yellow { background:var(--yellow); }
+    .dot-red { background:var(--red); }
+  </style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">Belle <span>Planner</span></div>
+    <div class="login-badge">Master Panel</div>
+    <input type="password" class="login-input" id="login-pass" placeholder="Senha master" onkeydown="if(event.key==='Enter')doLogin()">
+    <button class="login-btn" onclick="doLogin()">Entrar</button>
+    <div class="login-err hidden" id="login-err">Senha incorreta</div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <div class="brand-logo">Belle <span>Planner</span></div>
+      <div class="brand-tag">Master Panel · Erick</div>
+    </div>
+    <nav class="nav">
+      <div class="nav-section">Visão Geral</div>
+      <div class="nav-item active" id="nav-dashboard" onclick="showSec('dashboard')"><span class="nav-icon">📊</span> Dashboard</div>
+      <div class="nav-item" id="nav-alerts" onclick="showSec('alerts')"><span class="nav-icon">⚠️</span> Alertas <span id="alert-badge" style="background:var(--red);color:white;border-radius:50px;padding:1px 7px;font-size:10px;margin-left:auto"></span></div>
+      <div class="nav-sep"></div>
+      <div class="nav-section">Gestão</div>
+      <div class="nav-item" id="nav-tenants" onclick="showSec('tenants')"><span class="nav-icon">🏢</span> Tenants</div>
+      <div class="nav-item" id="nav-financial" onclick="showSec('financial')"><span class="nav-icon">💰</span> Financeiro</div>
+      <div class="nav-sep"></div>
+      <div class="nav-section">Sistema</div>
+      <div class="nav-item" id="nav-logs" onclick="showSec('logs')"><span class="nav-icon">📋</span> Logs</div>
+    </nav>
+    <div class="sidebar-footer">
+      <button class="logout-btn" onclick="doLogout()">Sair do painel</button>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="main">
+    <div class="topbar">
+      <div style="display:flex;align-items:center;gap:12px">
+        <button class="ham mobile-menu" onclick="document.getElementById('sidebar').classList.toggle('open')">☰</button>
+        <div class="page-title" id="page-title">Dashboard</div>
+      </div>
+      <div class="topbar-right" id="topbar-time"></div>
+    </div>
+
+    <div class="content">
+
+      <!-- DASHBOARD -->
+      <div class="sec active" id="sec-dashboard">
+        <div class="stats-grid" id="dash-stats"></div>
+        <div class="charts-grid">
+          <div class="chart-card">
+            <div class="chart-title">💰 Receita mensal (últimos 6 meses)</div>
+            <canvas id="chart-revenue" height="160"></canvas>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title">🏢 Status dos tenants</div>
+            <canvas id="chart-tenants" height="160"></canvas>
+          </div>
+        </div>
+        <div class="table-card">
+          <div class="table-head"><div class="table-title">🏢 Tenants recentes</div></div>
+          <div id="dash-tenants-table"></div>
+        </div>
+      </div>
+
+      <!-- ALERTS -->
+      <div class="sec" id="sec-alerts">
+        <div id="alerts-list"></div>
+      </div>
+
+      <!-- TENANTS -->
+      <div class="sec" id="sec-tenants">
+        <div class="table-card">
+          <div class="table-head">
+            <div class="table-title">🏢 Todos os tenants</div>
+            <button class="btn btn-primary" onclick="openTenantModal()">+ Novo tenant</button>
+          </div>
+          <div id="tenants-table"></div>
+        </div>
+      </div>
+
+      <!-- FINANCIAL -->
+      <div class="sec" id="sec-financial">
+        <div class="stats-grid" id="fin-stats"></div>
+        <div class="table-card">
+          <div class="table-head">
+            <div class="table-title">💳 Histórico de pagamentos</div>
+            <button class="btn btn-primary" onclick="openPaymentModal()">+ Registrar pagamento</button>
+          </div>
+          <div id="payments-table"></div>
+        </div>
+      </div>
+
+      <!-- LOGS -->
+      <div class="sec" id="sec-logs">
+        <div class="table-card">
+          <div class="table-head"><div class="table-title">📋 Log de ações</div></div>
+          <div id="logs-table"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- MODAL TENANT -->
+<div class="modal-bg hidden" id="modal-tenant-bg">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="tenant-modal-title">Novo Tenant</div>
+      <button class="modal-close" onclick="closeModal('tenant')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="fg-row">
+        <div class="fg"><label>Slug (único) *</label><input class="fi" id="t-slug" placeholder="ex: bela-essencia"></div>
+        <div class="fg"><label>Nome *</label><input class="fi" id="t-name" placeholder="Bela Essência"></div>
+      </div>
+      <div class="fg-row">
+        <div class="fg"><label>Nome da profissional</label><input class="fi" id="t-owner" placeholder="Ana Paula Silva"></div>
+        <div class="fg"><label>E-mail *</label><input class="fi" id="t-email" placeholder="email@gmail.com"></div>
+      </div>
+      <div class="fg-row">
+        <div class="fg"><label>WhatsApp</label><input class="fi" id="t-phone" placeholder="(43) 99999-9999"></div>
+        <div class="fg"><label>Vencimento</label><input class="fi" id="t-expires" type="date"></div>
+      </div>
+      <div class="fg-row">
+        <div class="fg"><label>Domínio próprio</label><input class="fi" id="t-domain" placeholder="belaessencia.app.br"></div>
+        <div class="fg"><label>Subdomínio BP</label><input class="fi" id="t-subdomain" placeholder="belaessencia"></div>
+      </div>
+      <div class="fg"><label>Nome do negócio</label><input class="fi" id="t-bizname" placeholder="Bela Essência"></div>
+      <div class="fg"><label>Tagline</label><input class="fi" id="t-tagline" placeholder="Estética & Beleza · Ana Paula Silva"></div>
+      <div class="fg-row">
+        <div class="fg">
+          <label>Cor primária</label>
+          <div style="display:flex;align-items:center;gap:8px">
+            <input type="color" id="t-color1" value="#9b4d6a" style="width:40px;height:34px;border:none;background:none;cursor:pointer">
+            <input class="fi" id="t-color1-hex" value="#9b4d6a" style="flex:1" onchange="document.getElementById('t-color1').value=this.value">
+          </div>
+        </div>
+        <div class="fg">
+          <label>Cor secundária</label>
+          <div style="display:flex;align-items:center;gap:8px">
+            <input type="color" id="t-color2" value="#C49A3C" style="width:40px;height:34px;border:none;background:none;cursor:pointer">
+            <input class="fi" id="t-color2-hex" value="#C49A3C" style="flex:1" onchange="document.getElementById('t-color2').value=this.value">
+          </div>
+        </div>
+      </div>
+      <div class="fg-row">
+        <div class="fg"><label>Login admin</label><input class="fi" id="t-adminuser" value="admin"></div>
+        <div class="fg"><label>Senha inicial</label><input class="fi" id="t-adminpass" type="text" placeholder="Gerada automaticamente"></div>
+      </div>
+      <div class="fg"><label>E-mail remetente</label><input class="fi" id="t-fromemail" placeholder="noreply@belaessencia.app.br"></div>
+      <div class="fg-row">
+        <div class="fg"><label>Valor setup (R$)</label><input class="fi" id="t-setup" type="number" value="200" min="0"></div>
+        <div class="fg"><label>Logo URL</label><input class="fi" id="t-logo" placeholder="https://..."></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('tenant')">Cancelar</button>
+        <button class="btn btn-primary" onclick="saveTenant()">Criar tenant + provisionar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL EDIT TENANT -->
+<div class="modal-bg hidden" id="modal-edit-bg">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Editar Tenant</div>
+      <button class="modal-close" onclick="closeModal('edit')">✕</button>
+    </div>
+    <div class="modal-body" id="modal-edit-body"></div>
+  </div>
+</div>
+
+<!-- MODAL PAYMENT -->
+<div class="modal-bg hidden" id="modal-payment-bg">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <div class="modal-title">Registrar Pagamento</div>
+      <button class="modal-close" onclick="closeModal('payment')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="fg"><label>Tenant *</label><select class="fi" id="p-tenant"></select></div>
+      <div class="fg-row">
+        <div class="fg"><label>Tipo *</label>
+          <select class="fi" id="p-type">
+            <option value="monthly">Mensalidade</option>
+            <option value="setup">Setup / Implantação</option>
+          </select>
+        </div>
+        <div class="fg"><label>Valor (R$) *</label><input class="fi" id="p-amount" type="number" value="100" min="0" step="0.01"></div>
+      </div>
+      <div class="fg-row">
+        <div class="fg"><label>Data do pagamento</label><input class="fi" id="p-date" type="date"></div>
+        <div class="fg"><label>Mês referência</label><input class="fi" id="p-month" type="month"></div>
+      </div>
+      <div class="fg"><label>Observações</label><input class="fi" id="p-notes" placeholder="Ex: PIX recebido"></div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('payment')">Cancelar</button>
+        <button class="btn btn-primary" onclick="savePayment()">Registrar pagamento</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ── UTILS ──────────────────────────────────────────────────────────────────
+const API = (method, url, body) => fetch(url, {
+  method, credentials: 'include',
+  headers: { 'Content-Type': 'application/json' },
+  body: body ? JSON.stringify(body) : undefined,
+}).then(async r => {
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.error || 'Erro');
+  return d;
+});
+const GET  = url    => API('GET', url);
+const POST = (u, b) => API('POST', u, b);
+const PUT  = (u, b) => API('PUT', u, b);
+const PATCH = (u,b) => API('PATCH', u, b);
+
+function toast(msg, type='ok', dur=3500) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.className = `show ${type}`;
+  setTimeout(() => el.className = '', dur);
+}
+
+function fmtDate(d) {
+  if (!d) return '—';
+  const dt = new Date(d + 'T12:00:00');
+  return dt.toLocaleDateString('pt-BR');
+}
+function fmtCurr(v) {
+  return `R$ ${Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}`;
+}
+
+const SEC_TITLES = { dashboard:'Dashboard', alerts:'Alertas', tenants:'Tenants', financial:'Financeiro', logs:'Logs' };
+let _tenants = [];
+let _editId   = null;
+
+// ── AUTH ───────────────────────────────────────────────────────────────────
+async function doLogin() {
+  const pass = document.getElementById('login-pass').value;
+  try {
+    await POST('/master/login', { pass });
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    init();
+  } catch {
+    const el = document.getElementById('login-err');
+    el.classList.remove('hidden');
+    setTimeout(() => el.classList.add('hidden'), 3000);
+  }
+}
+async function doLogout() {
+  await POST('/master/logout', {});
+  location.reload();
+}
+document.getElementById('login-pass').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doLogin();
+});
+
+// ── NAVIGATION ─────────────────────────────────────────────────────────────
+function showSec(name) {
+  document.querySelectorAll('.sec').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById(`sec-${name}`).classList.add('active');
+  document.getElementById(`nav-${name}`)?.classList.add('active');
+  document.getElementById('page-title').textContent = SEC_TITLES[name];
+  document.getElementById('sidebar').classList.remove('open');
+
+  if (name === 'tenants')   renderTenants();
+  if (name === 'financial') loadFinancial();
+  if (name === 'logs')      loadLogs();
+  if (name === 'alerts')    renderAlerts();
+}
+
+// ── INIT ───────────────────────────────────────────────────────────────────
+async function init() {
+  // Clock
+  setInterval(() => {
+    document.getElementById('topbar-time').textContent =
+      new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', hour:'2-digit', minute:'2-digit', day:'2-digit', month:'2-digit' });
+  }, 1000);
+  loadDashboard();
+}
+
+// ── DASHBOARD ──────────────────────────────────────────────────────────────
+async function loadDashboard() {
+  try {
+    const d = await GET('/master/api/stats');
+    _tenants = d.tenantList || [];
+
+    // Stats cards
+    const expiring = d.expiring || 0;
+    const blocked  = d.blocked  || 0;
+    const alertCount = expiring + blocked;
+    if (alertCount > 0) document.getElementById('alert-badge').textContent = alertCount;
+
+    document.getElementById('dash-stats').innerHTML = `
+      <div class="stat-card" style="--accent:var(--rose)">
+        <div class="stat-lbl">💰 MRR</div>
+        <div class="stat-val">${fmtCurr(d.payments?.mrr)}</div>
+        <div class="stat-sub">mensalidades ativas</div>
+      </div>
+      <div class="stat-card" style="--accent:var(--gold)">
+        <div class="stat-lbl">🚀 Setup acumulado</div>
+        <div class="stat-val">${fmtCurr(d.payments?.setup_total)}</div>
+        <div class="stat-sub">implantações pagas</div>
+      </div>
+      <div class="stat-card" style="--accent:var(--green)">
+        <div class="stat-lbl">🏢 Tenants ativos</div>
+        <div class="stat-val">${d.tenants?.active || 0}</div>
+        <div class="stat-sub">${d.tenants?.total || 0} no total</div>
+      </div>
+      <div class="stat-card" style="--accent:#8e44ad">
+        <div class="stat-lbl">💎 Receita total</div>
+        <div class="stat-val">${fmtCurr(d.payments?.total_revenue)}</div>
+        <div class="stat-sub">desde o início</div>
+      </div>
+      ${expiring > 0 ? `<div class="stat-card" style="--accent:var(--yellow)">
+        <div class="stat-lbl">⚠️ Vencendo em 7 dias</div>
+        <div class="stat-val">${expiring}</div>
+        <div class="stat-sub">tenants precisam renovar</div>
+      </div>` : ''}
+      ${blocked > 0 ? `<div class="stat-card" style="--accent:var(--red)">
+        <div class="stat-lbl">🔴 Bloqueados</div>
+        <div class="stat-val">${blocked}</div>
+        <div class="stat-sub">aguardando pagamento</div>
+      </div>` : ''}
+    `;
+
+    // Revenue chart
+    const months = d.chart?.map(r => r.month) || [];
+    const revs   = d.chart?.map(r => Number(r.revenue)) || [];
+    const rCtx = document.getElementById('chart-revenue').getContext('2d');
+    new Chart(rCtx, {
+      type: 'line',
+      data: {
+        labels: months,
+        datasets: [{ label: 'Receita (R$)', data: revs, borderColor: '#9b4d6a', backgroundColor: 'rgba(155,77,106,.15)', fill: true, tension: .4, pointBackgroundColor: '#9b4d6a' }]
+      },
+      options: { responsive:true, plugins:{legend:{display:false}}, scales:{
+        x:{ticks:{color:'#7a7d96'},grid:{color:'#2a2d42'}},
+        y:{ticks:{color:'#7a7d96',callback:v=>`R$${v}`},grid:{color:'#2a2d42'}}
+      }}
+    });
+
+    // Tenant status donut
+    const tCtx = document.getElementById('chart-tenants').getContext('2d');
+    new Chart(tCtx, {
+      type: 'doughnut',
+      data: {
+        labels: ['Ativos', 'Inativos'],
+        datasets: [{ data: [d.tenants?.active||0, d.tenants?.inactive||0], backgroundColor:['#2ecc71','#e74c3c'], borderWidth:0 }]
+      },
+      options: { responsive:true, plugins:{legend:{labels:{color:'#7a7d96'}}} }
+    });
+
+    // Recent tenants table
+    renderTenantsTable('dash-tenants-table', d.tenantList?.slice(0,5) || [], true);
+
+  } catch(e) { toast('Erro ao carregar dashboard: ' + e.message, 'err'); }
+}
+
+function tenantStatus(t) {
+  if (!t.active) return `<span class="badge badge-blocked"><span class="dot dot-red"></span>Bloqueado</span>`;
+  if (t.plan_expires_at) {
+    const days = Math.ceil((new Date(t.plan_expires_at) - new Date()) / 86400000);
+    if (days < 0)  return `<span class="badge badge-blocked"><span class="dot dot-red"></span>Expirado</span>`;
+    if (days <= 7) return `<span class="badge badge-expiring"><span class="dot dot-yellow"></span>Vence em ${days}d</span>`;
+  }
+  return `<span class="badge badge-active"><span class="dot dot-green"></span>Ativo</span>`;
+}
+
+function renderTenantsTable(containerId, list, compact=false) {
+  const el = document.getElementById(containerId);
+  if (!list.length) { el.innerHTML = '<div class="empty">Nenhum tenant cadastrado</div>'; return; }
+  el.innerHTML = `<table>
+    <thead><tr>
+      <th>Negócio / Domínio</th>
+      <th>Profissional</th>
+      ${!compact?'<th>Schema</th>':''}
+      <th>Vencimento</th>
+      <th>Status</th>
+      <th>Ações</th>
+    </tr></thead>
+    <tbody>
+    ${list.map(t => `<tr>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="width:10px;height:10px;border-radius:50%;background:${t.primary_color||'#9b4d6a'};flex-shrink:0"></div>
+          <div>
+            <div style="font-weight:800;color:var(--text)">${t.business_name||t.name}</div>
+            <div style="font-size:11px;color:var(--muted)">${t.domain_custom||t.subdomain+'.belleplanner.com.br'||'—'}</div>
+          </div>
+        </div>
+      </td>
+      <td><div style="font-size:12px">${t.owner_name||'—'}</div><div style="font-size:11px;color:var(--muted)">${t.owner_email||'—'}</div></td>
+      ${!compact?`<td style="font-family:monospace;font-size:11px;color:var(--muted)">${t.schema_name}</td>`:''}
+      <td style="font-size:12px">${fmtDate(t.plan_expires_at)}</td>
+      <td>${tenantStatus(t)}</td>
+      <td>
+        <div style="display:flex;gap:5px;flex-wrap:wrap">
+          <button class="btn btn-ghost btn-sm" onclick="openEditModal(${t.id})">Editar</button>
+          <button class="btn btn-sm ${t.active?'btn-red':'btn-green'}" onclick="toggleTenant(${t.id},'${t.slug}',${t.active})">${t.active?'Suspender':'Ativar'}</button>
+          ${t.domain_custom||t.subdomain?`<a href="https://${t.domain_custom||t.subdomain+'.belleplanner.com.br'}" target="_blank" class="btn btn-ghost btn-sm" style="text-decoration:none">Ver ↗</a>`:''}
+        </div>
+      </td>
+    </tr>`).join('')}
+    </tbody></table>`;
+}
+
+// ── TENANTS ────────────────────────────────────────────────────────────────
+async function renderTenants() {
+  try {
+    _tenants = await GET('/master/api/tenants');
+    renderTenantsTable('tenants-table', _tenants);
+  } catch(e) { toast('Erro: ' + e.message, 'err'); }
+}
+
+async function toggleTenant(id, slug, currentActive) {
+  if (!confirm(`${currentActive?'Suspender':'Ativar'} o tenant "${slug}"?`)) return;
+  try {
+    const r = await PATCH(`/master/api/tenants/${id}/toggle`, {});
+    toast(r.active ? '✓ Tenant ativado' : '⏸ Tenant suspenso');
+    renderTenants(); loadDashboard();
+  } catch(e) { toast(e.message, 'err'); }
+}
+
+function openTenantModal() {
+  // Set default expiry to 1 month from today
+  const exp = new Date(); exp.setMonth(exp.getMonth()+1);
+  document.getElementById('t-expires').value = exp.toISOString().slice(0,10);
+  document.getElementById('modal-tenant-bg').classList.remove('hidden');
+}
+
+async function saveTenant() {
+  const body = {
+    slug:           document.getElementById('t-slug').value.trim().toLowerCase().replace(/\s+/g,'-'),
+    name:           document.getElementById('t-name').value.trim(),
+    owner_name:     document.getElementById('t-owner').value.trim(),
+    owner_email:    document.getElementById('t-email').value.trim(),
+    owner_phone:    document.getElementById('t-phone').value.trim(),
+    domain_custom:  document.getElementById('t-domain').value.trim(),
+    subdomain:      document.getElementById('t-subdomain').value.trim(),
+    plan_expires_at:document.getElementById('t-expires').value,
+    business_name:  document.getElementById('t-bizname').value.trim(),
+    tagline:        document.getElementById('t-tagline').value.trim(),
+    primary_color:  document.getElementById('t-color1-hex').value,
+    secondary_color:document.getElementById('t-color2-hex').value,
+    admin_user:     document.getElementById('t-adminuser').value.trim(),
+    admin_pass:     document.getElementById('t-adminpass').value.trim(),
+    resend_from_email: document.getElementById('t-fromemail').value.trim(),
+    logo_url:       document.getElementById('t-logo').value.trim(),
+    whatsapp_number: document.getElementById('t-phone').value.trim(),
+    setup_amount:   document.getElementById('t-setup').value,
+  };
+  if (!body.slug || !body.name || !body.owner_email) {
+    toast('Slug, nome e e-mail são obrigatórios', 'err'); return;
+  }
+  try {
+    const btn = document.querySelector('#modal-tenant-bg .btn-primary');
+    btn.textContent = 'Provisionando...'; btn.disabled = true;
+    await POST('/master/api/tenants', body);
+    toast('✓ Tenant criado e provisionado! E-mail enviado.', 'ok', 5000);
+    closeModal('tenant');
+    renderTenants(); loadDashboard();
+  } catch(e) {
+    toast(e.message, 'err');
+    const btn = document.querySelector('#modal-tenant-bg .btn-primary');
+    btn.textContent = 'Criar tenant + provisionar'; btn.disabled = false;
+  }
+}
+
+async function openEditModal(id) {
+  const t = _tenants.find(x => x.id === id);
+  if (!t) return;
+  _editId = id;
+  document.getElementById('modal-edit-body').innerHTML = `
+    <div class="fg-row">
+      <div class="fg"><label>Nome</label><input class="fi" id="e-name" value="${t.name||''}"></div>
+      <div class="fg"><label>Nome do negócio</label><input class="fi" id="e-bizname" value="${t.business_name||''}"></div>
+    </div>
+    <div class="fg"><label>Tagline</label><input class="fi" id="e-tagline" value="${t.tagline||''}"></div>
+    <div class="fg-row">
+      <div class="fg"><label>Profissional</label><input class="fi" id="e-owner" value="${t.owner_name||''}"></div>
+      <div class="fg"><label>E-mail</label><input class="fi" id="e-email" value="${t.owner_email||''}"></div>
+    </div>
+    <div class="fg-row">
+      <div class="fg"><label>Domínio próprio</label><input class="fi" id="e-domain" value="${t.domain_custom||''}"></div>
+      <div class="fg"><label>Subdomínio BP</label><input class="fi" id="e-subdomain" value="${t.subdomain||''}"></div>
+    </div>
+    <div class="fg-row">
+      <div class="fg"><label>Cor primária</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="color" id="e-c1" value="${t.primary_color||'#9b4d6a'}" style="width:40px;height:34px;border:none;background:none;cursor:pointer">
+          <input class="fi" id="e-c1h" value="${t.primary_color||'#9b4d6a'}" style="flex:1" onchange="document.getElementById('e-c1').value=this.value">
+        </div>
+      </div>
+      <div class="fg"><label>Cor secundária</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="color" id="e-c2" value="${t.secondary_color||'#C49A3C'}" style="width:40px;height:34px;border:none;background:none;cursor:pointer">
+          <input class="fi" id="e-c2h" value="${t.secondary_color||'#C49A3C'}" style="flex:1" onchange="document.getElementById('e-c2').value=this.value">
+        </div>
+      </div>
+    </div>
+    <div class="fg-row">
+      <div class="fg"><label>Vencimento</label><input class="fi" id="e-expires" type="date" value="${t.plan_expires_at?t.plan_expires_at.slice(0,10):''}"></div>
+      <div class="fg"><label>E-mail remetente</label><input class="fi" id="e-fromemail" value="${t.resend_from_email||''}"></div>
+    </div>
+    <div class="fg"><label>Logo URL</label><input class="fi" id="e-logo" value="${t.logo_url||''}"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('edit')">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveEdit()">Salvar alterações</button>
+    </div>
+  `;
+  document.getElementById('modal-edit-bg').classList.remove('hidden');
+}
+
+async function saveEdit() {
+  const body = {
+    name:           document.getElementById('e-name').value,
+    owner_name:     document.getElementById('e-owner').value,
+    owner_email:    document.getElementById('e-email').value,
+    domain_custom:  document.getElementById('e-domain').value,
+    subdomain:      document.getElementById('e-subdomain').value,
+    plan_expires_at:document.getElementById('e-expires').value,
+    business_name:  document.getElementById('e-bizname').value,
+    tagline:        document.getElementById('e-tagline').value,
+    primary_color:  document.getElementById('e-c1h').value,
+    secondary_color:document.getElementById('e-c2h').value,
+    logo_url:       document.getElementById('e-logo').value,
+    resend_from_email: document.getElementById('e-fromemail').value,
+    active: true,
+  };
+  try {
+    await PUT(`/master/api/tenants/${_editId}`, body);
+    toast('✓ Tenant atualizado', 'ok');
+    closeModal('edit');
+    renderTenants(); loadDashboard();
+  } catch(e) { toast(e.message, 'err'); }
+}
+
+// ── ALERTS ─────────────────────────────────────────────────────────────────
+async function renderAlerts() {
+  try {
+    const tenants = await GET('/master/api/tenants');
+    const today   = new Date();
+    const container = document.getElementById('alerts-list');
+    let html = '';
+
+    const blocked  = tenants.filter(t => !t.active);
+    const expiring = tenants.filter(t => {
+      if (!t.active || !t.plan_expires_at) return false;
+      const days = Math.ceil((new Date(t.plan_expires_at) - today) / 86400000);
+      return days >= 0 && days <= 7;
+    });
+
+    if (!blocked.length && !expiring.length) {
+      html = `<div class="alert alert-info"><span>✅</span><p><strong>Tudo certo!</strong> Nenhum alerta pendente.</p></div>`;
+    }
+    for (const t of blocked) {
+      html += `<div class="alert alert-danger">
+        <span style="font-size:20px">🔴</span>
+        <div>
+          <p><strong>${t.business_name||t.name}</strong> — BLOQUEADO</p>
+          <p style="font-size:12px;color:var(--muted)">Venceu em ${fmtDate(t.plan_expires_at)} · ${t.owner_email}</p>
+          <div style="margin-top:8px;display:flex;gap:8px">
+            <button class="btn btn-green btn-sm" onclick="openPaymentModalFor(${t.id})">Registrar pagamento</button>
+            <button class="btn btn-ghost btn-sm" onclick="toggleTenant(${t.id},'${t.slug}',false)">Reativar manualmente</button>
+          </div>
+        </div>
+      </div>`;
+    }
+    for (const t of expiring) {
+      const days = Math.ceil((new Date(t.plan_expires_at) - today) / 86400000);
+      html += `<div class="alert alert-warn">
+        <span style="font-size:20px">⚠️</span>
+        <div>
+          <p><strong>${t.business_name||t.name}</strong> — vence em <strong>${days} dia${days!==1?'s':''}</strong></p>
+          <p style="font-size:12px;color:var(--muted)">${fmtDate(t.plan_expires_at)} · ${t.owner_email}</p>
+          <button class="btn btn-primary btn-sm" style="margin-top:8px" onclick="openPaymentModalFor(${t.id})">Registrar renovação</button>
+        </div>
+      </div>`;
+    }
+    container.innerHTML = html;
+  } catch(e) { toast(e.message, 'err'); }
+}
+
+// ── FINANCIAL ──────────────────────────────────────────────────────────────
+async function loadFinancial() {
+  try {
+    const [payments, tenants] = await Promise.all([GET('/master/api/payments'), GET('/master/api/tenants')]);
+    _tenants = tenants;
+
+    const totalRev   = payments.filter(p=>p.status==='paid').reduce((s,p)=>s+Number(p.amount),0);
+    const totalMon   = payments.filter(p=>p.status==='paid'&&p.type==='monthly').reduce((s,p)=>s+Number(p.amount),0);
+    const totalSetup = payments.filter(p=>p.status==='paid'&&p.type==='setup').reduce((s,p)=>s+Number(p.amount),0);
+    const pending    = payments.filter(p=>p.status==='pending').reduce((s,p)=>s+Number(p.amount),0);
+
+    document.getElementById('fin-stats').innerHTML = `
+      <div class="stat-card" style="--accent:var(--green)">
+        <div class="stat-lbl">💰 Receita total</div>
+        <div class="stat-val">${fmtCurr(totalRev)}</div>
+        <div class="stat-sub">todos os pagamentos pagos</div>
+      </div>
+      <div class="stat-card" style="--accent:var(--rose)">
+        <div class="stat-lbl">📅 Mensalidades</div>
+        <div class="stat-val">${fmtCurr(totalMon)}</div>
+        <div class="stat-sub">${payments.filter(p=>p.type==='monthly'&&p.status==='paid').length} pagamentos</div>
+      </div>
+      <div class="stat-card" style="--accent:var(--gold)">
+        <div class="stat-lbl">🚀 Implantações</div>
+        <div class="stat-val">${fmtCurr(totalSetup)}</div>
+        <div class="stat-sub">${payments.filter(p=>p.type==='setup'&&p.status==='paid').length} setups</div>
+      </div>
+      <div class="stat-card" style="--accent:var(--yellow)">
+        <div class="stat-lbl">⏳ Pendente</div>
+        <div class="stat-val">${fmtCurr(pending)}</div>
+        <div class="stat-sub">${payments.filter(p=>p.status==='pending').length} pagamentos</div>
+      </div>
+    `;
+
+    if (!payments.length) {
+      document.getElementById('payments-table').innerHTML = '<div class="empty">Nenhum pagamento registrado</div>';
+      return;
+    }
+    document.getElementById('payments-table').innerHTML = `<table>
+      <thead><tr><th>Tenant</th><th>Tipo</th><th>Valor</th><th>Status</th><th>Referência</th><th>Data</th><th>Obs.</th></tr></thead>
+      <tbody>
+      ${payments.map(p=>`<tr>
+        <td><div style="font-weight:700;font-size:13px">${p.business_name||p.tenant_name}</div></td>
+        <td><span class="badge badge-${p.type}">${p.type==='monthly'?'Mensalidade':'Setup'}</span></td>
+        <td style="color:var(--green);font-weight:800">${fmtCurr(p.amount)}</td>
+        <td><span class="badge badge-${p.status}">${p.status==='paid'?'✓ Pago':'⏳ Pendente'}</span></td>
+        <td style="font-size:12px;color:var(--muted)">${p.reference_month||'—'}</td>
+        <td style="font-size:12px">${fmtDate(p.paid_at)}</td>
+        <td style="font-size:11px;color:var(--muted)">${p.notes||'—'}</td>
+      </tr>`).join('')}
+      </tbody></table>`;
+  } catch(e) { toast(e.message, 'err'); }
+}
+
+function openPaymentModal() {
+  populatePaymentTenants();
+  const today = new Date().toISOString().slice(0,10);
+  const month = today.slice(0,7);
+  document.getElementById('p-date').value  = today;
+  document.getElementById('p-month').value = month;
+  document.getElementById('modal-payment-bg').classList.remove('hidden');
+}
+
+function openPaymentModalFor(tenantId) {
+  openPaymentModal();
+  setTimeout(() => {
+    document.getElementById('p-tenant').value = tenantId;
+  }, 50);
+}
+
+function populatePaymentTenants() {
+  document.getElementById('p-tenant').innerHTML = _tenants.map(t =>
+    `<option value="${t.id}">${t.business_name||t.name} (${t.owner_name||t.slug})</option>`
+  ).join('');
+}
+
+async function savePayment() {
+  const body = {
+    tenant_id:        Number(document.getElementById('p-tenant').value),
+    type:             document.getElementById('p-type').value,
+    amount:           document.getElementById('p-amount').value,
+    status:           'paid',
+    reference_month:  document.getElementById('p-month').value,
+    paid_at:          document.getElementById('p-date').value,
+    notes:            document.getElementById('p-notes').value,
+  };
+  try {
+    await POST('/master/api/payments', body);
+    toast('✓ Pagamento registrado! Tenant reativado se estava bloqueado.', 'ok', 5000);
+    closeModal('payment');
+    loadFinancial(); loadDashboard(); renderAlerts();
+  } catch(e) { toast(e.message, 'err'); }
+}
+
+// ── LOGS ───────────────────────────────────────────────────────────────────
+async function loadLogs() {
+  try {
+    const logs = await GET('/master/api/logs');
+    if (!logs.length) { document.getElementById('logs-table').innerHTML='<div class="empty">Nenhum log registrado</div>'; return; }
+    document.getElementById('logs-table').innerHTML = `<table>
+      <thead><tr><th>Data</th><th>Tenant</th><th>Ação</th><th>Detalhes</th></tr></thead>
+      <tbody>
+      ${logs.map(l=>`<tr>
+        <td style="font-size:11px;color:var(--muted);white-space:nowrap">${new Date(l.created_at).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'})}</td>
+        <td style="font-size:12px">${l.tenant_name||'Sistema'}</td>
+        <td><code style="font-size:11px;color:var(--rose-l);background:rgba(155,77,106,.1);padding:2px 6px;border-radius:4px">${l.action}</code></td>
+        <td style="font-size:12px;color:var(--muted)">${l.details||'—'}</td>
+      </tr>`).join('')}
+      </tbody></table>`;
+  } catch(e) { toast(e.message, 'err'); }
+}
+
+// ── MODALS ─────────────────────────────────────────────────────────────────
+function closeModal(name) {
+  document.getElementById(`modal-${name}-bg`).classList.add('hidden');
+}
+document.querySelectorAll('.modal-bg').forEach(bg => {
+  bg.addEventListener('click', e => { if (e.target === bg) bg.classList.add('hidden'); });
+});
+
+// Color pickers sync
+document.getElementById('t-color1').addEventListener('input', function() {
+  document.getElementById('t-color1-hex').value = this.value;
+});
+document.getElementById('t-color2').addEventListener('input', function() {
+  document.getElementById('t-color2-hex').value = this.value;
+});
+
+// Check if already logged in
+fetch('/master/api/stats', { credentials:'include' })
+  .then(r => {
+    if (r.ok) {
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('app').style.display = 'block';
+      init();
+    }
+  }).catch(()=>{});
+</script>
+</body>
+</html>
