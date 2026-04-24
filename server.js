@@ -168,7 +168,7 @@ async function tenantMiddleware(req, res, next) {
   const host = req.hostname;
 
   // Rotas do master (painel Erick) — sem tenant
-  if (host === 'admin.belleplanner.com.br' || req.path.startsWith('/master')) {
+  if (host === 'adminpanel.belleplanner.com.br' || req.path.startsWith('/master')) {
     req.isMaster = true;
     return next();
   }
