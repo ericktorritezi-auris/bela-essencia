@@ -513,6 +513,9 @@ async function init() {
 }
 
 // ── DASHBOARD ──────────────────────────────────────────────────────────────
+let _chartRevenue = null;
+let _chartTenants = null;
+
 async function loadDashboard() {
   try {
     const d = await GET('/master/api/stats');
@@ -560,8 +563,9 @@ async function loadDashboard() {
     // Revenue chart
     const months = d.chart?.map(r => r.month) || [];
     const revs   = d.chart?.map(r => Number(r.revenue)) || [];
+    if (_chartRevenue) { _chartRevenue.destroy(); _chartRevenue = null; }
     const rCtx = document.getElementById('chart-revenue').getContext('2d');
-    new Chart(rCtx, {
+    _chartRevenue = new Chart(rCtx, {
       type: 'line',
       data: {
         labels: months,
@@ -574,8 +578,9 @@ async function loadDashboard() {
     });
 
     // Tenant status donut
+    if (_chartTenants) { _chartTenants.destroy(); _chartTenants = null; }
     const tCtx = document.getElementById('chart-tenants').getContext('2d');
-    new Chart(tCtx, {
+    _chartTenants = new Chart(tCtx, {
       type: 'doughnut',
       data: {
         labels: ['Ativos', 'Inativos'],
