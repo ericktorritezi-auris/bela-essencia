@@ -361,9 +361,10 @@
       </div>
       <div class="fg"><label>E-mail remetente</label><input class="fi" id="t-fromemail" placeholder="noreply@belaessencia.app.br"></div>
       <div class="fg-row">
-        <div class="fg"><label>Valor setup (R$)</label><input class="fi" id="t-setup" type="number" value="200" min="0"></div>
-        <div class="fg"><label>Logo URL</label><input class="fi" id="t-logo" placeholder="https://..."></div>
+        <div class="fg"><label>Mensalidade (R$)</label><input class="fi" id="t-monthly" type="number" value="100" min="0" step="0.01" placeholder="100.00"></div>
+        <div class="fg"><label>Setup / Implantação (R$)</label><input class="fi" id="t-setup" type="number" value="200" min="0" step="0.01"></div>
       </div>
+      <div class="fg"><label>Logo URL</label><input class="fi" id="t-logo" placeholder="https://..."></div>
       <div class="modal-footer">
         <button class="btn btn-ghost" onclick="closeModal('tenant')">Cancelar</button>
         <button class="btn btn-primary" onclick="saveTenant()">Criar tenant + provisionar</button>
@@ -598,6 +599,7 @@ function renderTenantsTable(containerId, list, compact=false) {
       <th>Negócio / Domínio</th>
       <th>Profissional</th>
       ${!compact?'<th>Schema</th>':''}
+      <th>Mensalidade</th>
       <th>Vencimento</th>
       <th>Status</th>
       <th>Ações</th>
@@ -615,6 +617,7 @@ function renderTenantsTable(containerId, list, compact=false) {
       </td>
       <td><div style="font-size:12px">${t.owner_name||'—'}</div><div style="font-size:11px;color:var(--muted)">${t.owner_email||'—'}</div></td>
       ${!compact?`<td style="font-family:monospace;font-size:11px;color:var(--muted)">${t.schema_name}</td>`:''}
+      <td style="color:var(--green);font-weight:700;font-size:13px">${Number(t.monthly_fee||0)===0?'<span style="color:var(--muted)">Isento</span>':fmtCurr(t.monthly_fee)}</td>
       <td style="font-size:12px">${fmtDate(t.plan_expires_at)}</td>
       <td>${tenantStatus(t)}</td>
       <td>
@@ -672,6 +675,8 @@ async function saveTenant() {
     logo_url:       document.getElementById('t-logo').value.trim(),
     whatsapp_number: document.getElementById('t-phone').value.trim(),
     setup_amount:   document.getElementById('t-setup').value,
+    monthly_fee:    document.getElementById('t-monthly').value,
+    setup_fee:      document.getElementById('t-setup').value,
   };
   if (!body.slug || !body.name || !body.owner_email) {
     toast('Slug, nome e e-mail são obrigatórios', 'err'); return;
@@ -727,6 +732,10 @@ async function openEditModal(id) {
       <div class="fg"><label>E-mail remetente</label><input class="fi" id="e-fromemail" value="${t.resend_from_email||''}"></div>
     </div>
     <div class="fg"><label>Logo URL</label><input class="fi" id="e-logo" value="${t.logo_url||''}"></div>
+    <div class="fg-row">
+      <div class="fg"><label>Mensalidade (R$)</label><input class="fi" id="e-monthly" type="number" value="${t.monthly_fee||100}" min="0" step="0.01"></div>
+      <div class="fg"><label>Setup (R$)</label><input class="fi" id="e-setup" type="number" value="${t.setup_fee||200}" min="0" step="0.01"></div>
+    </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('edit')">Cancelar</button>
       <button class="btn btn-primary" onclick="saveEdit()">Salvar alterações</button>
@@ -749,6 +758,8 @@ async function saveEdit() {
     secondary_color:document.getElementById('e-c2h').value,
     logo_url:       document.getElementById('e-logo').value,
     resend_from_email: document.getElementById('e-fromemail').value,
+    monthly_fee:    document.getElementById('e-monthly').value,
+    setup_fee:      document.getElementById('e-setup').value,
     active: true,
   };
   try {
