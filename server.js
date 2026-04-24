@@ -821,6 +821,14 @@ app.use(express.json());
 // Tenant middleware — detecta tenant por hostname (Fase 1 White Label)
 app.use(tenantMiddleware);
 
+// Redireciona adminpanel.belleplanner.com.br → /master
+app.use((req, res, next) => {
+  if (req.hostname === 'adminpanel.belleplanner.com.br' && !req.path.startsWith('/master')) {
+    return res.redirect(301, '/master');
+  }
+  next();
+});
+
 // Suprimir warning de MemoryStore em produção (aceitável para 1 instância)
 const sessionStore = session.MemoryStore ? new session.MemoryStore() : undefined;
 
