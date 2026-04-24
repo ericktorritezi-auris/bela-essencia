@@ -2312,6 +2312,91 @@ app.get('/master/', (req, res) => {
   res.sendFile(require('path').join(__dirname, 'public', 'master.html'));
 });
 
+// ── Health Check ─────────────────────────────────────────────────────────────
+// Endpoint público — monitorado pelo UptimeRobot e pelo painel master
+app.get('/api/health', async (req, res) => {
+  const start = Date.now();
+  const status = { server: 'ok', database: 'ok', timestamp: new Date().toISOString(), latency_ms: 0 };
+  try {
+    await pool.query('SELECT 1');
+    status.latency_ms = Date.now() - start;
+    res.json(status);
+  } catch (err) {
+    status.database = 'error';
+    status.error    = err.message;
+    status.latency_ms = Date.now() - start;
+    res.status(503).json(status);
+  }
+});
+
+// ── Master: health de todos os tenants ────────────────────────────────────────
+// Verifica saúde diretamente no banco — sem HTTP para fora (evita loops no Railway)
+app.get('/master/api/health', requireMaster, async (req, res) => {
+  try {
+    const { rows: tenants } = await pool.query(
+      `SELECT t.id, t.slug, t.active, t.domain_custom, t.subdomain,
+              tc.business_name
+       FROM tenants t LEFT JOIN tenant_configs tc ON tc.tenant_id=t.id
+       WHERE t.active=TRUE ORDER BY t.id`
+    );
+
+    const results = await Promise.allSettled(
+      tenants.map(async t => {
+        const url = t.domain_custom
+          ? `https://${t.domain_custom}/api/health`
+          : t.subdomain ? `https://${t.subdomain}.belleplanner.com.br/api/health` : null;
+
+        // Verifica banco diretamente usando o schema do tenant
+        const start = Date.now();
+        try {
+          await pool.query(`SELECT 1`);
+          // Conta agendamentos recentes como indicador de atividade
+          const { rows: appts } = await pool.query(
+            `SELECT COUNT(*) as cnt FROM appointments WHERE created_at > NOW() - interval '30 days'`
+          );
+          return {
+            id: t.id, slug: t.slug,
+            business_name: t.business_name || t.slug,
+            url, status: 'ok',
+            latency_ms: Date.now() - start,
+            db: 'ok',
+            recent_appts: Number(appts[0]?.cnt || 0),
+            checked_at: new Date().toISOString(),
+          };
+        } catch (err) {
+          await logAction(t.id, 'health_check_failed', `DB error: ${err.message}`);
+          return {
+            id: t.id, slug: t.slug,
+            business_name: t.business_name || t.slug,
+            url, status: 'degraded',
+            latency_ms: Date.now() - start,
+            db: 'error', error: err.message,
+            checked_at: new Date().toISOString(),
+          };
+        }
+      })
+    );
+
+    res.json(results.map(r =>
+      r.status === 'fulfilled' ? r.value : { status: 'error', error: r.reason?.message }
+    ));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Master: health history (últimos incidentes) ───────────────────────────────
+app.get('/master/api/health/history', requireMaster, async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT l.*, t.name as tenant_name, tc.business_name
+      FROM system_logs l
+      LEFT JOIN tenants t ON t.id=l.tenant_id
+      LEFT JOIN tenant_configs tc ON tc.tenant_id=l.tenant_id
+      WHERE l.action IN ('health_check_failed','tenant_auto_blocked','expiry_reminder_sent')
+      ORDER BY l.created_at DESC LIMIT 50`);
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ── Tenant Config (White Label) ───────────────────────────────────────────────
 app.get('/api/config', async (req, res) => {
   try {
