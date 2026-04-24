@@ -188,20 +188,6 @@ async function tenantMiddleware(req, res, next) {
 }
 
 // Pool query com schema do tenant
-// Uso futuro (Fase 4): pool.queryTenant(req, sql, params)
-pool.queryTenant = async function(req, sql, params) {
-  if (req.schemaName) {
-    const client = await this.connect();
-    try {
-      await client.query(`SET search_path TO "${req.schemaName}", public`);
-      const result = await client.query(sql, params);
-      return result;
-    } finally {
-      client.release();
-    }
-  }
-  return this.query(sql, params);
-};
 
 // ── Fuso Brasil (America/Sao_Paulo) ──────────────────────────────────────────
 // Retorna objeto Date ajustado para o fuso de Brasília
@@ -293,6 +279,22 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
 });
+
+// Uso futuro (Fase 4): pool.queryTenant(req, sql, params)
+pool.queryTenant = async function(req, sql, params) {
+  if (req.schemaName) {
+    const client = await this.connect();
+    try {
+      await client.query(`SET search_path TO "${req.schemaName}", public`);
+      const result = await client.query(sql, params);
+      return result;
+    } finally {
+      client.release();
+    }
+  }
+  return this.query(sql, params);
+};
+
 
 // ══════════════════════════════════════════════════════════════════════════════
 // 2. SCHEMA + SEED
