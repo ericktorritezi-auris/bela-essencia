@@ -62,13 +62,30 @@ function invalidateTenantCache(host) { _tenantCache.delete(host); }
 async function migrateTenantData(schemaName) {
   const client = await pool.connect();
   try {
-    // Verifica se já tem dados (idempotente — não repete se já migrou)
-    const check = await client.query(
-      `SELECT COUNT(*) as cnt FROM "${schemaName}".procedures`
-    );
-    if (Number(check.rows[0].cnt) > 0) {
-      console.log(`[DB] Schema "${schemaName}" já tem dados — migração ignorada.`);
+    // Verifica se a migração está COMPLETA (procedures E cities com dados)
+    const checkProc = await client.query(`SELECT COUNT(*) as cnt FROM "${schemaName}".procedures`);
+    const checkCity = await client.query(`SELECT COUNT(*) as cnt FROM "${schemaName}".cities`);
+    const hasProc   = Number(checkProc.rows[0].cnt) > 0;
+    const hasCity   = Number(checkCity.rows[0].cnt) > 0;
+
+    if (hasProc && hasCity) {
+      console.log(`[DB] Schema "${schemaName}" já migrado completamente — ignorado.`);
       return;
+    }
+
+    // Migração parcial detectada — limpa e refaz do zero
+    if (hasProc && !hasCity) {
+      console.log(`[DB] Migração parcial detectada em "${schemaName}" — limpando para refazer...`);
+      const tables = [
+        'nps_responses','push_subscriptions','push_templates','app_settings',
+        'admin_profile','commemorative_dates','promotions','released_slots',
+        'released_dates','blocked_slots','blocked_dates','appointments',
+        'work_breaks','work_configs','city_procedures','cities','procedures',
+      ];
+      for (const tbl of tables) {
+        try { await client.query(`TRUNCATE "${schemaName}".${tbl} RESTART IDENTITY CASCADE`); } catch {}
+      }
+      console.log(`[DB] Schema "${schemaName}" limpo — iniciando migração completa...`);
     }
 
     console.log(`[DB] Iniciando migração public → "${schemaName}"...`);
