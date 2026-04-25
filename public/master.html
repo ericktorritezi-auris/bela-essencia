@@ -1149,21 +1149,14 @@ Isso move agendamentos, NPS e outros dados que estavam no schema público para o
     const synced = r.results.filter(x => x.synced > 0);
     const errors = r.results.filter(x => x.error);
 
-    let msg = `✅ Sync concluído para ${name}!
-
-`;
+    let msg = '✅ Sync concluído para ' + name + '!\n\n';
     if (synced.length) {
-      msg += synced.map(x => `• ${x.table}: +${x.synced} registros`).join('
-');
+      msg += synced.map(x => '• ' + x.table + ': +' + x.synced + ' registros').join('\n');
     } else {
       msg += '• Nenhum registro órfão encontrado.';
     }
     if (errors.length) {
-      msg += `
-
-⚠️ Erros:
-` + errors.map(x => `• ${x.table}: ${x.error}`).join('
-');
+      msg += '\n\n⚠️ Erros:\n' + errors.map(x => '• ' + x.table + ': ' + x.error).join('\n');
     }
 
     alert(msg);
