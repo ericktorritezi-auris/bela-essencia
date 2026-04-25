@@ -561,6 +561,37 @@ async function initDB() {
       );
     }
 
+    // Tabela: log de push master (histórico de envios para profissionais)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS master_push_log (
+        id           SERIAL PRIMARY KEY,
+        title        VARCHAR(100) NOT NULL,
+        body         VARCHAR(300) NOT NULL,
+        tenant_ids   INTEGER[] NOT NULL DEFAULT '{}',
+        sent_count   INTEGER NOT NULL DEFAULT 0,
+        created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    // Tabela: pipeline de vendas
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS sales_pipeline (
+        id             SERIAL PRIMARY KEY,
+        name           VARCHAR(100) NOT NULL,
+        contact        VARCHAR(100),
+        city           VARCHAR(100),
+        origin         VARCHAR(20) NOT NULL DEFAULT 'online',
+        status         VARCHAR(20) NOT NULL DEFAULT 'lead',
+        next_action    VARCHAR(200),
+        next_action_at DATE,
+        notes          TEXT,
+        value          NUMERIC(8,2),
+        created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_pipeline_status ON sales_pipeline(status)`);
+
     // Seed: plano padrão se ainda não existir
     const planCheck = await client.query("SELECT 1 FROM plans WHERE name='Essencial' LIMIT 1");
     if (!planCheck.rowCount) {
@@ -2569,6 +2600,219 @@ app.get('/master/api/revenue/projection', requireMaster, async (req, res) => {
     ];
 
     res.json({ mrr, at_risk: atRisk, expiring: expRows, history: histRows, projection });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PUSH PARA PROFISSIONAIS (MASTER → ADMINS DOS TENANTS)
+// ══════════════════════════════════════════════════════════════════════════════
+
+app.post('/master/api/push/send', requireMaster, async (req, res) => {
+  const { title, body, tenant_ids } = req.body;
+  if (!title || !body) return res.status(400).json({ error: 'Título e mensagem obrigatórios' });
+
+  const webpush = require('web-push');
+  const results = [];
+  let sentCount = 0;
+
+  try {
+    // Busca tenants alvo
+    let tenants;
+    if (!tenant_ids || tenant_ids.length === 0) {
+      // Envia para todos os tenants ativos
+      const { rows } = await pool.query(
+        `SELECT id, schema_name, name FROM tenants WHERE active=TRUE`
+      );
+      tenants = rows;
+    } else {
+      const { rows } = await pool.query(
+        `SELECT id, schema_name, name FROM tenants WHERE id = ANY($1)`,
+        [tenant_ids]
+      );
+      tenants = rows;
+    }
+
+    const payload = JSON.stringify({ title, body, url: '/' });
+
+    // Para cada tenant, busca a subscription do admin e envia
+    for (const t of tenants) {
+      try {
+        const client = await pool.connect();
+        try {
+          await client.query(`SET search_path TO "${t.schema_name}", public`);
+          const { rows: subs } = await client.query(
+            `SELECT endpoint, p256dh, auth FROM push_subscriptions
+             WHERE role='admin' ORDER BY created_at DESC LIMIT 1`
+          );
+          if (!subs.length) {
+            results.push({ tenant: t.name, status: 'no_subscription' });
+            continue;
+          }
+          const sub = { endpoint: subs[0].endpoint, keys: { p256dh: subs[0].p256dh, auth: subs[0].auth } };
+          await webpush.sendNotification(sub, payload);
+          sentCount++;
+          results.push({ tenant: t.name, status: 'sent' });
+        } finally { client.release(); }
+      } catch (e) {
+        results.push({ tenant: t.name, status: 'error', error: e.message });
+      }
+    }
+
+    // Salva no log
+    const ids = tenants.map(t => t.id);
+    await pool.query(
+      `INSERT INTO master_push_log (title, body, tenant_ids, sent_count) VALUES ($1,$2,$3,$4)`,
+      [title, body, ids, sentCount]
+    );
+
+    await logAction(null, 'master_push_sent',
+      `Push enviado: "${title}" → ${sentCount}/${tenants.length} tenants`);
+
+    res.json({ ok: true, sent: sentCount, total: tenants.length, results });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Histórico de pushes master
+app.get('/master/api/push/history', requireMaster, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT * FROM master_push_log ORDER BY created_at DESC LIMIT 50`
+    );
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Lista tenants com info de subscription admin
+app.get('/master/api/push/tenants', requireMaster, async (req, res) => {
+  try {
+    const { rows: tenants } = await pool.query(
+      `SELECT t.id, t.name, t.schema_name, t.active, tc.business_name
+       FROM tenants t LEFT JOIN tenant_configs tc ON tc.tenant_id=t.id
+       WHERE t.active=TRUE ORDER BY t.name`
+    );
+    // Verifica se cada tenant tem subscription admin
+    const result = [];
+    for (const t of tenants) {
+      const client = await pool.connect();
+      try {
+        await client.query(`SET search_path TO "${t.schema_name}", public`);
+        const { rows } = await client.query(
+          `SELECT 1 FROM push_subscriptions WHERE role='admin' LIMIT 1`
+        );
+        result.push({ ...t, has_subscription: rows.length > 0 });
+      } catch { result.push({ ...t, has_subscription: false }); }
+      finally { client.release(); }
+    }
+    res.json(result);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PIPELINE DE VENDAS
+// ══════════════════════════════════════════════════════════════════════════════
+
+app.get('/master/api/pipeline', requireMaster, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT * FROM sales_pipeline ORDER BY updated_at DESC`
+    );
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/master/api/pipeline', requireMaster, async (req, res) => {
+  const { name, contact, city, origin, status, next_action, next_action_at, notes, value } = req.body;
+  if (!name) return res.status(400).json({ error: 'Nome obrigatório' });
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO sales_pipeline
+         (name,contact,city,origin,status,next_action,next_action_at,notes,value)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+      [name, contact||'', city||'', origin||'online',
+       status||'lead', next_action||'', next_action_at||null,
+       notes||'', value||null]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/master/api/pipeline/:id', requireMaster, async (req, res) => {
+  const { name, contact, city, origin, status, next_action, next_action_at, notes, value } = req.body;
+  try {
+    const { rows } = await pool.query(
+      `UPDATE sales_pipeline SET
+         name=$1,contact=$2,city=$3,origin=$4,status=$5,
+         next_action=$6,next_action_at=$7,notes=$8,value=$9,updated_at=NOW()
+       WHERE id=$10 RETURNING *`,
+      [name, contact||'', city||'', origin||'online',
+       status||'lead', next_action||'', next_action_at||null,
+       notes||'', value||null, req.params.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Lead não encontrado' });
+    res.json(rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/master/api/pipeline/:id', requireMaster, async (req, res) => {
+  try {
+    await pool.query(`DELETE FROM sales_pipeline WHERE id=$1`, [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// RELATÓRIO EXPORTÁVEL (CSV)
+// ══════════════════════════════════════════════════════════════════════════════
+
+app.get('/master/api/report/csv', requireMaster, async (req, res) => {
+  const month = req.query.month || new Date().toISOString().slice(0,7);
+  try {
+    const { rows: tenants } = await pool.query(
+      `SELECT t.id, t.name, t.schema_name, t.active, t.monthly_fee, t.plan_expires_at,
+              tc.business_name, t.owner_email,
+              (SELECT COALESCE(SUM(amount),0) FROM payments
+               WHERE tenant_id=t.id AND status='paid'
+               AND TO_CHAR(paid_at,'YYYY-MM')=$1) as month_revenue
+       FROM tenants t LEFT JOIN tenant_configs tc ON tc.tenant_id=t.id
+       ORDER BY t.name`,
+      [month]
+    );
+
+    // Agendamentos do mês por tenant
+    for (const t of tenants) {
+      try {
+        const client = await pool.connect();
+        try {
+          await client.query(`SET search_path TO "${t.schema_name}", public`);
+          const { rows } = await client.query(
+            `SELECT COUNT(*) as cnt FROM appointments
+             WHERE TO_CHAR(date,'YYYY-MM')=$1 AND status!='cancelled'`,
+            [month]
+          );
+          t.month_appts = rows[0].cnt;
+        } finally { client.release(); }
+      } catch { t.month_appts = 0; }
+    }
+
+    // Monta CSV
+    const lines = [
+      'Negócio,Profissional (email),Status,Mensalidade (R$),Vencimento,Receita no mês (R$),Agendamentos no mês',
+      ...tenants.map(t => [
+        '"' + (t.business_name||t.name).replace(/"/g,'') + '"',
+        t.owner_email || '',
+        t.active ? 'Ativo' : 'Suspenso',
+        Number(t.monthly_fee||0).toFixed(2),
+        t.plan_expires_at ? t.plan_expires_at.toISOString().slice(0,10) : '',
+        Number(t.month_revenue||0).toFixed(2),
+        t.month_appts || 0,
+      ].join(','))
+    ];
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition',
+      'attachment; filename="belle-planner-' + month + '.csv"');
+    const csvContent = lines.join('\r\n');
+    res.send(csvContent); // UTF-8
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
