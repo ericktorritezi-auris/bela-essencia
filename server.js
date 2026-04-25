@@ -45,7 +45,6 @@ async function getTenantByHost(host) {
        FROM tenants t
        LEFT JOIN tenant_configs tc ON tc.tenant_id = t.id
        WHERE (t.domain_custom = $1 OR t.subdomain = $1 OR $1 LIKE '%.' || t.subdomain || '.%')
-         AND t.active = TRUE
        LIMIT 1`,
       [host]
     );
