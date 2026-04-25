@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agenda Indisponível</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --rose: #9b4d6a;
+      --gold: #C49A3C;
+      --cream: #fdf5f8;
+      --text: #4a3040;
+      --muted: #8a6070;
+      --border: #f0e0e8;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      font-family:'Nunito',sans-serif;
+      background:var(--cream);
+      min-height:100vh;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      padding:24px;
+    }
+
+    .card {
+      background:white;
+      border:1px solid var(--border);
+      border-radius:20px;
+      padding:48px 40px;
+      max-width:480px;
+      width:100%;
+      text-align:center;
+      box-shadow:0 8px 40px rgba(155,77,106,.08);
+    }
+
+    .brand {
+      margin-bottom:32px;
+    }
+    .brand-logo {
+      font-family:'Cormorant Garamond',serif;
+      font-size:32px;
+      font-weight:600;
+      color:var(--rose);
+      line-height:1.1;
+      margin-bottom:4px;
+    }
+    .brand-logo em { font-style:italic; color:var(--gold); }
+    .brand-logo img { height:48px; object-fit:contain; }
+    .brand-tag {
+      font-size:11px;
+      text-transform:uppercase;
+      letter-spacing:.12em;
+      color:var(--muted);
+    }
+
+    .icon {
+      font-size:56px;
+      margin-bottom:20px;
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%,100% { transform:scale(1); opacity:1; }
+      50%      { transform:scale(1.06); opacity:.85; }
+    }
+
+    h1 {
+      font-family:'Cormorant Garamond',serif;
+      font-size:28px;
+      font-weight:600;
+      color:var(--text);
+      margin-bottom:12px;
+      line-height:1.2;
+    }
+
+    p {
+      font-size:14px;
+      color:var(--muted);
+      line-height:1.7;
+      margin-bottom:8px;
+    }
+
+    .divider {
+      height:1px;
+      background:var(--border);
+      margin:28px 0;
+    }
+
+    .contact-label {
+      font-size:12px;
+      font-weight:800;
+      text-transform:uppercase;
+      letter-spacing:.1em;
+      color:var(--muted);
+      margin-bottom:12px;
+    }
+
+    .wa-btn {
+      display:inline-flex;
+      align-items:center;
+      gap:10px;
+      background:var(--rose);
+      color:white;
+      text-decoration:none;
+      padding:13px 28px;
+      border-radius:50px;
+      font-size:14px;
+      font-weight:800;
+      transition:all .2s;
+      box-shadow:0 4px 16px rgba(155,77,106,.25);
+    }
+    .wa-btn:hover { transform:translateY(-1px); box-shadow:0 6px 22px rgba(155,77,106,.35); }
+    .wa-btn.hidden { display:none; }
+
+    .footer {
+      margin-top:48px;
+      font-size:11px;
+      color:var(--muted);
+      opacity:.6;
+    }
+
+    @media(max-width:480px) {
+      .card { padding:36px 24px; }
+      h1 { font-size:24px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <div class="brand">
+      <div class="brand-logo" id="brand-logo">Bela <em>Essência</em></div>
+      <div class="brand-tag" id="brand-tag">Estética & Beleza</div>
+    </div>
+
+    <div class="icon">🔒</div>
+
+    <h1>Agenda temporariamente<br>indisponível</h1>
+
+    <p>Nossa agenda está passando por uma atualização e ficará disponível em breve.</p>
+    <p>Pedimos desculpas pelo inconveniente.</p>
+
+    <div class="divider"></div>
+
+    <div class="contact-label">Precisa de ajuda?</div>
+    <a href="#" id="wa-btn" class="wa-btn hidden" target="_blank">
+      <span>💬</span> Falar pelo WhatsApp
+    </a>
+    <p id="no-wa" style="font-size:13px">Entre em contato diretamente com a profissional.</p>
+  </div>
+
+  <div class="footer">Belle Planner · Sistema de Agendamento Online</div>
+
+  <script>
+    async function applyBranding() {
+      try {
+        const res = await fetch('/api/config');
+        if (!res.ok) return;
+        const cfg = await res.json();
+
+        const root = document.documentElement.style;
+        if (cfg.primary_color)   root.setProperty('--rose', cfg.primary_color);
+        if (cfg.secondary_color) root.setProperty('--gold', cfg.secondary_color);
+
+        // Nome / logo
+        const logoEl = document.getElementById('brand-logo');
+        if (cfg.logo_url) {
+          logoEl.innerHTML = `<img src="${cfg.logo_url}" alt="${cfg.business_name}">`;
+        } else if (cfg.business_name) {
+          const parts = cfg.business_name.split(' ');
+          logoEl.innerHTML = parts.length >= 2
+            ? `${parts[0]} <em>${parts.slice(1).join(' ')}</em>`
+            : cfg.business_name;
+        }
+
+        // Tagline
+        if (cfg.tagline) {
+          document.getElementById('brand-tag').textContent = cfg.tagline;
+        }
+
+        // WhatsApp
+        if (cfg.whatsapp_number) {
+          const num = cfg.whatsapp_number.replace(/\D/g,'');
+          const btn = document.getElementById('wa-btn');
+          btn.href = `https://wa.me/55${num}`;
+          btn.classList.remove('hidden');
+          document.getElementById('no-wa').style.display = 'none';
+        }
+
+        // Título da aba
+        if (cfg.business_name) {
+          document.title = `${cfg.business_name} — Indisponível`;
+        }
+      } catch {}
+    }
+    applyBranding();
+  </script>
+
+</body>
+</html>
