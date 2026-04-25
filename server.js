@@ -58,6 +58,77 @@ async function getTenantByHost(host) {
 // Invalida cache de um tenant (após atualização de config)
 function invalidateTenantCache(host) { _tenantCache.delete(host); }
 
+// Migra dados do schema public para o schema do tenant (apenas se vazio)
+async function migrateTenantData(schemaName) {
+  const client = await pool.connect();
+  try {
+    // Verifica se já tem dados (idempotente — não repete se já migrou)
+    const check = await client.query(
+      `SELECT COUNT(*) as cnt FROM "${schemaName}".procedures`
+    );
+    if (Number(check.rows[0].cnt) > 0) {
+      console.log(`[DB] Schema "${schemaName}" já tem dados — migração ignorada.`);
+      return;
+    }
+
+    console.log(`[DB] Iniciando migração public → "${schemaName}"...`);
+
+    const tables = [
+      'procedures', 'cities', 'city_procedures', 'work_configs', 'work_breaks',
+      'appointments', 'blocked_dates', 'blocked_slots', 'released_dates',
+      'released_slots', 'promotions', 'commemorative_dates', 'admin_profile',
+      'push_subscriptions', 'push_templates', 'app_settings', 'nps_responses',
+    ];
+
+    for (const tbl of tables) {
+      try {
+        await client.query(
+          `INSERT INTO "${schemaName}".${tbl} SELECT * FROM public.${tbl}`
+        );
+        const cnt = await client.query(
+          `SELECT COUNT(*) as n FROM "${schemaName}".${tbl}`
+        );
+        console.log(`[DB] Migrado: ${tbl} (${cnt.rows[0].n} registros)`);
+      } catch (err) {
+        // Ignora erros de tabela inexistente ou conflito — segue para a próxima
+        if (!err.message.includes('does not exist')) {
+          console.warn(`[DB] Aviso ao migrar ${tbl}: ${err.message}`);
+        }
+      }
+    }
+
+    // Sincroniza sequences para evitar conflito de IDs
+    const seqTables = [
+      { tbl: 'procedures',          seq: 'procedures_id_seq' },
+      { tbl: 'cities',              seq: 'cities_id_seq' },
+      { tbl: 'work_configs',        seq: 'work_configs_id_seq' },
+      { tbl: 'work_breaks',         seq: 'work_breaks_id_seq' },
+      { tbl: 'blocked_slots',       seq: 'blocked_slots_id_seq' },
+      { tbl: 'released_dates',      seq: 'released_dates_id_seq' },
+      { tbl: 'released_slots',      seq: 'released_slots_id_seq' },
+      { tbl: 'promotions',          seq: 'promotions_id_seq' },
+      { tbl: 'commemorative_dates', seq: 'commemorative_dates_id_seq' },
+      { tbl: 'admin_profile',       seq: 'admin_profile_id_seq' },
+      { tbl: 'push_subscriptions',  seq: 'push_subscriptions_id_seq' },
+      { tbl: 'push_templates',      seq: 'push_templates_id_seq' },
+      { tbl: 'nps_responses',       seq: 'nps_responses_id_seq' },
+    ];
+
+    for (const { tbl, seq } of seqTables) {
+      try {
+        await client.query(`
+          SELECT setval('"${schemaName}".${seq}',
+            COALESCE((SELECT MAX(id) FROM "${schemaName}".${tbl}), 1), true)
+        `);
+      } catch {}
+    }
+
+    console.log(`[DB] Migração para "${schemaName}" concluída com sucesso.`);
+  } finally {
+    client.release();
+  }
+}
+
 // Cria o schema de um novo tenant com todas as tabelas
 async function createTenantSchema(schemaName) {
   const client = await pool.connect();
@@ -848,6 +919,9 @@ async function initDB() {
     // Fase 1: garante que o schema tenant_001 existe (Ana Paula)
     await createTenantSchema('tenant_001');
 
+    // Fase 4: migra dados da Ana Paula de public → tenant_001 (apenas se vazio)
+    await migrateTenantData('tenant_001');
+
     console.log('[DB] Schema inicializado com sucesso.');
   } catch (err) {
     await client.query('ROLLBACK');
@@ -872,6 +946,26 @@ app.use(express.json());
 
 // Tenant middleware — detecta tenant por hostname (Fase 1 White Label)
 app.use(tenantMiddleware);
+
+// Middleware req.db — todas as queries de tenant usam o schema correto
+app.use((req, res, next) => {
+  if (req.schemaName && !req.isMaster) {
+    // Tenant detectado: queries vão para o schema correto via search_path
+    req.db = async (sql, params) => {
+      const client = await pool.connect();
+      try {
+        await client.query(`SET search_path TO "${req.schemaName}", public`);
+        return await client.query(sql, params);
+      } finally {
+        client.release();
+      }
+    };
+  } else {
+    // Sem tenant (master ou fallback): usa pool direto (schema public)
+    req.db = (sql, params) => pool.query(sql, params);
+  }
+  next();
+});
 
 // Redireciona adminpanel.belleplanner.com.br → /master
 app.use((req, res, next) => {
@@ -910,7 +1004,7 @@ function requireAdmin(req, res, next) {
 // ── Health check ─────────────────────────────────────────────────────────────
 app.get('/api/health', async (req, res) => {
   try {
-    await pool.query('SELECT 1');
+    await req.db('SELECT 1');
     res.json({ ok: true, version: '1.1', db: 'connected' });
   } catch {
     res.status(503).json({ ok: false, db: 'disconnected' });
@@ -922,7 +1016,7 @@ app.post('/api/auth/login', async (req, res) => {
   const { user, pass } = req.body;
   try {
     // Check DB first, fallback to env vars
-    const { rows } = await pool.query(
+    const { rows } = await req.db(
       'SELECT password FROM admin_profile WHERE login=$1 LIMIT 1', [user]
     );
     const dbPass = rows.length ? rows[0].password : null;
@@ -950,7 +1044,7 @@ app.get('/api/auth/me', (req, res) => {
 // ── Procedimentos (público: GET; admin: POST/PUT/DELETE) ──────────────────────
 app.get('/api/procedures', async (req, res) => {
   try {
-    const { rows } = await pool.query(
+    const { rows } = await req.db(
       'SELECT * FROM procedures WHERE active = TRUE ORDER BY id'
     );
     res.json(rows);
@@ -963,7 +1057,7 @@ app.post('/api/procedures', requireAdmin, async (req, res) => {
   const { name, dur, price, pt } = req.body;
   if (!name || !dur) return res.status(400).json({ error: 'Nome e duração obrigatórios' });
   try {
-    const { rows } = await pool.query(
+    const { rows } = await req.db(
       'INSERT INTO procedures (name, dur, price, pt) VALUES ($1, $2, $3, $4) RETURNING *',
       [name, parseInt(dur), price || null, pt || 'fixed']
     );
@@ -976,7 +1070,7 @@ app.post('/api/procedures', requireAdmin, async (req, res) => {
 app.put('/api/procedures/:id', requireAdmin, async (req, res) => {
   const { name, dur, price, pt } = req.body;
   try {
-    const { rows } = await pool.query(
+    const { rows } = await req.db(
       'UPDATE procedures SET name=$1, dur=$2, price=$3, pt=$4 WHERE id=$5 RETURNING *',
       [name, parseInt(dur), price || null, pt || 'fixed', req.params.id]
     );
@@ -990,7 +1084,7 @@ app.put('/api/procedures/:id', requireAdmin, async (req, res) => {
 app.delete('/api/procedures/:id', requireAdmin, async (req, res) => {
   try {
     // Soft delete – preserva histórico de agendamentos vinculados
-    await pool.query('UPDATE procedures SET active=FALSE WHERE id=$1', [req.params.id]);
+    await req.db('UPDATE procedures SET active=FALSE WHERE id=$1', [req.params.id]);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1093,7 +1187,7 @@ app.get('/api/appointments', requireAdmin, async (req, res) => {
   if (status) { sql += ` AND status = $${params.push(status)}`; }
   sql += ' ORDER BY date DESC, st DESC';
   try {
-    const { rows } = await pool.query(sql, params);
+    const { rows } = await req.db(sql, params);
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1104,7 +1198,7 @@ app.get('/api/appointments', requireAdmin, async (req, res) => {
 app.get('/api/appointments/month/:month', requireAdmin, async (req, res) => {
   // month = "2025-04"
   try {
-    const { rows } = await pool.query(
+    const { rows } = await req.db(
       `SELECT * FROM appointments
        WHERE to_char(date,'YYYY-MM') = $1 AND status IN ('confirmed','realizado')
        ORDER BY date, st`,
@@ -1127,7 +1221,7 @@ app.put('/api/appointments/:id', requireAdmin, async (req, res) => {
     const priceVal = (price !== undefined && price !== null && price !== '')
       ? Number(price) : undefined;
 
-    const { rows } = await pool.query(
+    const { rows } = await req.db(
       `UPDATE appointments
        SET name=$1, phone=$2, date=$3, st=$4, et=$5,
            city_id=COALESCE($7::integer, city_id),
@@ -1154,7 +1248,7 @@ app.put('/api/appointments/:id', requireAdmin, async (req, res) => {
 // Admin: cancelar agendamento
 app.patch('/api/appointments/:id/cancel', requireAdmin, async (req, res) => {
   try {
-    const { rows } = await pool.query(
+    const { rows } = await req.db(
       `UPDATE appointments SET status='cancelled', updated_at=NOW() WHERE id=$1 RETURNING *`,
       [req.params.id]
     );
@@ -1178,7 +1272,7 @@ app.patch('/api/appointments/:id/cancel', requireAdmin, async (req, res) => {
 // Admin: excluir agendamento definitivamente da base (hard delete)
 app.delete('/api/appointments/:id', requireAdmin, async (req, res) => {
   try {
-    const { rowCount } = await pool.query(
+    const { rowCount } = await req.db(
       'DELETE FROM appointments WHERE id=$1',
       [req.params.id]
     );
@@ -1192,7 +1286,7 @@ app.delete('/api/appointments/:id', requireAdmin, async (req, res) => {
 // ── Datas Bloqueadas ──────────────────────────────────────────────────────────
 app.get('/api/blocked', async (req, res) => {
   try {
-    const { rows } = await pool.query('SELECT * FROM blocked_dates ORDER BY date');
+    const { rows } = await req.db('SELECT * FROM blocked_dates ORDER BY date');
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1204,7 +1298,7 @@ app.post('/api/blocked', requireAdmin, async (req, res) => {
   if (!date) return res.status(400).json({ error: 'Data obrigatória' });
   const ids = Array.isArray(city_ids) ? city_ids.map(Number) : [];
   try {
-    const { rows } = await pool.query(
+    const { rows } = await req.db(
       `INSERT INTO blocked_dates (date, reason, city_ids)
        VALUES ($1, $2, $3)
        ON CONFLICT(date) DO UPDATE SET reason=EXCLUDED.reason, city_ids=EXCLUDED.city_ids
@@ -1219,7 +1313,7 @@ app.post('/api/blocked', requireAdmin, async (req, res) => {
 
 app.delete('/api/blocked/:date', requireAdmin, async (req, res) => {
   try {
-    await pool.query('DELETE FROM blocked_dates WHERE date = $1', [req.params.date]);
+    await req.db('DELETE FROM blocked_dates WHERE date = $1', [req.params.date]);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1292,7 +1386,7 @@ app.get('/api/availability', async (req, res) => {
     const nowMinBRT = isToday ? nowBRT.getHours() * 60 + nowBRT.getMinutes() : 0;
 
     // 1. Verifica data bloqueada para esta cidade (city_ids vazio = todas)
-    const blk = await pool.query(
+    const blk = await req.db(
       `SELECT 1 FROM blocked_dates
        WHERE date=$1 AND (cardinality(city_ids)=0 OR $2=ANY(city_ids))`,
       [date, Number(cityId)]
@@ -1302,7 +1396,7 @@ app.get('/api/availability', async (req, res) => {
     // 2. Exclusividade: outra cidade tem LIBERAÇÃO específica neste dia?
     //    Só released_dates cria exclusividade (profissional comprometida com aquela cidade).
     //    blocked_dates NÃO cria exclusividade — bloquear Assaí não compromete a profissional lá.
-    const exclusiveClaim = await pool.query(
+    const exclusiveClaim = await req.db(
       `SELECT 1 FROM released_dates
        WHERE date=$1 AND cardinality(city_ids)>0 AND NOT ($2 = ANY(city_ids))
        LIMIT 1`,
@@ -1318,21 +1412,21 @@ app.get('/api/availability', async (req, res) => {
     // Dia desabilitado na config — verifica se há liberação para esta data/cidade
     if (!cfg.is_active || !cfg.work_start || !cfg.work_end) {
       // Tenta released_dates (dia inteiro liberado)
-      const relDay = await pool.query(
+      const relDay = await req.db(
         `SELECT * FROM released_dates
          WHERE date=$1 AND (cardinality(city_ids)=0 OR $2=ANY(city_ids))`,
         [date, Number(cityId)]
       );
       if (!relDay.rowCount) {
         // Tenta released_slots (horários específicos liberados)
-        const relSlots = await pool.query(
+        const relSlots = await req.db(
           `SELECT st, et FROM released_slots
            WHERE date=$1 AND (cardinality(city_ids)=0 OR $2=ANY(city_ids))`,
           [date, Number(cityId)]
         );
         if (!relSlots.rowCount) return res.json([]);
         // Tem slots liberados — verifica procedimento e retorna esses horários
-        const pRes2 = await pool.query(
+        const pRes2 = await req.db(
           `SELECT p.dur FROM procedures p
            LEFT JOIN city_procedures cp ON cp.proc_id=p.id AND cp.city_id=$2
            WHERE p.id=$1 AND p.active=TRUE AND (cp.enabled IS NULL OR cp.enabled=TRUE)`,
@@ -1342,10 +1436,10 @@ app.get('/api/availability', async (req, res) => {
         const dur2 = pRes2.rows[0].dur;
         const [aRes2, bkSlots2, excSlots2] = await Promise.all([
           excludeId
-            ? pool.query(`SELECT st, et FROM appointments WHERE date=$1 AND status!='cancelled' AND id!=$2`, [date, excludeId])
-            : pool.query(`SELECT st, et FROM appointments WHERE date=$1 AND status!='cancelled'`, [date]),
-          pool.query(`SELECT st, et FROM blocked_slots WHERE date=$1 AND (cardinality(city_ids)=0 OR $2=ANY(city_ids))`, [date, Number(cityId)]),
-          pool.query(
+            ? req.db(`SELECT st, et FROM appointments WHERE date=$1 AND status!='cancelled' AND id!=$2`, [date, excludeId])
+            : req.db(`SELECT st, et FROM appointments WHERE date=$1 AND status!='cancelled'`, [date]),
+          req.db(`SELECT st, et FROM blocked_slots WHERE date=$1 AND (cardinality(city_ids)=0 OR $2=ANY(city_ids))`, [date, Number(cityId)]),
+          req.db(
             `SELECT st, et FROM released_slots
              WHERE date=$1 AND cardinality(city_ids)>0 AND NOT ($2 = ANY(city_ids))`,
             [date, Number(cityId)]
@@ -1365,7 +1459,7 @@ app.get('/api/availability', async (req, res) => {
       }
       // Dia inteiro liberado — usa os horários da liberação
       const rel = relDay.rows[0];
-      const pRes3 = await pool.query(
+      const pRes3 = await req.db(
         `SELECT p.dur FROM procedures p
          LEFT JOIN city_procedures cp ON cp.proc_id=p.id AND cp.city_id=$2
          WHERE p.id=$1 AND p.active=TRUE AND (cp.enabled IS NULL OR cp.enabled=TRUE)`,
@@ -1379,10 +1473,10 @@ app.get('/api/availability', async (req, res) => {
         ? [{ s: timeToMin(rel.break_start), e: timeToMin(rel.break_end) }] : [];
       const [aRes3, bkSlots3, excSlots3] = await Promise.all([
         excludeId
-          ? pool.query(`SELECT st, et FROM appointments WHERE date=$1 AND status!='cancelled' AND id!=$2`, [date, excludeId])
-          : pool.query(`SELECT st, et FROM appointments WHERE date=$1 AND status!='cancelled'`, [date]),
-        pool.query(`SELECT st, et FROM blocked_slots WHERE date=$1 AND (cardinality(city_ids)=0 OR $2=ANY(city_ids))`, [date, Number(cityId)]),
-        pool.query(
+          ? req.db(`SELECT st, et FROM appointments WHERE date=$1 AND status!='cancelled' AND id!=$2`, [date, excludeId])
+          : req.db(`SELECT st, et FROM appointments WHERE date=$1 AND status!='cancelled'`, [date]),
+        req.db(`SELECT st, et FROM blocked_slots WHERE date=$1 AND (cardinality(city_ids)=0 OR $2=ANY(city_ids))`, [date, Number(cityId)]),
+        req.db(
           `SELECT st, et FROM released_slots
            WHERE date=$1 AND cardinality(city_ids)>0 AND NOT ($2 = ANY(city_ids))`,
           [date, Number(cityId)]
@@ -1406,7 +1500,7 @@ app.get('/api/availability', async (req, res) => {
     }));
 
     // Verifica se procedimento está habilitado para esta cidade
-    const pRes = await pool.query(
+    const pRes = await req.db(
       `SELECT p.dur FROM procedures p
        LEFT JOIN city_procedures cp ON cp.proc_id=p.id AND cp.city_id=$2
        WHERE p.id=$1 AND p.active=TRUE AND (cp.enabled IS NULL OR cp.enabled=TRUE)`,
@@ -1419,10 +1513,10 @@ app.get('/api/availability', async (req, res) => {
     // excludeId já declarado no início do try block
     const [aRes, sRes] = await Promise.all([
       excludeId
-        ? pool.query(`SELECT st, et FROM appointments WHERE date=$1 AND status!='cancelled' AND id!=$2`, [date, excludeId])
-        : pool.query(`SELECT st, et FROM appointments WHERE date=$1 AND status!='cancelled'`, [date]),
+        ? req.db(`SELECT st, et FROM appointments WHERE date=$1 AND status!='cancelled' AND id!=$2`, [date, excludeId])
+        : req.db(`SELECT st, et FROM appointments WHERE date=$1 AND status!='cancelled'`, [date]),
       // Horários bloqueados para esta cidade (ou todas)
-      pool.query(
+      req.db(
         `SELECT st, et FROM blocked_slots
          WHERE date=$1 AND (cardinality(city_ids)=0 OR $2=ANY(city_ids))`,
         [date, Number(cityId)]
@@ -1430,7 +1524,7 @@ app.get('/api/availability', async (req, res) => {
     ]);
     // Horários exclusivos de OUTRAS cidades via released_slots
     // (só liberação cria exclusividade — bloquear não compromete a profissional lá)
-    const excSlots = await pool.query(
+    const excSlots = await req.db(
       `SELECT st, et FROM released_slots
        WHERE date=$1 AND cardinality(city_ids)>0 AND NOT ($2 = ANY(city_ids))`,
       [date, Number(cityId)]
@@ -1443,7 +1537,7 @@ app.get('/api/availability', async (req, res) => {
     // nowBRT, todayBRT, isToday, nowMinBRT declarados no início do try block
 
     // Horários liberados para esta cidade (override de blocked_slots)
-    const relRes = await pool.query(
+    const relRes = await req.db(
       `SELECT st, et FROM released_slots
        WHERE date=$1 AND (cardinality(city_ids)=0 OR $2=ANY(city_ids))`,
       [date, Number(cityId)]
@@ -1492,7 +1586,7 @@ app.get('/api/revenue/summary', requireAdmin, async (req, res) => {
     const { ws, we } = weekBrasilia();
 
     // COUNT(*) conta TODOS os confirmados; SUM(price) ignora NULL naturalmente
-    const q = (sql, p) => pool.query(sql, p).then(r => r.rows[0]);
+    const q = (sql, p) => req.db(sql, p).then(r => r.rows[0]);
     const [todayRow, weekRow, monthRow, yearRow] = await Promise.all([
       q(`SELECT COALESCE(SUM(price),0) as total, COUNT(*) as cnt FROM appointments WHERE date=$1 AND status IN ('confirmed','realizado')`, [today]),
       q(`SELECT COALESCE(SUM(price),0) as total, COUNT(*) as cnt FROM appointments WHERE date>=$1 AND date<=$2 AND status IN ('confirmed','realizado')`, [ws, we]),
@@ -1521,7 +1615,7 @@ app.get('/api/promotions/active', async (req, res) => {
       params.push(cityId);
     }
     query += ` ORDER BY created_at DESC LIMIT 1`;
-    const { rows } = await pool.query(query, params);
+    const { rows } = await req.db(query, params);
     res.json(rows[0] || null);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -1529,7 +1623,7 @@ app.get('/api/promotions/active', async (req, res) => {
 // Admin: listar todas
 app.get('/api/promotions', requireAdmin, async (req, res) => {
   try {
-    const { rows } = await pool.query(
+    const { rows } = await req.db(
       'SELECT * FROM promotions ORDER BY start_date DESC'
     );
     res.json(rows);
@@ -1559,7 +1653,7 @@ app.post('/api/promotions', requireAdmin, async (req, res) => {
     return res.status(400).json({ error: 'Selecione ao menos uma cidade' });
   }
   try {
-    const { rows } = await pool.query(
+    const { rows } = await req.db(
       `INSERT INTO promotions (name, start_date, end_date, discount, apply_to_all, proc_ids, apply_to_all_cities, city_ids_promo)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
       [name, start_date, end_date, Number(discount), allProcs, ids, allCities, cityIds]
@@ -1571,7 +1665,7 @@ app.post('/api/promotions', requireAdmin, async (req, res) => {
 // Admin: desativar promoção (soft delete)
 app.patch('/api/promotions/:id/deactivate', requireAdmin, async (req, res) => {
   try {
-    await pool.query('UPDATE promotions SET active = FALSE WHERE id = $1', [req.params.id]);
+    await req.db('UPDATE promotions SET active = FALSE WHERE id = $1', [req.params.id]);
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -1579,7 +1673,7 @@ app.patch('/api/promotions/:id/deactivate', requireAdmin, async (req, res) => {
 // Admin: excluir promoção definitivamente (hard delete)
 app.delete('/api/promotions/:id', requireAdmin, async (req, res) => {
   try {
-    const { rowCount } = await pool.query('DELETE FROM promotions WHERE id = $1', [req.params.id]);
+    const { rowCount } = await req.db('DELETE FROM promotions WHERE id = $1', [req.params.id]);
     if (!rowCount) return res.status(404).json({ error: 'Promoção não encontrada' });
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -1588,7 +1682,7 @@ app.delete('/api/promotions/:id', requireAdmin, async (req, res) => {
 // ── Horários Bloqueados (blocked_slots) ──────────────────────────────────────
 app.get('/api/blocked-slots', async (req, res) => {
   try {
-    const { rows } = await pool.query(
+    const { rows } = await req.db(
       'SELECT * FROM blocked_slots ORDER BY date, st'
     );
     res.json(rows);
@@ -1601,7 +1695,7 @@ app.post('/api/blocked-slots', requireAdmin, async (req, res) => {
   if (timeToMin(st) >= timeToMin(et)) return res.status(400).json({ error: 'Horário de início deve ser antes do fim' });
   const ids = Array.isArray(city_ids) ? city_ids.map(Number) : [];
   try {
-    const { rows } = await pool.query(
+    const { rows } = await req.db(
       'INSERT INTO blocked_slots (date, st, et, reason, city_ids) VALUES ($1,$2,$3,$4,$5) RETURNING *',
       [date, st, et, reason || null, ids]
     );
@@ -1611,7 +1705,7 @@ app.post('/api/blocked-slots', requireAdmin, async (req, res) => {
 
 app.delete('/api/blocked-slots/:id', requireAdmin, async (req, res) => {
   try {
-    await pool.query('DELETE FROM blocked_slots WHERE id=$1', [req.params.id]);
+    await req.db('DELETE FROM blocked_slots WHERE id=$1', [req.params.id]);
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -1620,11 +1714,11 @@ app.delete('/api/blocked-slots/:id', requireAdmin, async (req, res) => {
 app.get('/api/backup/export', requireAdmin, async (req, res) => {
   try {
     const [procs, appts, blocked, slots, promos] = await Promise.all([
-      pool.query('SELECT * FROM procedures ORDER BY id'),
-      pool.query('SELECT * FROM appointments ORDER BY date, st'),
-      pool.query('SELECT * FROM blocked_dates ORDER BY date'),
-      pool.query('SELECT * FROM blocked_slots ORDER BY date, st'),
-      pool.query('SELECT * FROM promotions ORDER BY start_date DESC'),
+      req.db('SELECT * FROM procedures ORDER BY id'),
+      req.db('SELECT * FROM appointments ORDER BY date, st'),
+      req.db('SELECT * FROM blocked_dates ORDER BY date'),
+      req.db('SELECT * FROM blocked_slots ORDER BY date, st'),
+      req.db('SELECT * FROM promotions ORDER BY start_date DESC'),
     ]);
     const today = todayBrasilia();
     res.setHeader('Content-Disposition', `attachment; filename="bela-essencia-backup-${today}.json"`);
@@ -1644,17 +1738,17 @@ app.get('/api/backup/export', requireAdmin, async (req, res) => {
 // ── Cidades ──────────────────────────────────────────────────────────────────
 app.get('/api/cities', async (req, res) => {
   try {
-    const { rows } = await pool.query(
+    const { rows } = await req.db(
       'SELECT * FROM cities WHERE is_active=TRUE ORDER BY id'
     );
     for (const city of rows) {
       // Check if this city has ANY city_procedures rows
-      const cpCount = await pool.query(
+      const cpCount = await req.db(
         'SELECT COUNT(*) FROM city_procedures WHERE city_id=$1', [city.id]
       );
       const hasOverrides = parseInt(cpCount.rows[0].count) > 0;
 
-      const pr = await pool.query(
+      const pr = await req.db(
         `SELECT p.id, p.name, p.dur, p.price, p.pt,
                 CASE
                   WHEN $2 THEN COALESCE(cp.enabled, TRUE)
@@ -1667,7 +1761,7 @@ app.get('/api/cities', async (req, res) => {
       );
       // Only return enabled procedures for client-facing API
       city.procedures = pr.rows.filter(p => p.enabled);
-      const wd = await pool.query(
+      const wd = await req.db(
         `SELECT day_of_week, is_active FROM work_configs
          WHERE scope='city_day' AND city_id=$1 ORDER BY day_of_week`,
         [city.id]
@@ -1676,7 +1770,7 @@ app.get('/api/cities', async (req, res) => {
 
       // Datas específicas futuras liberadas para esta cidade
       const today = todayBrasilia();
-      const rd = await pool.query(
+      const rd = await req.db(
         `SELECT date::text, work_start::text, work_end::text
          FROM released_dates
          WHERE date >= $1 AND (cardinality(city_ids)=0 OR $2=ANY(city_ids))
@@ -1697,7 +1791,7 @@ app.get('/api/cities', async (req, res) => {
 
 app.get('/api/cities/all', requireAdmin, async (req, res) => {
   try {
-    const { rows } = await pool.query('SELECT * FROM cities ORDER BY id');
+    const { rows } = await req.db('SELECT * FROM cities ORDER BY id');
     res.json(rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -1707,11 +1801,11 @@ app.get('/api/cities/:id/procedures', requireAdmin, async (req, res) => {
   try {
     const cityId = req.params.id;
     // Check if this city has any proc overrides at all
-    const { rowCount } = await pool.query(
+    const { rowCount } = await req.db(
       'SELECT 1 FROM city_procedures WHERE city_id=$1 LIMIT 1', [cityId]
     );
     const hasOverrides = rowCount > 0;
-    const { rows } = await pool.query(
+    const { rows } = await req.db(
       `SELECT p.id, p.name, p.dur, p.price, p.pt,
               CASE
                 WHEN $2 THEN COALESCE(cp.enabled, TRUE)
@@ -1732,16 +1826,16 @@ app.post('/api/cities', requireAdmin, async (req, res) => {
     return res.status(400).json({ error: 'Campos obrigatórios faltando' });
   try {
     const mapsUrl = `https://maps.google.com/?q=${encodeURIComponent(address+' '+number+' '+name+' '+uf)}`;
-    const { rows } = await pool.query(
+    const { rows } = await req.db(
       `INSERT INTO cities (name,uf,local_name,address,number,complement,neighborhood,cep,maps_url)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
       [name,uf,local_name,address,number,complement||'',neighborhood,cep,mapsUrl]
     );
     const city = rows[0];
     // Seed default schedule (all days disabled)
-    const procs = await pool.query('SELECT id FROM procedures WHERE active=TRUE');
+    const procs = await req.db('SELECT id FROM procedures WHERE active=TRUE');
     for (let d=0; d<=6; d++) {
-      await pool.query(
+      await req.db(
         `INSERT INTO work_configs (scope,city_id,day_of_week,is_active,work_start,work_end)
          VALUES ('city_day',$1,$2,FALSE,NULL,NULL)`,
         [city.id, d]
@@ -1750,7 +1844,7 @@ app.post('/api/cities', requireAdmin, async (req, res) => {
     // Insert procedure overrides (all enabled by default unless specified)
     if (proc_ids && proc_ids.length) {
       for (const p of procs.rows) {
-        await pool.query(
+        await req.db(
           `INSERT INTO city_procedures (city_id,proc_id,enabled) VALUES ($1,$2,$3)
            ON CONFLICT (city_id,proc_id) DO UPDATE SET enabled=EXCLUDED.enabled`,
           [city.id, p.id, proc_ids.includes(p.id)]
@@ -1765,7 +1859,7 @@ app.put('/api/cities/:id', requireAdmin, async (req, res) => {
   const { name, uf, local_name, address, number, complement, neighborhood, cep, is_active, proc_overrides } = req.body;
   try {
     const mapsUrl = `https://maps.google.com/?q=${encodeURIComponent((address||'')+' '+(number||'')+' '+(name||'')+' '+(uf||''))}`;
-    const { rows } = await pool.query(
+    const { rows } = await req.db(
       `UPDATE cities SET name=COALESCE($1,name), uf=COALESCE($2,uf), local_name=COALESCE($3,local_name),
        address=COALESCE($4,address), number=COALESCE($5,number), complement=COALESCE($6,complement),
        neighborhood=COALESCE($7,neighborhood), cep=COALESCE($8,cep),
@@ -1776,9 +1870,9 @@ app.put('/api/cities/:id', requireAdmin, async (req, res) => {
     if (!rows.length) return res.status(404).json({ error: 'Cidade não encontrada' });
     // Always upsert procedure overrides (delete old + reinsert ensures clean state)
     if (proc_overrides && Object.keys(proc_overrides).length > 0) {
-      await pool.query('DELETE FROM city_procedures WHERE city_id=$1', [req.params.id]);
+      await req.db('DELETE FROM city_procedures WHERE city_id=$1', [req.params.id]);
       for (const [procId, enabled] of Object.entries(proc_overrides)) {
-        await pool.query(
+        await req.db(
           `INSERT INTO city_procedures (city_id,proc_id,enabled) VALUES ($1,$2,$3)`,
           [req.params.id, procId, enabled]
         );
@@ -1791,10 +1885,10 @@ app.put('/api/cities/:id', requireAdmin, async (req, res) => {
 app.delete('/api/cities/:id', requireAdmin, async (req, res) => {
   try {
     // Only delete if inactive
-    const { rows } = await pool.query('SELECT is_active FROM cities WHERE id=$1', [req.params.id]);
+    const { rows } = await req.db('SELECT is_active FROM cities WHERE id=$1', [req.params.id]);
     if (!rows.length) return res.status(404).json({ error: 'Cidade não encontrada' });
     if (rows[0].is_active) return res.status(400).json({ error: 'Desative a cidade antes de excluir' });
-    await pool.query('DELETE FROM cities WHERE id=$1', [req.params.id]);
+    await req.db('DELETE FROM cities WHERE id=$1', [req.params.id]);
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -1802,7 +1896,7 @@ app.delete('/api/cities/:id', requireAdmin, async (req, res) => {
 // ── Work Configs ──────────────────────────────────────────────────────────────
 app.get('/api/work-configs', requireAdmin, async (req, res) => {
   try {
-    const { rows } = await pool.query(
+    const { rows } = await req.db(
       `SELECT wc.*, c.name as city_name,
               array_agg(json_build_object('id',wb.id,'s',wb.break_start::text,'e',wb.break_end::text))
                 FILTER (WHERE wb.id IS NOT NULL) as breaks
@@ -1818,15 +1912,15 @@ app.get('/api/work-configs', requireAdmin, async (req, res) => {
 app.put('/api/work-configs/:id', requireAdmin, async (req, res) => {
   const { is_active, work_start, work_end, breaks } = req.body;
   try {
-    await pool.query(
+    await req.db(
       `UPDATE work_configs SET is_active=$1, work_start=$2, work_end=$3 WHERE id=$4`,
       [is_active, is_active ? work_start : null, is_active ? work_end : null, req.params.id]
     );
     if (breaks !== undefined) {
-      await pool.query('DELETE FROM work_breaks WHERE config_id=$1', [req.params.id]);
+      await req.db('DELETE FROM work_breaks WHERE config_id=$1', [req.params.id]);
       if (breaks && breaks.length) {
         for (const b of breaks) {
-          await pool.query(
+          await req.db(
             'INSERT INTO work_breaks (config_id,break_start,break_end) VALUES ($1,$2,$3)',
             [req.params.id, b.s, b.e]
           );
@@ -1841,7 +1935,7 @@ app.put('/api/work-configs/:id', requireAdmin, async (req, res) => {
 // Público: expõe apenas nome e telefone para o frontend do cliente
 app.get('/api/admin/profile/public', async (req, res) => {
   try {
-    const { rows } = await pool.query(
+    const { rows } = await req.db(
       'SELECT name, phone FROM admin_profile LIMIT 1'
     );
     res.json(rows[0] || { name: 'Profissional', phone: '' });
@@ -1850,7 +1944,7 @@ app.get('/api/admin/profile/public', async (req, res) => {
 
 app.get('/api/admin/profile', requireAdmin, async (req, res) => {
   try {
-    const { rows } = await pool.query(
+    const { rows } = await req.db(
       'SELECT id, name, phone, email, login FROM admin_profile LIMIT 1'
     );
     res.json(rows[0] || {});
@@ -1861,7 +1955,7 @@ app.put('/api/admin/profile', requireAdmin, async (req, res) => {
   const { name, phone, email } = req.body;
   if (!name||!phone||!email) return res.status(400).json({ error: 'Nome, telefone e e-mail são obrigatórios' });
   try {
-    await pool.query(
+    await req.db(
       `UPDATE admin_profile SET name=$1, phone=$2, email=$3, updated_at=NOW() WHERE login='admin'`,
       [name, phone, email]
     );
@@ -1881,10 +1975,10 @@ app.put('/api/admin/password', requireAdmin, async (req, res) => {
   if (!/[0-9]/.test(newPass))
     return res.status(400).json({ error: 'Senha deve ter pelo menos um número' });
   try {
-    const { rows } = await pool.query('SELECT password FROM admin_profile LIMIT 1');
+    const { rows } = await req.db('SELECT password FROM admin_profile LIMIT 1');
     const stored = rows.length ? rows[0].password : (process.env.ADMIN_PASS || '');
     if (current !== stored) return res.status(401).json({ error: 'Senha atual incorreta' });
-    await pool.query(`UPDATE admin_profile SET password=$1, updated_at=NOW() WHERE login='admin'`, [newPass]);
+    await req.db(`UPDATE admin_profile SET password=$1, updated_at=NOW() WHERE login='admin'`, [newPass]);
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -1893,7 +1987,7 @@ app.put('/api/admin/password', requireAdmin, async (req, res) => {
 app.get('/api/commemorative', async (req, res) => {
   try {
     const brtNow = nowBrasilia();
-    const { rows } = await pool.query(
+    const { rows } = await req.db(
       `SELECT * FROM commemorative_dates
        WHERE is_active=TRUE AND day=$1 AND month=$2 LIMIT 1`,
       [brtNow.getDate(), brtNow.getMonth() + 1]
@@ -1904,7 +1998,7 @@ app.get('/api/commemorative', async (req, res) => {
 
 app.get('/api/commemorative/all', requireAdmin, async (req, res) => {
   try {
-    const { rows } = await pool.query('SELECT * FROM commemorative_dates ORDER BY month,day');
+    const { rows } = await req.db('SELECT * FROM commemorative_dates ORDER BY month,day');
     res.json(rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -1914,7 +2008,7 @@ app.post('/api/commemorative', requireAdmin, async (req, res) => {
   if (!day||!month||!title||!message) return res.status(400).json({ error: 'Todos os campos obrigatórios' });
   if (message.length > 300) return res.status(400).json({ error: 'Mensagem máximo 300 caracteres' });
   try {
-    const { rows } = await pool.query(
+    const { rows } = await req.db(
       `INSERT INTO commemorative_dates (day,month,title,message) VALUES ($1,$2,$3,$4) RETURNING *`,
       [day, month, title, message]
     );
@@ -1924,7 +2018,7 @@ app.post('/api/commemorative', requireAdmin, async (req, res) => {
 
 app.patch('/api/commemorative/:id/toggle', requireAdmin, async (req, res) => {
   try {
-    const { rows } = await pool.query(
+    const { rows } = await req.db(
       'UPDATE commemorative_dates SET is_active=NOT is_active WHERE id=$1 RETURNING is_active', [req.params.id]
     );
     res.json(rows[0]);
@@ -1933,10 +2027,10 @@ app.patch('/api/commemorative/:id/toggle', requireAdmin, async (req, res) => {
 
 app.delete('/api/commemorative/:id', requireAdmin, async (req, res) => {
   try {
-    const { rows } = await pool.query('SELECT is_active FROM commemorative_dates WHERE id=$1',[req.params.id]);
+    const { rows } = await req.db('SELECT is_active FROM commemorative_dates WHERE id=$1',[req.params.id]);
     if (!rows.length) return res.status(404).json({ error: 'Data não encontrada' });
     if (rows[0].is_active) return res.status(400).json({ error: 'Cancele a data antes de excluir' });
-    await pool.query('DELETE FROM commemorative_dates WHERE id=$1', [req.params.id]);
+    await req.db('DELETE FROM commemorative_dates WHERE id=$1', [req.params.id]);
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -2451,7 +2545,7 @@ app.get('/api/nps/check', async (req, res) => {
 
   try {
     // Último procedimento realizado deste telefone
-    const apptRes = await pool.query(
+    const apptRes = await req.db(
       `SELECT id, proc_name, date FROM appointments
        WHERE regexp_replace(phone, '[^0-9]', '', 'g') LIKE $1
          AND status = 'realizado'
@@ -2462,7 +2556,7 @@ app.get('/api/nps/check', async (req, res) => {
     const appt = apptRes.rows[0];
 
     // Verificar cooldown: última resposta NPS deste telefone
-    const lastRes = await pool.query(
+    const lastRes = await req.db(
       `SELECT created_at FROM nps_responses
        WHERE phone_norm LIKE $1
        ORDER BY created_at DESC LIMIT 1`,
@@ -2493,7 +2587,7 @@ app.post('/api/nps', async (req, res) => {
   const norm = normalizePhone(phone);
   const category = npsCategory(s);
   try {
-    await pool.query(
+    await req.db(
       `INSERT INTO nps_responses (phone, phone_norm, appt_id, score, comment, category)
        VALUES ($1, $2, $3, $4, $5, $6)`,
       [phone, norm, appt_id || null, s, comment || null, category]
@@ -2507,7 +2601,7 @@ app.post('/api/nps', async (req, res) => {
 // Admin: painel NPS completo
 app.get('/api/nps/dashboard', requireAdmin, async (req, res) => {
   try {
-    const { rows: all } = await pool.query(
+    const { rows: all } = await req.db(
       `SELECT score, category, comment, phone, created_at FROM nps_responses ORDER BY created_at DESC`
     );
     if (!all.length) return res.json({ score: null, total: 0, promoters: 0, neutrals: 0, detractors: 0, responses: [] });
@@ -2535,7 +2629,7 @@ app.get('/api/nps/dashboard', requireAdmin, async (req, res) => {
 
 app.get('/api/released', requireAdmin, async (req, res) => {
   try {
-    const { rows } = await pool.query('SELECT * FROM released_dates ORDER BY date');
+    const { rows } = await req.db('SELECT * FROM released_dates ORDER BY date');
     res.json(rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -2545,7 +2639,7 @@ app.post('/api/released', requireAdmin, async (req, res) => {
   if (!date || !work_start || !work_end) return res.status(400).json({ error: 'Data, início e fim são obrigatórios' });
   const ids = Array.isArray(city_ids) ? city_ids.map(Number) : [];
   try {
-    const { rows } = await pool.query(
+    const { rows } = await req.db(
       `INSERT INTO released_dates (date, city_ids, work_start, work_end, break_start, break_end, reason)
        VALUES ($1,$2,$3,$4,$5,$6,$7)
        ON CONFLICT (date) DO UPDATE
@@ -2559,14 +2653,14 @@ app.post('/api/released', requireAdmin, async (req, res) => {
 
 app.delete('/api/released/:date', requireAdmin, async (req, res) => {
   try {
-    await pool.query('DELETE FROM released_dates WHERE date=$1', [req.params.date]);
+    await req.db('DELETE FROM released_dates WHERE date=$1', [req.params.date]);
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.get('/api/released-slots', requireAdmin, async (req, res) => {
   try {
-    const { rows } = await pool.query('SELECT * FROM released_slots ORDER BY date, st');
+    const { rows } = await req.db('SELECT * FROM released_slots ORDER BY date, st');
     res.json(rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -2577,7 +2671,7 @@ app.post('/api/released-slots', requireAdmin, async (req, res) => {
   if (timeToMin(st) >= timeToMin(et)) return res.status(400).json({ error: 'Início deve ser antes do fim' });
   const ids = Array.isArray(city_ids) ? city_ids.map(Number) : [];
   try {
-    const { rows } = await pool.query(
+    const { rows } = await req.db(
       `INSERT INTO released_slots (date, st, et, city_ids, reason) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
       [date, st, et, ids, reason||null]
     );
@@ -2587,7 +2681,7 @@ app.post('/api/released-slots', requireAdmin, async (req, res) => {
 
 app.delete('/api/released-slots/:id', requireAdmin, async (req, res) => {
   try {
-    await pool.query('DELETE FROM released_slots WHERE id=$1', [req.params.id]);
+    await req.db('DELETE FROM released_slots WHERE id=$1', [req.params.id]);
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -2695,7 +2789,7 @@ app.post('/api/push/subscribe/client', async (req, res) => {
   }
   console.log('[Push] Nova subscription cliente, appointmentId:', appointmentId);
   try {
-    await pool.query(
+    await req.db(
       `INSERT INTO push_subscriptions (endpoint, p256dh, auth, role)
        VALUES ($1, $2, $3, 'client')
        ON CONFLICT (endpoint) DO UPDATE SET p256dh=$2, auth=$3`,
@@ -2704,7 +2798,7 @@ app.post('/api/push/subscribe/client', async (req, res) => {
 
     // Liga a subscription ao agendamento para notificações futuras
     if (appointmentId) {
-      await pool.query(
+      await req.db(
         `UPDATE appointments SET push_auth=$1 WHERE id=$2`,
         [keys.auth, appointmentId]
       );
@@ -2715,7 +2809,7 @@ app.post('/api/push/subscribe/client', async (req, res) => {
     // Envia confirmação push imediatamente após inscrição
     // (resolve o race condition — subscription existe ANTES de enviar)
     if (appointmentId) {
-      const { rows } = await pool.query('SELECT * FROM appointments WHERE id=$1', [appointmentId]);
+      const { rows } = await req.db('SELECT * FROM appointments WHERE id=$1', [appointmentId]);
       if (rows.length) {
         const appt = rows[0];
         const sub = { endpoint, p256dh: keys.p256dh, auth: keys.auth };
@@ -2737,7 +2831,7 @@ app.post('/api/push/subscribe/client', async (req, res) => {
 // Listar todos os templates
 app.get('/api/push/templates', requireAdmin, async (req, res) => {
   try {
-    const { rows } = await pool.query('SELECT * FROM push_templates ORDER BY is_system DESC, id');
+    const { rows } = await req.db('SELECT * FROM push_templates ORDER BY is_system DESC, id');
     res.json(rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -2749,7 +2843,7 @@ app.post('/api/push/templates', requireAdmin, async (req, res) => {
   if (title.length > 200) return res.status(400).json({ error: 'Título máx. 200 caracteres' });
   if (body.length > 500)  return res.status(400).json({ error: 'Mensagem máx. 500 caracteres' });
   try {
-    const { rows } = await pool.query(
+    const { rows } = await req.db(
       `INSERT INTO push_templates (title, body, is_system) VALUES ($1, $2, FALSE) RETURNING *`,
       [title, body]
     );
@@ -2761,7 +2855,7 @@ app.post('/api/push/templates', requireAdmin, async (req, res) => {
 app.put('/api/push/templates/:id', requireAdmin, async (req, res) => {
   const { title, body } = req.body;
   try {
-    const { rows } = await pool.query(
+    const { rows } = await req.db(
       `UPDATE push_templates SET title=$1, body=$2
        WHERE id=$3 AND is_system=FALSE RETURNING *`,
       [title, body, req.params.id]
@@ -2774,7 +2868,7 @@ app.put('/api/push/templates/:id', requireAdmin, async (req, res) => {
 // Excluir template (só customizados)
 app.delete('/api/push/templates/:id', requireAdmin, async (req, res) => {
   try {
-    const { rowCount } = await pool.query(
+    const { rowCount } = await req.db(
       `DELETE FROM push_templates WHERE id=$1 AND is_system=FALSE`,
       [req.params.id]
     );
@@ -2788,7 +2882,7 @@ app.post('/api/push/broadcast', requireAdmin, async (req, res) => {
   const { title, body } = req.body;
   if (!title || !body) return res.status(400).json({ error: 'Título e mensagem obrigatórios' });
   try {
-    const { rows: allSubs } = await pool.query(
+    const { rows: allSubs } = await req.db(
       'SELECT endpoint, p256dh, auth FROM push_subscriptions'
     );
     console.log(`[Push/broadcast] Disparando para ${allSubs.length} subscribers...`);
@@ -2802,7 +2896,7 @@ app.post('/api/push/broadcast', requireAdmin, async (req, res) => {
 // Contar subscribers ativos
 app.get('/api/push/subscribers/count', requireAdmin, async (req, res) => {
   try {
-    const { rows } = await pool.query(
+    const { rows } = await req.db(
       `SELECT role, COUNT(*) as cnt FROM push_subscriptions GROUP BY role`
     );
     const result = { total: 0, admin: 0, client: 0 };
@@ -2834,7 +2928,7 @@ app.post('/api/push/subscribe/admin', requireAdmin, async (req, res) => {
     return res.status(400).json({ error: 'Dados de inscrição inválidos' });
   }
   try {
-    await pool.query(
+    await req.db(
       `INSERT INTO push_subscriptions (endpoint, p256dh, auth, role)
        VALUES ($1, $2, $3, 'admin')
        ON CONFLICT (endpoint) DO UPDATE SET p256dh=$2, auth=$3`,
