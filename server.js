@@ -2175,8 +2175,11 @@ app.get('/master/api/stats', requireMaster, async (req, res) => {
 
     // Top tenants by agendamentos (cross-schema count)
     const { rows: tenantList } = await pool.query(
-      `SELECT t.id, t.slug, t.name, t.schema_name, t.active, t.plan_expires_at,
-              tc.business_name, tc.primary_color
+      `SELECT t.id, t.slug, t.name, t.owner_name, t.owner_email,
+              t.domain_custom, t.subdomain, t.schema_name, t.active,
+              t.plan_expires_at, t.monthly_fee, t.setup_fee,
+              tc.business_name, tc.primary_color, tc.secondary_color,
+              tc.logo_url, tc.tagline
        FROM tenants t LEFT JOIN tenant_configs tc ON tc.tenant_id=t.id
        ORDER BY t.created_at DESC`
     );
