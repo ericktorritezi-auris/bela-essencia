@@ -154,6 +154,25 @@ async function migrateTenantData(schemaName) {
       } catch {}
     }
 
+    // admin_profile: inserção especial (pass_hash pode ser nulo no public)
+    try {
+      const apCnt = await client.query(`SELECT COUNT(*) as cnt FROM "${schemaName}".admin_profile`);
+      if (Number(apCnt.rows[0].cnt) === 0) {
+        const { rows: src } = await client.query(
+          `SELECT id, name, email, login, pass_hash FROM public.admin_profile LIMIT 1`
+        );
+        if (src.length > 0) {
+          await client.query(
+            `INSERT INTO "${schemaName}".admin_profile (id, name, email, login, pass_hash)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [src[0].id, src[0].name || 'Profissional', src[0].email || '',
+             src[0].login || 'admin', src[0].pass_hash || null]
+          );
+          console.log(`[DB] Migrado: admin_profile (1 registro)`);
+        }
+      }
+    } catch (e) { console.warn('[DB] admin_profile fallback:', e.message); }
+
     console.log(`[DB] Migração para "${schemaName}" concluída com sucesso.`);
   } finally {
     client.release();
@@ -233,7 +252,7 @@ async function createTenantSchema(schemaName) {
       `CREATE TABLE IF NOT EXISTS admin_profile (
         id SERIAL PRIMARY KEY, name VARCHAR(100) NOT NULL DEFAULT 'Profissional',
         email VARCHAR(150), login VARCHAR(50) NOT NULL DEFAULT 'admin',
-        pass_hash TEXT NOT NULL
+        pass_hash TEXT
       )`,
       `CREATE TABLE IF NOT EXISTS push_subscriptions (
         id SERIAL PRIMARY KEY, endpoint TEXT NOT NULL UNIQUE, p256dh TEXT NOT NULL,
