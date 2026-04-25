@@ -504,6 +504,63 @@ async function initDB() {
       );
     `);
 
+    // Tabela: perfil master (Erick)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS master_profile (
+        id            SERIAL PRIMARY KEY,
+        name          VARCHAR(100) NOT NULL DEFAULT 'Erick',
+        email         VARCHAR(150),
+        whatsapp      VARCHAR(30),
+        photo_url     TEXT,
+        support_msg   VARCHAR(300) DEFAULT 'Entre em contato para renovar sua assinatura.',
+        updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    // Seed: perfil master inicial
+    const mpCheck = await client.query(`SELECT 1 FROM master_profile LIMIT 1`);
+    if (!mpCheck.rowCount) {
+      await client.query(
+        `INSERT INTO master_profile (name, email, whatsapp)
+         VALUES ('Erick Torritezi', 'erick.torritezi@gmail.com', '')`
+      );
+    }
+
+    // Tabela: notas internas por tenant
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS tenant_notes (
+        id          SERIAL PRIMARY KEY,
+        tenant_id   INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        note        TEXT NOT NULL,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_tenant_notes_tenant ON tenant_notes(tenant_id)`);
+
+    // Tabela: onboarding checklist por tenant
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS tenant_onboarding (
+        tenant_id         INTEGER PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
+        acesso_criado     BOOLEAN NOT NULL DEFAULT FALSE,
+        dns_configurado   BOOLEAN NOT NULL DEFAULT FALSE,
+        procedimentos     BOOLEAN NOT NULL DEFAULT FALSE,
+        cidades           BOOLEAN NOT NULL DEFAULT FALSE,
+        horarios          BOOLEAN NOT NULL DEFAULT FALSE,
+        teste_agendamento BOOLEAN NOT NULL DEFAULT FALSE,
+        entregue          BOOLEAN NOT NULL DEFAULT FALSE,
+        updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    // Seed: onboarding da Ana Paula como completo
+    const ob1 = await client.query(`SELECT 1 FROM tenant_onboarding WHERE tenant_id=(SELECT id FROM tenants WHERE slug='bela-essencia') LIMIT 1`);
+    if (!ob1.rowCount) {
+      await client.query(
+        `INSERT INTO tenant_onboarding (tenant_id,acesso_criado,dns_configurado,procedimentos,cidades,horarios,teste_agendamento,entregue)
+         SELECT id,TRUE,TRUE,TRUE,TRUE,TRUE,TRUE,TRUE FROM tenants WHERE slug='bela-essencia'`
+      );
+    }
+
     // Seed: plano padrão se ainda não existir
     const planCheck = await client.query("SELECT 1 FROM plans WHERE name='Essencial' LIMIT 1");
     if (!planCheck.rowCount) {
@@ -2366,6 +2423,152 @@ app.post('/master/api/payments', requireMaster, async (req, res) => {
       await logAction(tenant_id, 'payment_registered', `Mensalidade paga. Novo vencimento: ${expiryStr}`);
     }
     res.status(201).json(rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MASTER PROFILE
+// ══════════════════════════════════════════════════════════════════════════════
+
+app.get('/master/api/profile', requireMaster, async (req, res) => {
+  try {
+    const { rows } = await pool.query(`SELECT * FROM master_profile LIMIT 1`);
+    res.json(rows[0] || {});
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/master/api/profile', requireMaster, async (req, res) => {
+  const { name, email, whatsapp, photo_url, support_msg, new_pass } = req.body;
+  try {
+    await pool.query(
+      `UPDATE master_profile SET name=$1, email=$2, whatsapp=$3,
+       photo_url=$4, support_msg=$5, updated_at=NOW()`,
+      [name, email, whatsapp||'', photo_url||null, support_msg||'']
+    );
+    // Atualiza senha se fornecida
+    if (new_pass && new_pass.trim().length >= 6) {
+      process.env.MASTER_PASS = new_pass.trim();
+      // Nota: a mudança é em memória; para persistir, atualizar variável no Railway
+    }
+    await logAction(null, 'profile_updated', 'Perfil master atualizado');
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// TENANT NOTES
+// ══════════════════════════════════════════════════════════════════════════════
+
+app.get('/master/api/tenants/:id/notes', requireMaster, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT * FROM tenant_notes WHERE tenant_id=$1 ORDER BY created_at DESC`,
+      [req.params.id]
+    );
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/master/api/tenants/:id/notes', requireMaster, async (req, res) => {
+  const { note } = req.body;
+  if (!note?.trim()) return res.status(400).json({ error: 'Nota não pode ser vazia' });
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO tenant_notes (tenant_id, note) VALUES ($1, $2) RETURNING *`,
+      [req.params.id, note.trim()]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/master/api/notes/:id', requireMaster, async (req, res) => {
+  try {
+    await pool.query(`DELETE FROM tenant_notes WHERE id=$1`, [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ONBOARDING CHECKLIST
+// ══════════════════════════════════════════════════════════════════════════════
+
+app.get('/master/api/tenants/:id/onboarding', requireMaster, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT * FROM tenant_onboarding WHERE tenant_id=$1`, [req.params.id]
+    );
+    if (!rows.length) {
+      // Cria registro vazio se não existe
+      const { rows: nr } = await pool.query(
+        `INSERT INTO tenant_onboarding (tenant_id) VALUES ($1) RETURNING *`,
+        [req.params.id]
+      );
+      return res.json(nr[0]);
+    }
+    res.json(rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/master/api/tenants/:id/onboarding', requireMaster, async (req, res) => {
+  const { acesso_criado, dns_configurado, procedimentos, cidades,
+          horarios, teste_agendamento, entregue } = req.body;
+  try {
+    await pool.query(
+      `INSERT INTO tenant_onboarding
+         (tenant_id,acesso_criado,dns_configurado,procedimentos,cidades,horarios,teste_agendamento,entregue,updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
+       ON CONFLICT (tenant_id) DO UPDATE SET
+         acesso_criado=$2, dns_configurado=$3, procedimentos=$4,
+         cidades=$5, horarios=$6, teste_agendamento=$7,
+         entregue=$8, updated_at=NOW()`,
+      [req.params.id, !!acesso_criado, !!dns_configurado, !!procedimentos,
+       !!cidades, !!horarios, !!teste_agendamento, !!entregue]
+    );
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// RECEITA PROJETADA
+// ══════════════════════════════════════════════════════════════════════════════
+
+app.get('/master/api/revenue/projection', requireMaster, async (req, res) => {
+  try {
+    const today = todayBrasilia();
+    // MRR atual (tenants ativos com mensalidade > 0)
+    const { rows: mrrRows } = await pool.query(
+      `SELECT COALESCE(SUM(monthly_fee),0) as mrr FROM tenants WHERE active=TRUE AND monthly_fee>0`
+    );
+    const mrr = Number(mrrRows[0].mrr);
+
+    // Tenants que vencem nos próximos 3 meses (risco de churn)
+    const { rows: expRows } = await pool.query(
+      `SELECT t.name, t.plan_expires_at, t.monthly_fee, tc.business_name
+       FROM tenants t LEFT JOIN tenant_configs tc ON tc.tenant_id=t.id
+       WHERE t.active=TRUE AND t.monthly_fee>0
+         AND t.plan_expires_at BETWEEN $1 AND ($1::date + interval '90 days')
+       ORDER BY t.plan_expires_at`,
+      [today]
+    );
+
+    // Histórico mensal últimos 6 meses
+    const { rows: histRows } = await pool.query(
+      `SELECT TO_CHAR(created_at AT TIME ZONE 'America/Sao_Paulo','YYYY-MM') as month,
+              COALESCE(SUM(amount),0) as revenue,
+              COUNT(*) as payments
+       FROM payments WHERE status='paid' AND created_at >= NOW() - interval '6 months'
+       GROUP BY month ORDER BY month`
+    );
+
+    // Projeção 3 meses (MRR × 3, descontando tenants que vencem e não renovam)
+    const atRisk = expRows.reduce((s,r) => s + Number(r.monthly_fee), 0);
+    const projection = [
+      { month: 1, label: 'Mês 1', projected: mrr, at_risk: atRisk },
+      { month: 2, label: 'Mês 2', projected: mrr, at_risk: atRisk },
+      { month: 3, label: 'Mês 3', projected: mrr, at_risk: atRisk },
+    ];
+
+    res.json({ mrr, at_risk: atRisk, expiring: expRows, history: histRows, projection });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
