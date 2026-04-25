@@ -33,7 +33,7 @@
     }
     .login-card {
       background:var(--card); border:1px solid var(--border); border-radius:16px;
-      padding:48px 40px; width:360px; text-align:center;
+      padding:40px 28px; width:min(360px, calc(100vw - 32px)); text-align:center;
     }
     .login-logo { font-family:'Cormorant Garamond',serif; font-size:32px; color:var(--rose); margin-bottom:4px; }
     .login-logo span { color:var(--gold); font-style:italic; }
@@ -186,8 +186,35 @@
       .main { margin-left:0; }
       .mobile-menu { display:flex!important; }
       .stats-grid { grid-template-columns:1fr 1fr; }
+      .stats-grid .stat-card:only-child { grid-column:1/-1; }
       .fg-row { grid-template-columns:1fr; }
+      .content { padding:16px 14px 60px; }
+      .topbar { padding:12px 14px; }
+      .page-title { font-size:18px; }
+      .topbar-right { display:none; }
+      .table-head { padding:12px 14px; flex-wrap:wrap; gap:8px; }
+      .table-title { font-size:13px; }
+      th, td { padding:9px 10px; font-size:11.5px; }
+      .stat-card { padding:14px; }
+      .stat-val { font-size:28px; }
+      .modal { margin:0; max-width:100%; border-radius:14px 14px 0 0; }
+      .modal-body { padding:14px 16px 16px; }
+      .modal-header { padding:14px 16px 12px; }
+      .modal-bg { align-items:flex-end; padding:0; }
+      .charts-grid { grid-template-columns:1fr; }
+      .chart-card { padding:14px; }
+      .btn { padding:6px 11px; font-size:11.5px; }
+      .btn-sm { padding:4px 9px; font-size:10.5px; }
+      .sidebar-brand { padding:16px 14px 12px; }
+      .brand-logo { font-size:18px; }
+      .nav-item { padding:8px 10px; font-size:12.5px; }
     }
+    /* Sidebar backdrop */
+    .sidebar-backdrop {
+      display:none; position:fixed; inset:0; background:rgba(0,0,0,.55);
+      z-index:49;
+    }
+    .sidebar-backdrop.show { display:block; }
     .mobile-menu { display:none; align-items:center; gap:10px; }
     .ham { background:none; border:none; color:var(--text); font-size:22px; cursor:pointer; }
 
@@ -219,6 +246,9 @@
 
 <!-- APP -->
 <div id="app">
+  <!-- SIDEBAR BACKDROP -->
+  <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
+
   <!-- SIDEBAR -->
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-brand">
@@ -247,7 +277,7 @@
   <div class="main">
     <div class="topbar">
       <div style="display:flex;align-items:center;gap:12px">
-        <button class="ham mobile-menu" onclick="document.getElementById('sidebar').classList.toggle('open')">☰</button>
+        <button class="ham mobile-menu" onclick="openSidebar()">☰</button>
         <div class="page-title" id="page-title">Dashboard</div>
       </div>
       <div class="topbar-right" id="topbar-time"></div>
@@ -504,6 +534,15 @@ async function doLogin() {
     setTimeout(() => { el.style.display = 'none'; }, 4000);
   }
 }
+function openSidebar() {
+  document.getElementById('sidebar').classList.add('open');
+  document.getElementById('sidebar-backdrop').classList.add('show');
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebar-backdrop').classList.remove('show');
+}
+
 async function doLogout() {
   await POST('/master/logout', {});
   sessionStorage.removeItem('bp_master_token');
@@ -521,7 +560,7 @@ function showSec(name) {
   document.getElementById(`sec-${name}`).classList.add('active');
   document.getElementById(`nav-${name}`)?.classList.add('active');
   document.getElementById('page-title').textContent = SEC_TITLES[name];
-  document.getElementById('sidebar').classList.remove('open');
+  closeSidebar();
 
   if (name === 'tenants')   renderTenants();
   if (name === 'financial') loadFinancial();
@@ -636,7 +675,7 @@ function tenantStatus(t) {
 function renderTenantsTable(containerId, list, compact=false) {
   const el = document.getElementById(containerId);
   if (!list.length) { el.innerHTML = '<div class="empty">Nenhum tenant cadastrado</div>'; return; }
-  el.innerHTML = `<table>
+  el.innerHTML = `<div style="overflow-x:auto"><table>
     <thead><tr>
       <th>Negócio / Domínio</th>
       <th>Profissional</th>
@@ -663,14 +702,14 @@ function renderTenantsTable(containerId, list, compact=false) {
       <td style="font-size:12px">${fmtDate(t.plan_expires_at)}</td>
       <td>${tenantStatus(t)}</td>
       <td>
-        <div style="display:flex;gap:5px;flex-wrap:wrap">
+        <div style="display:flex;gap:4px;flex-wrap:wrap;min-width:160px">
           <button class="btn btn-ghost btn-sm" onclick="openEditModal(${t.id})">Editar</button>
           <button class="btn btn-sm ${t.active?'btn-red':'btn-green'}" onclick="toggleTenant(${t.id},'${t.slug}',${t.active})">${t.active?'Suspender':'Ativar'}</button>
           ${t.domain_custom||t.subdomain?`<a href="https://${t.domain_custom||t.subdomain+'.belleplanner.com.br'}" target="_blank" class="btn btn-ghost btn-sm" style="text-decoration:none">Ver ↗</a>`:''}
         </div>
       </td>
     </tr>`).join('')}
-    </tbody></table>`;
+    </tbody></table></div>`;
 }
 
 // ── TENANTS ────────────────────────────────────────────────────────────────
@@ -896,7 +935,7 @@ async function loadFinancial() {
       document.getElementById('payments-table').innerHTML = '<div class="empty">Nenhum pagamento registrado</div>';
       return;
     }
-    document.getElementById('payments-table').innerHTML = `<table>
+    document.getElementById('payments-table').innerHTML = `<div style="overflow-x:auto"><table>
       <thead><tr><th>Tenant</th><th>Tipo</th><th>Valor</th><th>Status</th><th>Referência</th><th>Data</th><th>Obs.</th></tr></thead>
       <tbody>
       ${payments.map(p=>`<tr>
@@ -908,7 +947,7 @@ async function loadFinancial() {
         <td style="font-size:12px">${fmtDate(p.paid_at)}</td>
         <td style="font-size:11px;color:var(--muted)">${p.notes||'—'}</td>
       </tr>`).join('')}
-      </tbody></table>`;
+      </tbody></table></div>`;
   } catch(e) { toast(e.message, 'err'); }
 }
 
@@ -998,7 +1037,7 @@ async function loadHealth() {
     if (!results.length) {
       document.getElementById('health-table').innerHTML = '<div class="empty">Nenhum tenant ativo para verificar</div>';
     } else {
-      document.getElementById('health-table').innerHTML = `<table>
+      document.getElementById('health-table').innerHTML = `<div style="overflow-x:auto"><table>
         <thead><tr>
           <th>Tenant</th>
           <th>URL</th>
@@ -1031,14 +1070,14 @@ async function loadHealth() {
             <td style="font-size:11px;color:var(--muted)">${r.checked_at ? new Date(r.checked_at).toLocaleTimeString('pt-BR') : '—'}</td>
           </tr>`;
         }).join('')}
-        </tbody></table>`;
+        </tbody></table></div>`;
     }
 
     // Incident history
     if (!history.length) {
       document.getElementById('health-history').innerHTML = '<div class="empty">✅ Nenhum incidente registrado</div>';
     } else {
-      document.getElementById('health-history').innerHTML = `<table>
+      document.getElementById('health-history').innerHTML = `<div style="overflow-x:auto"><table>
         <thead><tr><th>Data/Hora</th><th>Tenant</th><th>Evento</th><th>Detalhe</th></tr></thead>
         <tbody>
         ${history.map(h => {
@@ -1050,7 +1089,7 @@ async function loadHealth() {
             <td style="font-size:12px;color:var(--muted)">${h.details || '—'}</td>
           </tr>`;
         }).join('')}
-        </tbody></table>`;
+        </tbody></table></div>`;
     }
 
     // UptimeRobot URLs
@@ -1074,7 +1113,7 @@ async function loadLogs() {
   try {
     const logs = await GET('/master/api/logs');
     if (!logs.length) { document.getElementById('logs-table').innerHTML='<div class="empty">Nenhum log registrado</div>'; return; }
-    document.getElementById('logs-table').innerHTML = `<table>
+    document.getElementById('logs-table').innerHTML = `<div style="overflow-x:auto"><table>
       <thead><tr><th>Data</th><th>Tenant</th><th>Ação</th><th>Detalhes</th></tr></thead>
       <tbody>
       ${logs.map(l=>`<tr>
@@ -1083,7 +1122,7 @@ async function loadLogs() {
         <td><code style="font-size:11px;color:var(--rose-l);background:rgba(155,77,106,.1);padding:2px 6px;border-radius:4px">${l.action}</code></td>
         <td style="font-size:12px;color:var(--muted)">${l.details||'—'}</td>
       </tr>`).join('')}
-      </tbody></table>`;
+      </tbody></table></div>`;
   } catch(e) { toast(e.message, 'err'); }
 }
 
