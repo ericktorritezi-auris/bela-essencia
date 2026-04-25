@@ -182,12 +182,33 @@
     .sec.active { display:block; }
 
     /* RESPONSIVE */
+    /* Pipeline Kanban */
+    .kanban-board { display:flex; gap:12px; overflow-x:auto; padding-bottom:8px; }
+    .kanban-board::-webkit-scrollbar { height:4px; }
+    .kanban-board::-webkit-scrollbar-thumb { background:var(--border); border-radius:4px; }
+    .kanban-col { flex:0 0 220px; background:var(--card); border:1px solid var(--border); border-radius:var(--r); overflow:hidden; }
+    .kanban-col-header { padding:10px 14px; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.08em; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; }
+    .kanban-col-count { background:rgba(255,255,255,.1); border-radius:50px; padding:1px 7px; font-size:10px; }
+    .kanban-cards { padding:8px; display:flex; flex-direction:column; gap:6px; min-height:80px; }
+    .kanban-card { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:10px 12px; cursor:pointer; transition:.15s; }
+    .kanban-card:hover { border-color:var(--rose); }
+    .kanban-card-name { font-size:13px; font-weight:800; color:var(--text); margin-bottom:3px; }
+    .kanban-card-sub { font-size:11px; color:var(--muted); line-height:1.4; }
+    .kanban-card-value { font-size:11px; color:var(--green); font-weight:700; margin-top:4px; }
+    .pipeline-list { display:none; }
+    /* Push comms */
+    .tenant-checkbox { display:flex; align-items:center; gap:8px; padding:8px 10px; background:var(--surface); border-radius:7px; font-size:13px; cursor:pointer; }
+    .tenant-checkbox input { accent-color:var(--rose); width:15px; height:15px; }
     /* Projection grid responsive */
     .proj-grid { grid-template-columns: repeat(3,1fr); }
     @media(max-width:600px) {
       .proj-grid { grid-template-columns: 1fr !important; }
     }
+    .comms-grid { grid-template-columns:1fr 1fr; }
     @media(max-width:768px) {
+      .comms-grid { grid-template-columns:1fr !important; }
+      .pipeline-list { display:flex!important; flex-direction:column; gap:10px; }
+      .kanban-board { display:none!important; }
       .sidebar { transform:translateX(-100%); transition:.3s; }
       .sidebar.open { transform:translateX(0); }
       .main { margin-left:0; }
@@ -275,6 +296,11 @@
       <div class="nav-item" id="nav-health" onclick="showSec('health')"><span class="nav-icon">🩺</span> Saúde do Sistema</div>
       <div class="nav-item" id="nav-logs" onclick="showSec('logs')"><span class="nav-icon">📋</span> Logs</div>
       <div class="nav-sep"></div>
+      <div class="nav-sep"></div>
+      <div class="nav-section">Vendas</div>
+      <div class="nav-item" id="nav-pipeline" onclick="showSec('pipeline')"><span class="nav-icon">🎯</span> Pipeline</div>
+      <div class="nav-item" id="nav-comms" onclick="showSec('comms')"><span class="nav-icon">📣</span> Comunicações</div>
+      <div class="nav-sep"></div>
       <div class="nav-section">Minha Conta</div>
       <div class="nav-item" id="nav-profile" onclick="showSec('profile')"><span class="nav-icon">👤</span> Meu Perfil</div>
     </nav>
@@ -338,6 +364,7 @@
           <div class="table-head">
             <div class="table-title">💳 Histórico de pagamentos</div>
             <button class="btn btn-primary" onclick="openPaymentModal()">+ Registrar pagamento</button>
+          <a id="export-csv-btn" class="btn btn-ghost" style="text-decoration:none">⬇️ Exportar CSV</a>
           </div>
           <div id="payments-table"></div>
         </div>
@@ -366,6 +393,49 @@
           <a href="https://uptimerobot.com" target="_blank" class="btn btn-primary" style="display:inline-flex;margin-top:12px;text-decoration:none;align-items:center;gap:6px">
             Configurar UptimeRobot ↗
           </a>
+        </div>
+      </div>
+
+      <!-- PIPELINE -->
+      <div class="sec" id="sec-pipeline">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+          <div style="font-size:13px;color:var(--muted)" id="pipeline-summary"></div>
+          <button class="btn btn-primary" onclick="openLeadModal()">+ Novo lead</button>
+        </div>
+        <!-- Kanban (desktop) -->
+        <div class="kanban-board" id="kanban-board"></div>
+        <!-- Lista (mobile) -->
+        <div class="pipeline-list" id="pipeline-list"></div>
+      </div>
+
+      <!-- COMUNICAÇÕES -->
+      <div class="sec" id="sec-comms">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="comms-grid">
+          <!-- Enviar push -->
+          <div class="table-card">
+            <div class="table-head"><div class="table-title">📣 Enviar Push para Profissionais</div></div>
+            <div style="padding:18px 20px 20px">
+              <div class="fg"><label>Título</label><input class="fi" id="push-title" placeholder="Ex: Nova funcionalidade disponível!" maxlength="100"></div>
+              <div class="fg"><label>Mensagem</label><textarea class="fi" id="push-body" placeholder="Escreva sua mensagem aqui..." maxlength="280" rows="3" style="resize:vertical"></textarea></div>
+              <div class="fg">
+                <label style="margin-bottom:8px;display:block">Destinatários</label>
+                <label class="tenant-checkbox" style="margin-bottom:8px">
+                  <input type="checkbox" id="push-all" onchange="togglePushAll(this)" checked>
+                  <span style="font-weight:800;color:var(--text)">Todos os tenants ativos</span>
+                </label>
+                <div id="push-tenants-list" style="display:none;flex-direction:column;gap:5px;margin-top:6px"></div>
+              </div>
+              <div style="display:flex;gap:10px;align-items:center;margin-top:8px">
+                <button class="btn btn-primary" onclick="sendMasterPush()">Enviar agora 🚀</button>
+                <span id="push-result" style="font-size:12px;color:var(--green);display:none"></span>
+              </div>
+            </div>
+          </div>
+          <!-- Histórico -->
+          <div class="table-card">
+            <div class="table-head"><div class="table-title">📋 Histórico de envios</div></div>
+            <div id="push-history" style="max-height:400px;overflow-y:auto"></div>
+          </div>
         </div>
       </div>
 
@@ -486,6 +556,57 @@
   </div>
 </div>
 
+<!-- MODAL LEAD -->
+<div class="modal-bg hidden" id="modal-lead-bg">
+  <div class="modal" style="max-width:500px">
+    <div class="modal-header">
+      <div class="modal-title" id="lead-modal-title">Novo Lead</div>
+      <button class="modal-close" onclick="closeModal('lead')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="fg-row">
+        <div class="fg"><label>Nome *</label><input class="fi" id="lead-name" placeholder="Nome da profissional ou negócio"></div>
+        <div class="fg"><label>Contato (WhatsApp)</label><input class="fi" id="lead-contact" placeholder="(43) 99999-9999"></div>
+      </div>
+      <div class="fg-row">
+        <div class="fg"><label>Cidade</label><input class="fi" id="lead-city" placeholder="Londrina, PR"></div>
+        <div class="fg"><label>Origem</label>
+          <select class="fi" id="lead-origin">
+            <option value="online">Online</option>
+            <option value="presencial">Presencial</option>
+            <option value="indicacao">Indicação</option>
+            <option value="instagram">Instagram</option>
+            <option value="outro">Outro</option>
+          </select>
+        </div>
+      </div>
+      <div class="fg-row">
+        <div class="fg"><label>Status</label>
+          <select class="fi" id="lead-status">
+            <option value="lead">Lead</option>
+            <option value="contato">Contato feito</option>
+            <option value="demo">Demo agendada</option>
+            <option value="proposta">Proposta enviada</option>
+            <option value="fechado">Fechado ✅</option>
+            <option value="perdido">Perdido ❌</option>
+          </select>
+        </div>
+        <div class="fg"><label>Valor estimado (R$)</label><input class="fi" id="lead-value" type="number" placeholder="200.00" min="0" step="0.01"></div>
+      </div>
+      <div class="fg-row">
+        <div class="fg"><label>Próxima ação</label><input class="fi" id="lead-action" placeholder="Ex: Ligar para apresentar"></div>
+        <div class="fg"><label>Data da ação</label><input class="fi" id="lead-action-date" type="date"></div>
+      </div>
+      <div class="fg"><label>Notas internas</label><textarea class="fi" id="lead-notes" rows="2" placeholder="Observações sobre o lead..."></textarea></div>
+      <div class="modal-footer">
+        <button class="btn btn-red btn-sm" id="lead-delete-btn" onclick="deleteLead()" style="display:none;margin-right:auto">Excluir lead</button>
+        <button class="btn btn-ghost" onclick="closeModal('lead')">Cancelar</button>
+        <button class="btn btn-primary" onclick="saveLead()">Salvar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL NOTES -->
 <div class="modal-bg hidden" id="modal-notes-bg">
   <div class="modal" style="max-width:480px">
@@ -590,7 +711,7 @@ function fmtCurr(v) {
   return `R$ ${Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}`;
 }
 
-const SEC_TITLES = { dashboard:'Dashboard', alerts:'Alertas', tenants:'Tenants', financial:'Financeiro', health:'Saúde do Sistema', logs:'Logs', profile:'Meu Perfil' };
+const SEC_TITLES = { dashboard:'Dashboard', alerts:'Alertas', tenants:'Tenants', financial:'Financeiro', health:'Saúde do Sistema', logs:'Logs', profile:'Meu Perfil', pipeline:'Pipeline de Vendas', comms:'Comunicações' };
 let _tenants = [];
 let _editId   = null;
 
@@ -648,6 +769,8 @@ function showSec(name) {
   if (name === 'alerts')    renderAlerts();
   if (name === 'health')    loadHealth();
   if (name === 'profile')   loadProfile();
+  if (name === 'pipeline')  loadPipeline();
+  if (name === 'comms')     loadComms();
 }
 
 // ── INIT ───────────────────────────────────────────────────────────────────
@@ -1485,3 +1608,271 @@ if (_masterToken) {
 </script>
 </body>
 </html>
+<script>
+// ── PIPELINE ────────────────────────────────────────────────────────────────
+const PIPELINE_COLS = [
+  { key:'lead',     label:'Lead',             color:'#7a7d96' },
+  { key:'contato',  label:'Contato feito',    color:'#8e44ad' },
+  { key:'demo',     label:'Demo agendada',    color:'#C49A3C' },
+  { key:'proposta', label:'Proposta enviada', color:'#2980b9' },
+  { key:'fechado',  label:'Fechado',          color:'#2ecc71' },
+  { key:'perdido',  label:'Perdido',          color:'#e74c3c' },
+];
+
+let _leads = [];
+let _editLeadId = null;
+
+async function loadPipeline() {
+  try {
+    _leads = await GET('/master/api/pipeline');
+    renderPipeline();
+  } catch(e) { toast('Erro ao carregar pipeline: ' + e.message, 'err'); }
+}
+
+function renderPipeline() {
+  const total   = _leads.length;
+  const closed  = _leads.filter(l => l.status === 'fechado').length;
+  const revenue = _leads.filter(l => l.status === 'fechado').reduce((s,l) => s + Number(l.value||0), 0);
+  document.getElementById('pipeline-summary').innerHTML =
+    total + ' leads · ' + closed + ' fechados · ' + fmtCurr(revenue) + ' em valor';
+
+  const isMobile = window.innerWidth <= 768;
+  if (isMobile) {
+    document.getElementById('kanban-board').style.display = 'none';
+    document.getElementById('pipeline-list').style.display = 'flex';
+    renderPipelineList();
+  } else {
+    document.getElementById('kanban-board').style.display = 'flex';
+    document.getElementById('pipeline-list').style.display = 'none';
+    renderKanban();
+  }
+}
+
+function renderKanban() {
+  const board = document.getElementById('kanban-board');
+  board.innerHTML = PIPELINE_COLS.map(col => {
+    const colLeads = _leads.filter(l => l.status === col.key);
+    return '<div class="kanban-col">' +
+      '<div class="kanban-col-header" style="border-top:3px solid ' + col.color + ';color:' + col.color + '">' +
+        col.label +
+        '<span class="kanban-col-count">' + colLeads.length + '</span>' +
+      '</div>' +
+      '<div class="kanban-cards">' +
+        (colLeads.length ? colLeads.map(l => kanbanCard(l)).join('') :
+          '<div style="text-align:center;color:var(--muted);font-size:11px;padding:12px">Vazio</div>') +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function kanbanCard(l) {
+  return '<div class="kanban-card" onclick="openLeadModal(' + l.id + ')">' +
+    '<div class="kanban-card-name">' + l.name + '</div>' +
+    '<div class="kanban-card-sub">' +
+      (l.city ? l.city + ' · ' : '') + l.origin +
+      (l.next_action ? '<br>' + l.next_action : '') +
+    '</div>' +
+    (l.value ? '<div class="kanban-card-value">' + fmtCurr(l.value) + '</div>' : '') +
+  '</div>';
+}
+
+function renderPipelineList() {
+  const list = document.getElementById('pipeline-list');
+  if (!_leads.length) {
+    list.innerHTML = '<div class="empty">Nenhum lead cadastrado</div>';
+    return;
+  }
+  list.innerHTML = _leads.map(l => {
+    const col = PIPELINE_COLS.find(c => c.key === l.status) || PIPELINE_COLS[0];
+    return '<div style="background:var(--card);border:1px solid var(--border);border-left:4px solid ' + col.color + ';border-radius:var(--r);padding:14px 16px;cursor:pointer" onclick="openLeadModal(' + l.id + ')">' +
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">' +
+        '<div>' +
+          '<div style="font-size:14px;font-weight:800;color:var(--text)">' + l.name + '</div>' +
+          '<div style="font-size:12px;color:var(--muted);margin-top:3px">' +
+            (l.city ? l.city + ' · ' : '') + l.origin +
+          '</div>' +
+        '</div>' +
+        '<div style="text-align:right;flex-shrink:0">' +
+          '<span class="badge" style="background:rgba(255,255,255,.06);color:' + col.color + '">' + col.label + '</span>' +
+          (l.value ? '<div style="color:var(--green);font-weight:700;font-size:12px;margin-top:4px">' + fmtCurr(l.value) + '</div>' : '') +
+        '</div>' +
+      '</div>' +
+      (l.next_action ? '<div style="font-size:11px;color:var(--muted);margin-top:8px">&#128197; ' + l.next_action + (l.next_action_at ? ' · ' + fmtDate(l.next_action_at) : '') + '</div>' : '') +
+    '</div>';
+  }).join('');
+}
+
+window.addEventListener('resize', () => {
+  if (document.getElementById('sec-pipeline')?.classList.contains('active')) {
+    renderPipeline();
+  }
+});
+
+function openLeadModal(id) {
+  _editLeadId = id || null;
+  document.getElementById('lead-modal-title').textContent = id ? 'Editar Lead' : 'Novo Lead';
+  document.getElementById('lead-delete-btn').style.display = id ? 'inline-flex' : 'none';
+
+  if (id) {
+    const l = _leads.find(x => x.id === id);
+    if (!l) return;
+    document.getElementById('lead-name').value        = l.name || '';
+    document.getElementById('lead-contact').value     = l.contact || '';
+    document.getElementById('lead-city').value        = l.city || '';
+    document.getElementById('lead-origin').value      = l.origin || 'online';
+    document.getElementById('lead-status').value      = l.status || 'lead';
+    document.getElementById('lead-value').value       = l.value || '';
+    document.getElementById('lead-action').value      = l.next_action || '';
+    document.getElementById('lead-action-date').value = l.next_action_at ? l.next_action_at.slice(0,10) : '';
+    document.getElementById('lead-notes').value       = l.notes || '';
+  } else {
+    ['lead-name','lead-contact','lead-city','lead-value','lead-action','lead-notes'].forEach(id => {
+      document.getElementById(id).value = '';
+    });
+    document.getElementById('lead-origin').value = 'online';
+    document.getElementById('lead-status').value = 'lead';
+    document.getElementById('lead-action-date').value = '';
+  }
+  document.getElementById('modal-lead-bg').classList.remove('hidden');
+}
+
+async function saveLead() {
+  const body = {
+    name:           document.getElementById('lead-name').value.trim(),
+    contact:        document.getElementById('lead-contact').value.trim(),
+    city:           document.getElementById('lead-city').value.trim(),
+    origin:         document.getElementById('lead-origin').value,
+    status:         document.getElementById('lead-status').value,
+    value:          document.getElementById('lead-value').value || null,
+    next_action:    document.getElementById('lead-action').value.trim(),
+    next_action_at: document.getElementById('lead-action-date').value || null,
+    notes:          document.getElementById('lead-notes').value.trim(),
+  };
+  if (!body.name) { toast('Nome é obrigatório', 'err'); return; }
+  try {
+    if (_editLeadId) {
+      await PUT('/master/api/pipeline/' + _editLeadId, body);
+    } else {
+      await POST('/master/api/pipeline', body);
+    }
+    toast('✓ Lead salvo', 'ok');
+    closeModal('lead');
+    await loadPipeline();
+  } catch(e) { toast('Erro: ' + e.message, 'err'); }
+}
+
+async function deleteLead() {
+  if (!confirm('Excluir este lead permanentemente?')) return;
+  try {
+    await API('DELETE', '/master/api/pipeline/' + _editLeadId);
+    toast('Lead excluído', 'ok');
+    closeModal('lead');
+    await loadPipeline();
+  } catch(e) { toast('Erro: ' + e.message, 'err'); }
+}
+
+// ── COMUNICAÇÕES (PUSH MASTER) ──────────────────────────────────────────────
+let _pushTenants = [];
+
+async function loadComms() {
+  try {
+    const [tenants, history] = await Promise.all([
+      GET('/master/api/push/tenants'),
+      GET('/master/api/push/history'),
+    ]);
+    _pushTenants = tenants;
+
+    // Populate tenant checkboxes
+    const list = document.getElementById('push-tenants-list');
+    list.innerHTML = tenants.map(t =>
+      '<label class="tenant-checkbox">' +
+        '<input type="checkbox" class="push-tenant-cb" value="' + t.id + '" checked>' +
+        '<span>' + (t.business_name || t.name) + '</span>' +
+        (t.has_subscription ?
+          '<span style="color:var(--green);font-size:10px;margin-left:auto">● Online</span>' :
+          '<span style="color:var(--muted);font-size:10px;margin-left:auto">sem app</span>') +
+      '</label>'
+    ).join('');
+
+    // Render history
+    const hEl = document.getElementById('push-history');
+    if (!history.length) {
+      hEl.innerHTML = '<div class="empty">Nenhum push enviado ainda</div>';
+    } else {
+      hEl.innerHTML = '<table style="width:100%;border-collapse:collapse">' +
+        '<thead><tr>' +
+          '<th style="padding:10px 14px;text-align:left;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);border-bottom:1px solid var(--border)">Data</th>' +
+          '<th style="padding:10px 14px;text-align:left;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);border-bottom:1px solid var(--border)">Mensagem</th>' +
+          '<th style="padding:10px 14px;text-align:left;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);border-bottom:1px solid var(--border)">Enviados</th>' +
+        '</tr></thead>' +
+        '<tbody>' +
+        history.map(h =>
+          '<tr>' +
+            '<td style="padding:10px 14px;font-size:11px;color:var(--muted)">' + new Date(h.created_at).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) + '</td>' +
+            '<td style="padding:10px 14px">' +
+              '<div style="font-size:12px;font-weight:700;color:var(--text)">' + h.title + '</div>' +
+              '<div style="font-size:11px;color:var(--muted)">' + h.body + '</div>' +
+            '</td>' +
+            '<td style="padding:10px 14px;font-size:12px;color:var(--green);font-weight:700">' + h.sent_count + '</td>' +
+          '</tr>'
+        ).join('') +
+        '</tbody></table>';
+    }
+
+    // Setup export CSV button
+    const now = new Date();
+    const month = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+    const exportBtn = document.getElementById('export-csv-btn');
+    if (exportBtn) {
+      exportBtn.href = '/master/api/report/csv?month=' + month;
+      exportBtn.setAttribute('download', 'belle-planner-' + month + '.csv');
+    }
+  } catch(e) { toast('Erro: ' + e.message, 'err'); }
+}
+
+function togglePushAll(cb) {
+  document.getElementById('push-tenants-list').style.display = cb.checked ? 'none' : 'flex';
+}
+
+async function sendMasterPush() {
+  const title = document.getElementById('push-title').value.trim();
+  const body  = document.getElementById('push-body').value.trim();
+  if (!title || !body) { toast('Título e mensagem são obrigatórios', 'err'); return; }
+
+  const allChecked = document.getElementById('push-all').checked;
+  const tenantIds  = allChecked ? [] :
+    Array.from(document.querySelectorAll('.push-tenant-cb:checked')).map(cb => Number(cb.value));
+
+  const btn = document.querySelector('#sec-comms .btn-primary');
+  btn.textContent = 'Enviando...'; btn.disabled = true;
+
+  try {
+    const r = await POST('/master/api/push/send', { title, body, tenant_ids: tenantIds });
+    const resultEl = document.getElementById('push-result');
+    resultEl.textContent = 'Enviado para ' + r.sent + ' de ' + r.total + ' tenant(s)';
+    resultEl.style.display = 'inline';
+    setTimeout(() => { resultEl.style.display = 'none'; }, 5000);
+    document.getElementById('push-title').value = '';
+    document.getElementById('push-body').value  = '';
+    toast('✓ Push enviado: ' + r.sent + '/' + r.total, 'ok');
+    await loadComms(); // refresh history
+  } catch(e) {
+    toast('Erro: ' + e.message, 'err');
+  } finally {
+    btn.textContent = 'Enviar agora 🚀'; btn.disabled = false;
+  }
+}
+
+// Setup export button when financial loads
+const _origLoadFinancial = loadFinancial;
+loadFinancial = async function() {
+  await _origLoadFinancial();
+  const now = new Date();
+  const month = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+  const exportBtn = document.getElementById('export-csv-btn');
+  if (exportBtn) {
+    exportBtn.href = '/master/api/report/csv?month=' + month;
+    exportBtn.setAttribute('download', 'belle-planner-' + month + '.csv');
+  }
+};
+</script>

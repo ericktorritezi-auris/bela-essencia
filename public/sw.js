@@ -4,7 +4,7 @@
 //   API (/api/*)       → Network Only  (nunca cacheia dados)
 //   Assets estáticos   → Cache First   (ícones, manifest)
 
-const CACHE_VERSION = 'bela-essencia-2.2.0';
+const CACHE_VERSION = 'bela-essencia-2.3.0';
 const STATIC_ASSETS = ['/manifest.json', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png'];
 
 // ── Install: cacheia só assets estáticos ──────────────────────────
