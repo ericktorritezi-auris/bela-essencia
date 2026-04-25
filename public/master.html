@@ -694,7 +694,7 @@ function renderTenantsTable(containerId, list, compact=false) {
           <div style="width:10px;height:10px;border-radius:50%;background:${t.primary_color||'#9b4d6a'};flex-shrink:0"></div>
           <div>
             <div style="font-weight:800;color:var(--text)">${t.business_name||t.name}</div>
-            <div style="font-size:11px;color:var(--muted)">${t.domain_custom||t.subdomain+'.belleplanner.com.br'||'—'}</div>
+            <div style="font-size:11px;color:var(--muted)">${t.domain_custom||(t.subdomain?t.subdomain+'.belleplanner.com.br':'—')}</div>
           </div>
         </div>
       </td>
@@ -707,7 +707,7 @@ function renderTenantsTable(containerId, list, compact=false) {
         <div style="display:flex;gap:4px;flex-wrap:wrap;min-width:160px">
           <button class="btn btn-ghost btn-sm" onclick="openEditModal(${t.id})">Editar</button>
           <button class="btn btn-sm ${t.active?'btn-red':'btn-green'}" onclick="toggleTenant(${t.id},'${t.slug}',${t.active})">${t.active?'Suspender':'Ativar'}</button>
-          ${t.domain_custom||t.subdomain?`<a href="https://${t.domain_custom||t.subdomain+'.belleplanner.com.br'}" target="_blank" class="btn btn-ghost btn-sm" style="text-decoration:none">Ver ↗</a>`:''}
+          ${(t.domain_custom||t.subdomain)?`<a href="https://${t.domain_custom||(t.subdomain+'.belleplanner.com.br')}" target="_blank" class="btn btn-ghost btn-sm" style="text-decoration:none">Ver ↗</a>`:''}
         </div>
       </td>
     </tr>`).join('')}
