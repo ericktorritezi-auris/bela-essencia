@@ -73,9 +73,9 @@ async function migrateTenantData(schemaName) {
       return;
     }
 
-    // Migração parcial detectada — limpa e refaz do zero
-    if (hasProc && !hasCity) {
-      console.log(`[DB] Migração parcial detectada em "${schemaName}" — limpando para refazer...`);
+    // Migração parcial ou incompleta — limpa e refaz do zero
+    if (hasProc || hasCity) {
+      console.log(`[DB] Migração incompleta em "${schemaName}" — limpando para refazer...`);
       const tables = [
         'nps_responses','push_subscriptions','push_templates','app_settings',
         'admin_profile','commemorative_dates','promotions','released_slots',
@@ -99,15 +99,29 @@ async function migrateTenantData(schemaName) {
 
     for (const tbl of tables) {
       try {
+        // Busca colunas que existem em AMBOS os schemas (evita mismatch de ordem/estrutura)
+        const { rows: colRows } = await client.query(`
+          SELECT column_name FROM information_schema.columns
+          WHERE table_schema = $1 AND table_name = $2
+            AND column_name IN (
+              SELECT column_name FROM information_schema.columns
+              WHERE table_schema = 'public' AND table_name = $2
+            )
+          ORDER BY ordinal_position
+        `, [schemaName, tbl]);
+
+        if (!colRows.length) continue;
+        const cols = colRows.map(r => `"${r.column_name}"`).join(', ');
+
         await client.query(
-          `INSERT INTO "${schemaName}".${tbl} SELECT * FROM public.${tbl}`
+          `INSERT INTO "${schemaName}".${tbl} (${cols})
+           SELECT ${cols} FROM public.${tbl}`
         );
         const cnt = await client.query(
           `SELECT COUNT(*) as n FROM "${schemaName}".${tbl}`
         );
         console.log(`[DB] Migrado: ${tbl} (${cnt.rows[0].n} registros)`);
       } catch (err) {
-        // Ignora erros de tabela inexistente ou conflito — segue para a próxima
         if (!err.message.includes('does not exist')) {
           console.warn(`[DB] Aviso ao migrar ${tbl}: ${err.message}`);
         }
