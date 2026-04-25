@@ -708,6 +708,7 @@ function renderTenantsTable(containerId, list, compact=false) {
           <button class="btn btn-ghost btn-sm" onclick="openEditModal(${t.id})">Editar</button>
           <button class="btn btn-sm ${t.active?'btn-red':'btn-green'}" onclick="toggleTenant(${t.id},'${t.slug}',${t.active})">${t.active?'Suspender':'Ativar'}</button>
           ${(t.domain_custom||t.subdomain)?`<a href="https://${t.domain_custom||(t.subdomain+'.belleplanner.com.br')}" target="_blank" class="btn btn-ghost btn-sm" style="text-decoration:none">Ver ↗</a>`:''}
+          <button class="btn btn-ghost btn-sm" onclick="syncTenant('${t.schema_name}','${t.business_name||t.name}')" title="Sincronizar dados órfãos do schema public">⚙️ Sync</button>
         </div>
       </td>
     </tr>`).join('')}
@@ -1134,6 +1135,42 @@ async function loadLogs() {
       </tr>`).join('')}
       </tbody></table></div>`;
   } catch(e) { toast(e.message, 'err'); }
+}
+
+// ── SYNC ───────────────────────────────────────────────────────────────────
+async function syncTenant(schema, name) {
+  if (!confirm(`Sincronizar dados órfãos do public → ${schema} (${name})?
+
+Isso move agendamentos, NPS e outros dados que estavam no schema público para o schema correto do tenant.`)) return;
+
+  toast(`⚙️ Sincronizando ${name}...`, 'ok', 30000);
+  try {
+    const r = await POST(`/master/api/sync/${schema}`, {});
+    const synced = r.results.filter(x => x.synced > 0);
+    const errors = r.results.filter(x => x.error);
+
+    let msg = `✅ Sync concluído para ${name}!
+
+`;
+    if (synced.length) {
+      msg += synced.map(x => `• ${x.table}: +${x.synced} registros`).join('
+');
+    } else {
+      msg += '• Nenhum registro órfão encontrado.';
+    }
+    if (errors.length) {
+      msg += `
+
+⚠️ Erros:
+` + errors.map(x => `• ${x.table}: ${x.error}`).join('
+');
+    }
+
+    alert(msg);
+    toast('✅ Sincronização concluída', 'ok');
+  } catch(e) {
+    toast('Erro no sync: ' + e.message, 'err');
+  }
 }
 
 // ── MODALS ─────────────────────────────────────────────────────────────────
