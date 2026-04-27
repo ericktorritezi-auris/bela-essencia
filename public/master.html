@@ -182,6 +182,22 @@
     .sec.active { display:block; }
 
     /* RESPONSIVE */
+    /* Icon buttons — compact action buttons */
+    .icon-btn {
+      width:30px; height:30px; border-radius:7px;
+      background:transparent; border:1px solid var(--border);
+      font-size:14px; cursor:pointer; display:inline-flex;
+      align-items:center; justify-content:center;
+      transition:.15s; flex-shrink:0; text-decoration:none;
+      color:var(--text);
+    }
+    .icon-btn:hover {
+      background:rgba(155,77,106,.12);
+      border-color:var(--rose);
+    }
+    /* Tenant table row — compact */
+    tbody tr td { padding:10px 14px; vertical-align:middle; }
+
     /* Avatar */
     .avatar {
       width:36px; height:36px; border-radius:50%; object-fit:cover;
@@ -946,14 +962,16 @@ function renderTenantsTable(containerId, list, compact=false) {
       <td style="font-size:12px">${fmtDate(t.plan_expires_at)}</td>
       <td>${tenantStatus(t)}</td>
       <td>
-        <div style="display:flex;gap:4px;flex-wrap:wrap">
-          <button class="btn btn-ghost btn-sm" onclick="openEditModal(${t.id})">Editar</button>
-          <button class="btn btn-ghost btn-sm" onclick="openNotesModal(${t.id},'${(t.business_name||t.name).replace(/'/g,'')}')" title="Notas internas">📝</button>
-          <button class="btn btn-ghost btn-sm" onclick="openOnboardingModal(${t.id},'${(t.business_name||t.name).replace(/'/g,'')}')" title="Checklist onboarding">✅</button>
-          <button class="btn btn-sm ${t.active?'btn-red':'btn-green'}" onclick="toggleTenant(${t.id},'${t.slug}',${t.active})">${t.active?'Suspender':'Ativar'}</button>
-          ${(t.domain_custom||t.subdomain)?`<a href="https://${t.domain_custom||(t.subdomain+'.belleplanner.com.br')}" target="_blank" class="btn btn-ghost btn-sm" style="text-decoration:none">Ver ↗</a>`:''}
-          <button class="btn btn-ghost btn-sm" onclick="syncTenant('${t.schema_name}','${t.business_name||t.name}')" title="Sincronizar dados órfãos do schema public">⚙️ Sync</button>
-          <button class="btn btn-ghost btn-sm" onclick="resendWelcome(${t.id},'${(t.business_name||t.name).replace(/'/g,'')}','${t.owner_email||''}')" title="Reenviar e-mail de boas-vindas">📧 E-mail</button>
+        <div style="display:flex;gap:3px;align-items:center;flex-wrap:nowrap">
+          <button class="icon-btn" onclick="openEditModal(${t.id})" title="Editar tenant">✏️</button>
+          <button class="icon-btn" onclick="openNotesModal(${t.id},'${(t.business_name||t.name).replace(/'/g,'')}')" title="Notas internas">📝</button>
+          <button class="icon-btn" onclick="openOnboardingModal(${t.id},'${(t.business_name||t.name).replace(/'/g,'')}')" title="Checklist onboarding">✅</button>
+          <button class="icon-btn" onclick="resetTenantPass(${t.id},'${(t.business_name||t.name).replace(/'/g,'')}')" title="Redefinir senha">🔑</button>
+          <button class="icon-btn" onclick="resendWelcome(${t.id},'${(t.business_name||t.name).replace(/'/g,'')}','${t.owner_email||''}')" title="Reenviar e-mail de boas-vindas">📧</button>
+          ${(t.domain_custom||t.subdomain)?`<a href="https://${t.domain_custom||(t.subdomain+'.belleplanner.com.br')}" target="_blank" class="icon-btn" style="text-decoration:none" title="Abrir agenda">↗</a>`:''}
+          <button class="icon-btn" onclick="syncTenant('${t.schema_name}','${t.business_name||t.name}')" title="Sync dados">⚙️</button>
+          <div style="width:1px;height:20px;background:var(--border);margin:0 2px"></div>
+          <button class="btn btn-sm ${t.active?'btn-red':'btn-green'}" style="padding:4px 10px;font-size:11px;white-space:nowrap" onclick="toggleTenant(${t.id},'${t.slug}',${t.active})">${t.active?'Suspender':'Ativar'}</button>
         </div>
       </td>
     </tr>`).join('')}
@@ -1077,8 +1095,16 @@ async function saveTenant() {
     setProvisionStep(4, 'done');
 
     setTimeout(() => {
-      const passInfo = result?.provisioned ? '' : '';
-      toast('✅ Tenant criado e provisionado! Verifique o e-mail com os dados de acesso.', 'ok', 8000);
+      if (result && result.generated_pass) {
+        alert('✅ Tenant criado com sucesso!\n\n' +
+          '📋 CREDENCIAIS DE ACESSO:\n' +
+          '👤 Login: ' + (result.admin_user || 'admin') + '\n' +
+          '🔑 Senha: ' + result.generated_pass + '\n\n' +
+          '💡 Anote essa senha — ela não será exibida novamente.\n' +
+          'Você pode redefini-la a qualquer momento em Tenants → botão 🔑 Senha.');
+      } else {
+        toast('✅ Tenant criado e provisionado! E-mail enviado.', 'ok', 6000);
+      }
       closeModal('tenant');
       stepsEl.style.display = 'none';
       btn.textContent = 'Criar tenant + provisionar'; btn.disabled = false;
@@ -1669,6 +1695,17 @@ async function loadRevenueProjection() {
         </div>` : ''}
       </div>`;
   } catch(e) { console.error('projection error:', e); }
+}
+
+// ── RESET TENANT PASSWORD ──────────────────────────────────────────────────
+async function resetTenantPass(id, name) {
+  const newPass = prompt('Nova senha para o admin de "' + name + '" (mínimo 6 caracteres):');
+  if (!newPass) return;
+  if (newPass.trim().length < 6) { toast('Senha mínima: 6 caracteres', 'err'); return; }
+  try {
+    await API('PUT', '/master/api/tenants/' + id + '/reset-password', { new_pass: newPass.trim() });
+    toast('✅ Senha redefinida para "' + name + '"', 'ok');
+  } catch(e) { toast('Erro: ' + e.message, 'err'); }
 }
 
 // ── RESEND WELCOME ─────────────────────────────────────────────────────────
