@@ -1220,9 +1220,13 @@ app.use((req, res, next) => {
     req.db = async (sql, params) => {
       const client = await pool.connect();
       try {
-        // Só usa o schema do tenant se os dados já foram migrados
-        const migrated = await isSchemaMigrated(req.schemaName);
-        const schema   = migrated ? req.schemaName : 'public';
+        // tenant_001 (Ana Paula): usa fallback para public se ainda não migrado
+        // Todos os outros tenants: usam sempre o próprio schema (mesmo que vazio)
+        let schema = req.schemaName;
+        if (req.schemaName === 'tenant_001') {
+          const migrated = await isSchemaMigrated('tenant_001');
+          if (!migrated) schema = 'public';
+        }
         await client.query(`SET search_path TO "${schema}", public`);
         return await client.query(sql, params);
       } finally {
