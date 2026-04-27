@@ -182,6 +182,17 @@
     .sec.active { display:block; }
 
     /* RESPONSIVE */
+    /* Avatar */
+    .avatar {
+      width:36px; height:36px; border-radius:50%; object-fit:cover;
+      border:2px solid rgba(255,255,255,.15); flex-shrink:0;
+    }
+    .avatar-initials {
+      width:36px; height:36px; border-radius:50%; background:var(--rose);
+      color:white; font-size:13px; font-weight:800; display:flex;
+      align-items:center; justify-content:center; flex-shrink:0;
+      border:2px solid rgba(255,255,255,.15);
+    }
     /* Pipeline Kanban */
     .kanban-board { display:flex; gap:12px; overflow-x:auto; padding-bottom:8px; }
     .kanban-board::-webkit-scrollbar { height:4px; }
@@ -305,6 +316,13 @@
       <div class="nav-item" id="nav-profile" onclick="showSec('profile')"><span class="nav-icon">👤</span> Meu Perfil</div>
     </nav>
     <div class="sidebar-footer">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px" id="sidebar-avatar-area">
+        <div class="avatar-initials" id="sidebar-avatar">E</div>
+        <div>
+          <div style="font-size:12px;font-weight:800;color:var(--text)" id="sidebar-name">Erick</div>
+          <div style="font-size:10px;color:var(--muted)">Master</div>
+        </div>
+      </div>
       <button class="logout-btn" onclick="doLogout()">Sair do painel</button>
     </div>
   </aside>
@@ -316,7 +334,10 @@
         <button class="ham mobile-menu" onclick="openSidebar()">☰</button>
         <div class="page-title" id="page-title">Dashboard</div>
       </div>
-      <div class="topbar-right" id="topbar-time"></div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div class="topbar-right" id="topbar-time"></div>
+        <div id="topbar-avatar" class="avatar-initials" style="width:32px;height:32px;font-size:11px">E</div>
+      </div>
     </div>
 
     <div class="content">
@@ -494,8 +515,12 @@
     </div>
     <div class="modal-body">
       <div class="fg-row">
-        <div class="fg"><label>Slug (único) *</label><input class="fi" id="t-slug" placeholder="ex: bela-essencia"></div>
-        <div class="fg"><label>Nome *</label><input class="fi" id="t-name" placeholder="Bela Essência"></div>
+        <div class="fg"><label>Nome do negócio *</label>
+          <input class="fi" id="t-name" placeholder="Bela Essência" oninput="autoSlug(this.value)">
+        </div>
+        <div class="fg"><label>Slug (único) *</label>
+          <input class="fi" id="t-slug" placeholder="bela-essencia">
+        </div>
       </div>
       <div class="fg-row">
         <div class="fg"><label>Nome da profissional</label><input class="fi" id="t-owner" placeholder="Ana Paula Silva"></div>
@@ -506,8 +531,20 @@
         <div class="fg"><label>Vencimento</label><input class="fi" id="t-expires" type="date"></div>
       </div>
       <div class="fg-row">
-        <div class="fg"><label>Domínio próprio</label><input class="fi" id="t-domain" placeholder="belaessencia.app.br"></div>
-        <div class="fg"><label>Subdomínio BP</label><input class="fi" id="t-subdomain" placeholder="belaessencia"></div>
+        <div class="fg"><label>Subdomínio Belle Planner *</label>
+          <div style="display:flex;gap:6px;align-items:center">
+            <input class="fi" id="t-subdomain" placeholder="mariaestetica" oninput="updateCnameSuggestion()" style="flex:1">
+            <span style="color:var(--muted);font-size:12px;white-space:nowrap">.belleplanner.com.br</span>
+          </div>
+        </div>
+        <div class="fg"><label>Domínio próprio (opcional)</label><input class="fi" id="t-domain" placeholder="agenda.seudominio.com.br"></div>
+      </div>
+      <div id="cname-box" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:4px">
+        <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:6px">CNAME para adicionar no Railway</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <code style="font-size:12px;color:var(--rose-l);flex:1" id="cname-value"></code>
+          <button onclick="copyCname()" class="btn btn-ghost btn-sm">Copiar</button>
+        </div>
       </div>
       <div class="fg"><label>Nome do negócio</label><input class="fi" id="t-bizname" placeholder="Bela Essência"></div>
       <div class="fg"><label>Tagline</label><input class="fi" id="t-tagline" placeholder="Estética & Beleza · Ana Paula Silva"></div>
@@ -537,9 +574,10 @@
         <div class="fg"><label>Setup / Implantação (R$)</label><input class="fi" id="t-setup" type="number" value="200" min="0" step="0.01"></div>
       </div>
       <div class="fg"><label>Logo URL</label><input class="fi" id="t-logo" placeholder="https://..."></div>
+      <div id="provision-steps" style="display:none;background:var(--surface);border-radius:8px;padding:12px 14px;margin-bottom:12px"></div>
       <div class="modal-footer">
         <button class="btn btn-ghost" onclick="closeModal('tenant')">Cancelar</button>
-        <button class="btn btn-primary" onclick="saveTenant()">Criar tenant + provisionar</button>
+        <button class="btn btn-primary" id="save-tenant-btn" onclick="saveTenant()">Criar tenant + provisionar</button>
       </div>
     </div>
   </div>
@@ -780,6 +818,8 @@ async function init() {
     document.getElementById('topbar-time').textContent =
       new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', hour:'2-digit', minute:'2-digit', day:'2-digit', month:'2-digit' });
   }, 1000);
+  // Load profile for avatar display
+  loadProfile();
   loadDashboard();
 }
 
@@ -943,6 +983,53 @@ function openTenantModal() {
   document.getElementById('modal-tenant-bg').classList.remove('hidden');
 }
 
+// Auto-slug from business name
+function autoSlug(val) {
+  const slug = val.toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '') // remove acentos
+    .replace(/[^a-z0-9\s-]/g, '')
+    .trim().replace(/\s+/g, '-');
+  document.getElementById('t-slug').value = slug;
+  // Also update subdomain suggestion
+  document.getElementById('t-subdomain').value = slug;
+  updateCnameSuggestion();
+}
+
+// CNAME suggestion helpers
+let _railwayUrl = '';
+async function getRailwayUrl() {
+  if (_railwayUrl) return _railwayUrl;
+  _railwayUrl = window.location.hostname.replace('adminpanel.', '').replace('belleplanner.com.br', '') || 'seu-app.railway.app';
+  return _railwayUrl;
+}
+
+function updateCnameSuggestion() {
+  const sub = document.getElementById('t-subdomain').value.trim().toLowerCase();
+  const box = document.getElementById('cname-box');
+  const val = document.getElementById('cname-value');
+  if (sub) {
+    box.style.display = 'block';
+    val.textContent = sub + ' → CNAME → ' + window.location.hostname.split('.').slice(1).join('.');
+  } else {
+    box.style.display = 'none';
+  }
+}
+
+function copyCname() {
+  const text = document.getElementById('cname-value').textContent;
+  navigator.clipboard.writeText(text).then(() => toast('✓ CNAME copiado', 'ok'));
+}
+
+function setProvisionStep(step, status) {
+  const steps = ['🔄 Criando schema...', '🌱 Inserindo dados iniciais...', '💾 Salvando configurações...', '📧 Enviando e-mail de boas-vindas...'];
+  const stepEl = document.getElementById('provision-steps');
+  if (!stepEl) return;
+  stepEl.innerHTML = steps.map((s, i) => {
+    let icon = i < step ? '✅' : i === step ? (status === 'error' ? '❌' : '⏳') : '⏸';
+    return '<div style="font-size:12px;color:' + (i < step ? 'var(--green)' : i === step ? 'var(--text)' : 'var(--muted)') + ';padding:3px 0">' + icon + ' ' + s + '</div>';
+  }).join('');
+}
+
 async function saveTenant() {
   const body = {
     slug:           document.getElementById('t-slug').value.trim().toLowerCase().replace(/\s+/g,'-'),
@@ -969,16 +1056,37 @@ async function saveTenant() {
   if (!body.slug || !body.name || !body.owner_email) {
     toast('Slug, nome e e-mail são obrigatórios', 'err'); return;
   }
+  const btn = document.getElementById('save-tenant-btn');
+  const stepsEl = document.getElementById('provision-steps');
+
   try {
-    const btn = document.querySelector('#modal-tenant-bg .btn-primary');
     btn.textContent = 'Provisionando...'; btn.disabled = true;
-    await POST('/master/api/tenants', body);
-    toast('✓ Tenant criado e provisionado! E-mail enviado.', 'ok', 5000);
-    closeModal('tenant');
-    renderTenants(); loadDashboard();
+    stepsEl.style.display = 'block';
+    setProvisionStep(0, 'running');
+
+    // Simula progresso visual enquanto o servidor processa
+    let step = 0;
+    const stepInterval = setInterval(() => {
+      if (step < 3) { step++; setProvisionStep(step, 'running'); }
+    }, 1200);
+
+    const result = await POST('/master/api/tenants', body);
+
+    clearInterval(stepInterval);
+    setProvisionStep(4, 'done');
+
+    setTimeout(() => {
+      toast('✅ Tenant criado e provisionado! E-mail enviado.', 'ok', 6000);
+      closeModal('tenant');
+      stepsEl.style.display = 'none';
+      btn.textContent = 'Criar tenant + provisionar'; btn.disabled = false;
+      renderTenants(); loadDashboard();
+    }, 800);
+
   } catch(e) {
+    clearInterval && clearInterval();
+    setProvisionStep(0, 'error');
     toast(e.message, 'err');
-    const btn = document.querySelector('#modal-tenant-bg .btn-primary');
     btn.textContent = 'Criar tenant + provisionar'; btn.disabled = false;
   }
 }
@@ -1342,6 +1450,26 @@ async function loadLogs() {
 }
 
 // ── PROFILE ────────────────────────────────────────────────────────────────
+function renderAvatars(name, photoUrl) {
+  const initials = (name || 'E').split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
+  const mkAvatar = (el, size) => {
+    if (!el) return;
+    if (photoUrl) {
+      el.outerHTML = '<img src="' + photoUrl + '" class="avatar" id="' + el.id + '" style="width:' + size + 'px;height:' + size + 'px">';
+    } else {
+      el.className = 'avatar-initials';
+      el.style.width  = size + 'px';
+      el.style.height = size + 'px';
+      el.style.fontSize = (size * 0.38) + 'px';
+      el.textContent = initials;
+    }
+  };
+  mkAvatar(document.getElementById('sidebar-avatar'), 36);
+  mkAvatar(document.getElementById('topbar-avatar'), 32);
+  const nameEl = document.getElementById('sidebar-name');
+  if (nameEl) nameEl.textContent = (name || 'Erick').split(' ')[0];
+}
+
 async function loadProfile() {
   try {
     const p = await GET('/master/api/profile');
@@ -1352,6 +1480,7 @@ async function loadProfile() {
     document.getElementById('mp-support-msg').value = p.support_msg || '';
     document.getElementById('mp-pass').value  = '';
     document.getElementById('mp-pass2').value = '';
+    renderAvatars(p.name, p.photo_url);
   } catch(e) { toast('Erro ao carregar perfil: ' + e.message, 'err'); }
 }
 
