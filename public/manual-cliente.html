@@ -549,5 +549,21 @@
     <p style="margin-top:6px">Dúvidas? Fale com a profissional pelo WhatsApp.</p>
   </footer>
 
+<script>
+fetch('/api/config').then(r=>r.json()).then(cfg=>{
+  if(!cfg) return;
+  const r = document.documentElement.style;
+  if(cfg.primary_color)   r.setProperty('--rose', cfg.primary_color);
+  if(cfg.secondary_color) r.setProperty('--gold', cfg.secondary_color);
+  if(cfg.business_name) {
+    document.querySelectorAll('.header-brand,[data-brand]').forEach(el=>{
+      const p=cfg.business_name.split(' ');
+      el.innerHTML=p.length>=2?p[0]+' <span>'+p.slice(1).join(' ')+'</span>':cfg.business_name;
+    });
+    document.title=cfg.business_name+' — Manual';
+  }
+  if(cfg.tagline) document.querySelectorAll('.brand-tagline,[data-tagline]').forEach(el=>el.textContent=cfg.tagline);
+}).catch(()=>{});
+</script>
 </body>
 </html>

@@ -278,7 +278,7 @@ h1,h2,h3,h4{font-family:'Cormorant Garamond',serif}
 .succ-loc-map:hover{text-decoration:underline}
 
 /* ── ADMIN ── */
-.adm-login-bg{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:linear-gradient(145deg,#1A1214,#3D2B35)}
+.adm-login-bg{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:linear-gradient(145deg,var(--dark,#1A1214),var(--rose-deep,#3D2B35))}
 .adm-login-card{background:white;border-radius:var(--r-lg);padding:38px 30px;width:100%;max-width:340px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3)}
 .adm-layout{display:flex;min-height:100vh}
 .adm-sidebar{width:220px;background:linear-gradient(180deg,#1A1214,#3D2B35);color:white;padding:18px 0 60px;position:fixed;top:0;left:0;height:100vh;overflow-y:auto;z-index:200;transition:transform .28s ease;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.1) transparent}
@@ -489,6 +489,23 @@ tr:hover td{background:#FAF3F6}
   }
 }
 </style>
+<script>
+// Pre-load branding to prevent color flash — runs synchronously before body renders
+(function() {
+  fetch('/api/config').then(r => r.json()).then(cfg => {
+    const root = document.documentElement.style;
+    if (cfg.primary_color) {
+      root.setProperty('--rose', cfg.primary_color);
+      root.setProperty('--rose-deep', cfg.primary_color);
+    }
+    if (cfg.secondary_color) {
+      root.setProperty('--gold', cfg.secondary_color);
+    }
+    // Store for later use
+    window._tenantConfig = cfg;
+  }).catch(() => {});
+})();
+</script>
 </head>
 <body>
 <div id="app">
@@ -619,7 +636,7 @@ tr:hover td{background:#FAF3F6}
     <div class="adm-layout">
       <aside class="adm-sidebar" id="adm-sb">
         <div class="sb-brand">
-          <div class="brand-name" data-brand-name style="font-size:18px;color:var(--rose-mid)">Bela Essência</div>
+          <div class="brand-name" data-admin-brand data-brand-name style="font-size:18px;color:var(--rose-mid)">Bela Essência</div>
           <div class="sb-sub">Painel Admin</div>
         </div>
         <div>
@@ -1187,8 +1204,8 @@ tr:hover td{background:#FAF3F6}
 // ══════════════════════════════════════════════════
 // VERSÃO — altere APENAS aqui; atualiza todos os rodapés
 // ══════════════════════════════════════════════════
-const APP_VERSION  = '2.4.0';
-const APP_COPY     = `Versão: ${APP_VERSION} | Clínica Bela Essência © ${new Date().getFullYear()}`;
+const APP_VERSION  = '2.5.0';
+const APP_COPY     = `Versão: ${APP_VERSION} | ${(window._tenantConfig?.business_name || 'Belle Planner')} © ${new Date().getFullYear()}`;
 
 function renderFooters() {
   document.querySelectorAll('[id^="footer-"]').forEach(el => {
@@ -4025,7 +4042,7 @@ function showWelcomePopup() {
   if (isInstalled) return;
 
   // Preenche com o nome do profissional (já carregado em PROF)
-  const profName = PROF.name || 'nossa profissional';
+  const profName = PROF.name || window._tenantConfig?.business_name || 'nossa profissional';
   document.getElementById('welcome-title').textContent  = `Olá, seja bem-vinda(o)!`;
   document.getElementById('welcome-subtitle').textContent = `Agenda de ${profName}`;
   document.getElementById('welcome-msg').innerHTML =
@@ -4198,17 +4215,41 @@ async function applyBranding() {
   root.setProperty('--rose-mid',   hexToRgba(cfg.primary_color || BRAND_DEFAULTS.primary_color, 0.4));
 
   // Textos
-  if (cfg.business_name) {
-    document.title = cfg.business_name;
-    document.querySelectorAll('[data-brand-name]').forEach(el => {
-      el.textContent = cfg.business_name;
-    });
-  }
-  if (cfg.tagline) {
-    document.querySelectorAll('[data-brand-tagline]').forEach(el => {
-      el.textContent = cfg.tagline;
-    });
-  }
+  const bizName = cfg.business_name || 'Belle Planner';
+  const tagline = cfg.tagline || '';
+  document.title = bizName + ' — Agendamento Online';
+
+  document.querySelectorAll('[data-brand-name]').forEach(el => {
+    el.textContent = bizName;
+  });
+  document.querySelectorAll('[data-brand-tagline]').forEach(el => {
+    if (tagline) el.textContent = tagline;
+  });
+
+  // Loading screen name
+  document.querySelectorAll('.pl-brand').forEach(el => {
+    const parts = bizName.split(' ');
+    if (parts.length >= 2) {
+      el.innerHTML = parts[0] + ' <em>' + parts.slice(1).join(' ') + '</em>';
+    } else {
+      el.textContent = bizName;
+    }
+  });
+
+  // Admin login brand
+  document.querySelectorAll('[data-admin-brand]').forEach(el => {
+    const parts = bizName.split(' ');
+    if (parts.length >= 2) {
+      el.innerHTML = parts[0] + ' <em>' + parts.slice(1).join(' ') + '</em>';
+    } else {
+      el.textContent = bizName;
+    }
+  });
+
+  // Footer — update APP_COPY text
+  document.querySelectorAll('[id^="footer-"]').forEach(el => {
+    el.textContent = 'Versão: ' + (typeof APP_VERSION !== 'undefined' ? APP_VERSION : '') + ' | ' + bizName + ' © ' + new Date().getFullYear();
+  });
 
   // Logo ou nome de texto
   document.querySelectorAll('[data-brand-name]').forEach(el => {
