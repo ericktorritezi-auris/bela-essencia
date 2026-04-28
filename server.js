@@ -1304,18 +1304,23 @@ app.get('/api/health', async (req, res) => {
 // ── Auth ──────────────────────────────────────────────────────────────────────
 app.post('/api/auth/login', async (req, res) => {
   const { user, pass } = req.body;
+  const bcrypt = require('bcryptjs');
   try {
-    // Check DB first, fallback to env vars
+    // Tenta autenticar pelo banco do tenant (pass_hash com bcrypt)
     const { rows } = await req.db(
-      'SELECT password FROM admin_profile WHERE login=$1 LIMIT 1', [user]
+      'SELECT pass_hash FROM admin_profile WHERE login=$1 LIMIT 1', [user]
     );
-    const dbPass = rows.length ? rows[0].password : null;
-    const validPass = dbPass ? (pass === dbPass) : (user === ADMIN_USER && pass === ADMIN_PASS);
-    if (validPass) {
-      req.session.isAdmin = true;
-      return res.json({ ok: true });
+    if (rows.length && rows[0].pass_hash) {
+      const valid = await bcrypt.compare(pass, rows[0].pass_hash);
+      if (valid) {
+        req.session.isAdmin = true;
+        return res.json({ ok: true });
+      } else {
+        return res.status(401).json({ error: 'Credenciais inválidas' });
+      }
     }
-  } catch { /* fallback to env */ }
+  } catch (e) { console.error('[Auth]', e.message); }
+  // Fallback para variáveis de ambiente (Ana Paula / dev)
   if (user === ADMIN_USER && pass === ADMIN_PASS) {
     req.session.isAdmin = true;
     return res.json({ ok: true });
@@ -2445,7 +2450,11 @@ app.post('/master/api/tenants', requireMaster, async (req, res) => {
   const schemaName = `tenant_${slug.replace(/[^a-z0-9]/gi,'_')}`;
 
   // Gera senha automática se não fornecida
-  const finalPass = admin_pass?.trim() || generatePassword();
+  if (!admin_pass || admin_pass.trim().length < 6) {
+    await client.query('ROLLBACK');
+    return res.status(400).json({ error: 'Senha obrigatória — mínimo 6 caracteres' });
+  }
+  const finalPass = admin_pass.trim();
   const passHash  = await bcrypt.hash(finalPass, 10);
 
   const client = await pool.connect();
@@ -3014,18 +3023,17 @@ app.put('/master/api/tenants/:id/reset-password', requireMaster, async (req, res
 app.post('/master/api/tenants/:id/resend-welcome', requireMaster, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT t.*, tc.business_name, tc.admin_user
+      `SELECT t.*, tc.business_name, tc.admin_user, tc.primary_color
        FROM tenants t LEFT JOIN tenant_configs tc ON tc.tenant_id=t.id
        WHERE t.id=$1 LIMIT 1`,
       [req.params.id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Tenant não encontrado' });
     const t = rows[0];
-    const { new_pass } = req.body;
 
     await sendTenantWelcomeEmail(t, {
       admin_user:    t.admin_user || 'admin',
-      admin_pass:    new_pass || '(a senha não foi alterada)',
+      admin_pass:    null, // senha não exibida no reenvio
       business_name: t.business_name || t.name,
     });
     await logAction(t.id, 'welcome_email_resent', `E-mail reenviado para ${t.owner_email}`);
@@ -3135,10 +3143,10 @@ async function sendTenantWelcomeEmail(tenant, { admin_user, admin_pass, business
   const html = `
     <div style="font-family:Arial,sans-serif;max-width:580px;margin:0 auto;background:#fdf5f8;padding:24px">
       <div style="text-align:center;margin-bottom:24px">
-        <div style="font-family:Georgia,serif;font-size:26px;color:#9b4d6a">Belle <em>Planner</em></div>
+        <div style="font-family:Georgia,serif;font-size:26px;color:${tenant.primary_color||'#9b4d6a'}">Belle <em>Planner</em></div>
         <div style="font-size:11px;letter-spacing:.1em;color:#b07090;text-transform:uppercase">Sua agenda está no ar!</div>
       </div>
-      <div style="background:linear-gradient(135deg,#9b4d6a,#7b3050);border-radius:12px;padding:24px;color:white;text-align:center;margin-bottom:20px">
+      <div style="background:linear-gradient(135deg,${t.primary_color||'#9b4d6a'},#5a1a30);border-radius:12px;padding:24px;color:white;text-align:center;margin-bottom:20px">
         <div style="font-family:Georgia,serif;font-size:22px;margin-bottom:8px">Olá, ${tenant.owner_name || 'Profissional'}! 🎉</div>
         <p style="opacity:.9;margin:0">Sua agenda <strong>${business_name}</strong> foi criada com sucesso e já está disponível!</p>
       </div>
@@ -3229,7 +3237,7 @@ cron.schedule('0 11 * * *', async () => {
           <div style="text-align:center;margin-bottom:20px">
             <div style="font-family:Georgia,serif;font-size:24px;color:#9b4d6a">Belle Planner</div>
           </div>
-          <div style="background:linear-gradient(135deg,#C49A3C,#9b6a10);border-radius:12px;padding:20px;color:white;text-align:center;margin-bottom:20px">
+          <div style="background:linear-gradient(135deg,${t.monthly_fee>0?'#C49A3C':'#9b4d6a'},#7b5010);border-radius:12px;padding:20px;color:white;text-align:center;margin-bottom:20px">
             <div style="font-size:32px;margin-bottom:8px">⚠️</div>
             <div style="font-family:Georgia,serif;font-size:20px">Sua agenda vence em 5 dias</div>
           </div>
@@ -3350,6 +3358,29 @@ app.get('/master/api/health/history', requireMaster, async (req, res) => {
       ORDER BY l.created_at DESC LIMIT 50`);
     res.json(rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Dynamic manifest.json per tenant ────────────────────────────────────────
+app.get('/manifest.json', async (req, res) => {
+  const cfg = req.tenant || {};
+  const name      = cfg.business_name || 'Belle Planner';
+  const color     = cfg.primary_color  || '#9b4d6a';
+  const bgColor   = cfg.primary_color  || '#9b4d6a';
+  res.json({
+    name,
+    short_name:       name.split(' ')[0],
+    description:      `Agendamento online — ${name}`,
+    start_url:        '/',
+    display:          'standalone',
+    orientation:      'portrait',
+    background_color: bgColor,
+    theme_color:      color,
+    icons: [
+      { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
+      { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+    ],
+  });
 });
 
 // ── Tenant Config (White Label) ───────────────────────────────────────────────
@@ -3828,7 +3859,7 @@ async function sendEmail({ to, bcc, subject, html }) {
       'Content-Type':  'application/json',
     },
     body: JSON.stringify({
-      from:    'Belle Planner <noreply@belaessencia.app.br>',
+      from:    `Belle Planner <${MASTER_FROM_EMAIL}>`,
       to:      Array.isArray(to) ? to : [to],
       bcc:     bcc ? (Array.isArray(bcc) ? bcc : [bcc]) : undefined,
       subject,
