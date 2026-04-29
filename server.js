@@ -704,6 +704,20 @@ async function initDB() {
     `);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_pipeline_status ON sales_pipeline(status)`);
 
+    // Tabela: snapshots da agenda diária (gerados à meia-noite, enviados às 06h30)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS daily_agenda_snapshots (
+        id          SERIAL PRIMARY KEY,
+        tenant_id   INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        snap_date   DATE NOT NULL,
+        snapshot    JSONB NOT NULL,
+        sent        BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE(tenant_id, snap_date)
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_snap_date ON daily_agenda_snapshots(snap_date, sent)`);
+
     // Seed: plano padrão se ainda não existir
     const planCheck = await client.query("SELECT 1 FROM plans WHERE name='Essencial' LIMIT 1");
     if (!planCheck.rowCount) {
@@ -4005,11 +4019,138 @@ app.post('/api/admin/send-daily-email', requireAdmin, async (req, res) => {
   }
 });
 
-// Cron: todo dia às 06h30 horário de Brasília (= 09h30 UTC)
-// Railway está em UTC → 06h30 BRT = 09h30 UTC
-cron.schedule('30 9 * * *', () => {
-  console.log('[Cron] Disparando e-mail da agenda diária...');
-  sendDailyAgendaEmail();
+// ── Cron: snapshot à meia-noite BRT (03h00 UTC) ─────────────────────────────
+cron.schedule('0 3 * * *', async () => {
+  console.log('[Cron] 00h00 BRT — gerando snapshots da agenda do dia...');
+  try {
+    const today = todayBrasilia();
+    const { rows: tenants } = await pool.query(
+      `SELECT t.id, t.schema_name, t.name, tc.business_name
+       FROM tenants t LEFT JOIN tenant_configs tc ON tc.tenant_id=t.id
+       WHERE t.active=TRUE`
+    );
+    for (const t of tenants) {
+      try {
+        const client = await pool.connect();
+        let appts = [];
+        try {
+          await client.query(`SET search_path TO "${t.schema_name}", public`);
+          const { rows } = await client.query(
+            `SELECT a.*, c.name as city_name FROM appointments a
+             LEFT JOIN cities c ON c.id = a.city_id
+             WHERE a.date = $1 AND a.status != 'cancelled'
+             ORDER BY a.st`,
+            [today]
+          );
+          appts = rows;
+        } finally { client.release(); }
+        await pool.query(
+          `INSERT INTO daily_agenda_snapshots (tenant_id, snap_date, snapshot, sent)
+           VALUES ($1, $2, $3::jsonb, FALSE)
+           ON CONFLICT (tenant_id, snap_date)
+           DO UPDATE SET snapshot=$3::jsonb, sent=FALSE, created_at=NOW()`,
+          [t.id, today, JSON.stringify({ appointments: appts, generated_at: new Date().toISOString() })]
+        );
+        console.log('[Cron] Snapshot ' + (t.business_name||t.name) + ': ' + appts.length + ' agendamentos');
+      } catch (e) { console.error('[Cron] Snapshot erro ' + t.name + ':', e.message); }
+    }
+  } catch (e) { console.error('[Cron] Snapshot geral:', e.message); }
+});
+
+// ── Cron: e-mail diário às 06h30 BRT (09h30 UTC) — usa snapshot da meia-noite
+cron.schedule('30 9 * * *', async () => {
+  console.log('[Cron] 06h30 BRT — disparando e-mails da agenda diária...');
+  try {
+    const today = todayBrasilia();
+
+    // Busca snapshots do dia ainda não enviados
+    const { rows: snaps } = await pool.query(
+      `SELECT s.*, t.schema_name, t.name as tenant_name,
+              tc.business_name, tc.primary_color, tc.resend_from_email,
+              tc.whatsapp_number
+       FROM daily_agenda_snapshots s
+       JOIN tenants t ON t.id = s.tenant_id
+       LEFT JOIN tenant_configs tc ON tc.tenant_id = t.id
+       WHERE s.snap_date = $1 AND s.sent = FALSE AND t.active = TRUE`,
+      [today]
+    );
+
+    if (!snaps.length) {
+      // Fallback: nenhum snapshot gerado (servidor reiniciou após meia-noite?)
+      // Gera snapshot em tempo real e envia
+      console.log('[Cron] Sem snapshots — gerando em tempo real...');
+      await sendDailyAgendaEmail();
+      return;
+    }
+
+    for (const snap of snaps) {
+      try {
+        const data    = snap.snapshot;
+        const appts   = data.appointments || [];
+        const genAt   = data.generated_at ? new Date(data.generated_at).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '00h00';
+
+        // Busca email do profissional no schema do tenant
+        const client = await pool.connect();
+        let prof = null;
+        try {
+          await client.query(`SET search_path TO "${snap.schema_name}", public`);
+          const { rows } = await client.query(`SELECT name, email FROM admin_profile LIMIT 1`);
+          prof = rows[0];
+        } finally { client.release(); }
+
+        if (!prof?.email) {
+          console.log('[Cron] Sem e-mail para ' + (snap.business_name||snap.tenant_name));
+          continue;
+        }
+
+        const bizName = snap.business_name || snap.tenant_name;
+        const color   = snap.primary_color || '#9b4d6a';
+
+        // Monta HTML do email com os agendamentos do snapshot
+        const rows_html = appts.length ? appts.map(a =>
+          '<tr>' +
+          '<td style="padding:8px 12px;border-bottom:1px solid #f0e0e8;font-size:13px;color:#4a3040">' + a.st + ' – ' + a.et + '</td>' +
+          '<td style="padding:8px 12px;border-bottom:1px solid #f0e0e8;font-size:13px;color:#4a3040;font-weight:600">' + a.name + '</td>' +
+          '<td style="padding:8px 12px;border-bottom:1px solid #f0e0e8;font-size:13px;color:#6a4060">' + (a.proc_name||'') + '</td>' +
+          '<td style="padding:8px 12px;border-bottom:1px solid #f0e0e8;font-size:13px;color:#8a6070">' + (a.city_name||'') + '</td>' +
+          '</tr>'
+        ).join('') : '<tr><td colspan="4" style="padding:16px;text-align:center;color:#8a6070;font-style:italic">Nenhum agendamento para hoje</td></tr>';
+
+        const html = '<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#fdf5f8;padding:20px">' +
+          '<div style="background:linear-gradient(135deg,' + color + ',#5a1a30);border-radius:10px;padding:20px;color:white;text-align:center;margin-bottom:16px">' +
+            '<div style="font-size:20px;font-weight:bold">' + bizName + '</div>' +
+            '<div style="opacity:.85;font-size:13px;margin-top:4px">Agenda de hoje · ' + new Date().toLocaleDateString('pt-BR', {timeZone:'America/Sao_Paulo',weekday:'long',day:'numeric',month:'long'}) + '</div>' +
+          '</div>' +
+          '<div style="background:white;border-radius:8px;overflow:hidden;margin-bottom:12px">' +
+            '<table style="width:100%;border-collapse:collapse">' +
+              '<thead><tr style="background:#f5eaef">' +
+                '<th style="padding:8px 12px;text-align:left;font-size:11px;color:#9b4d6a;font-weight:800;text-transform:uppercase">Horário</th>' +
+                '<th style="padding:8px 12px;text-align:left;font-size:11px;color:#9b4d6a;font-weight:800;text-transform:uppercase">Cliente</th>' +
+                '<th style="padding:8px 12px;text-align:left;font-size:11px;color:#9b4d6a;font-weight:800;text-transform:uppercase">Procedimento</th>' +
+                '<th style="padding:8px 12px;text-align:left;font-size:11px;color:#9b4d6a;font-weight:800;text-transform:uppercase">Local</th>' +
+              '</tr></thead>' +
+              '<tbody>' + rows_html + '</tbody>' +
+            '</table>' +
+          '</div>' +
+          '<p style="text-align:center;font-size:10px;color:#aaa">Agenda gerada às ' + genAt + ' · Belle Planner</p>' +
+        '</div>';
+
+        await sendEmail({
+          to:      prof.email,
+          bcc:     prof.email !== 'erick.torritezi@gmail.com' ? 'erick.torritezi@gmail.com' : undefined,
+          subject: bizName + ' · Agenda de hoje ' + new Date().toLocaleDateString('pt-BR', {timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit'}),
+          html,
+        });
+
+        // Marca como enviado
+        await pool.query(
+          `UPDATE daily_agenda_snapshots SET sent=TRUE WHERE id=$1`,
+          [snap.id]
+        );
+        console.log('[Cron] E-mail enviado: ' + bizName + ' (' + appts.length + ' agendamentos)');
+      } catch (e) { console.error('[Cron] Erro no envio para ' + snap.tenant_name + ':', e.message); }
+    }
+  } catch (e) { console.error('[Cron] Erro geral 06h30:', e.message); }
 }, { timezone: 'UTC' });
 
 async function start() {
