@@ -255,8 +255,11 @@ async function createTenantSchema(schemaName) {
         month INTEGER NOT NULL, message VARCHAR(500), is_active BOOLEAN NOT NULL DEFAULT TRUE
       )`,
       `CREATE TABLE IF NOT EXISTS admin_profile (
-        id SERIAL PRIMARY KEY, name VARCHAR(100) NOT NULL DEFAULT 'Profissional',
-        email VARCHAR(150), login VARCHAR(50) NOT NULL DEFAULT 'admin',
+        id        SERIAL       PRIMARY KEY,
+        name      VARCHAR(200) NOT NULL DEFAULT 'Profissional',
+        phone     VARCHAR(30),
+        email     VARCHAR(150),
+        login     VARCHAR(50)  NOT NULL DEFAULT 'admin',
         pass_hash TEXT
       )`,
       `CREATE TABLE IF NOT EXISTS push_subscriptions (
@@ -685,8 +688,8 @@ async function initDB() {
           if (Number(apRows[0].n) === 0 && t.admin_pass_hash) {
             // Insere admin_profile do zero
             await tc.query(
-              `INSERT INTO admin_profile (name, email, login, pass_hash)
-               VALUES ($1, $2, $3, $4)`,
+              `INSERT INTO admin_profile (name, phone, email, login, pass_hash)
+               VALUES ($1, '', $2, $3, $4)`,
               [t.business_name || t.name || 'Profissional',
                t.owner_email   || '',
                t.admin_user    || 'admin',
@@ -926,6 +929,8 @@ async function initDB() {
     // Migração: cidades — adiciona uf e neighborhood em public e em todos os schemas de tenant
     await client.query(`ALTER TABLE cities ADD COLUMN IF NOT EXISTS uf VARCHAR(2)`);
     await client.query(`ALTER TABLE cities ADD COLUMN IF NOT EXISTS neighborhood VARCHAR(100)`);
+    // Migração: admin_profile — adiciona phone se não existir
+    await client.query(`ALTER TABLE admin_profile ADD COLUMN IF NOT EXISTS phone VARCHAR(30)`);
     // Roda migration em todos os schemas de tenant existentes
     const { rows: schemas } = await client.query(
       `SELECT schema_name FROM tenants WHERE schema_name IS NOT NULL`
@@ -934,6 +939,7 @@ async function initDB() {
       try {
         await client.query(`ALTER TABLE "${schema_name}".cities ADD COLUMN IF NOT EXISTS uf VARCHAR(2)`);
         await client.query(`ALTER TABLE "${schema_name}".cities ADD COLUMN IF NOT EXISTS neighborhood VARCHAR(100)`);
+        await client.query(`ALTER TABLE "${schema_name}".admin_profile ADD COLUMN IF NOT EXISTS phone VARCHAR(30)`);
         // Preenche UF=PR para cidades sem UF (padrão para cidades do Paraná)
         await client.query(
           `UPDATE "${schema_name}".cities SET uf='PR' WHERE (uf IS NULL OR uf='') AND id > 0`
@@ -2309,16 +2315,21 @@ app.put('/api/work-configs/:id', requireAdmin, async (req, res) => {
 app.get('/api/admin/profile/public', async (req, res) => {
   try {
     const { rows } = await req.db(
-      'SELECT name, phone FROM admin_profile LIMIT 1'
+      'SELECT name, phone, email FROM admin_profile LIMIT 1'
     );
-    res.json(rows[0] || { name: 'Profissional', phone: '' });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+    const fallbackName = req.tenant?.business_name || 'Profissional';
+    res.json(rows[0] || { name: fallbackName, phone: '', email: '' });
+  } catch (err) {
+    // Fallback gracioso mesmo com erro de DB
+    const fallbackName = req.tenant?.business_name || 'Profissional';
+    res.json({ name: fallbackName, phone: '', email: '' });
+  }
 });
 
 app.get('/api/admin/profile', requireAdmin, async (req, res) => {
   try {
     const { rows } = await req.db(
-      'SELECT id, name, email, login FROM admin_profile LIMIT 1'
+      'SELECT id, name, phone, email, login FROM admin_profile LIMIT 1'
     );
     res.json(rows[0] || {});
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -2327,10 +2338,11 @@ app.get('/api/admin/profile', requireAdmin, async (req, res) => {
 app.put('/api/admin/profile', requireAdmin, async (req, res) => {
   const { name, phone, email } = req.body;
   if (!name || !email) return res.status(400).json({ error: 'Nome e e-mail são obrigatórios' });
+  // phone is optional
   try {
     await req.db(
-      `UPDATE admin_profile SET name=$1, email=$2 WHERE id IN (SELECT id FROM admin_profile LIMIT 1)`,
-      [name, email]
+      `UPDATE admin_profile SET name=$1, phone=$2, email=$3 WHERE id IN (SELECT id FROM admin_profile LIMIT 1)`,
+      [name, phone || '', email]
     );
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
