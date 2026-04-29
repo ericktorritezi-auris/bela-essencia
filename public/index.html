@@ -283,7 +283,7 @@ h1,h2,h3,h4{font-family:'Cormorant Garamond',serif}
 .adm-login-bg{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:linear-gradient(145deg,var(--dark,#1A1214),var(--rose-deep,#3D2B35))}
 .adm-login-card{background:white;border-radius:var(--r-lg);padding:38px 30px;width:100%;max-width:340px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3)}
 .adm-layout{display:flex;min-height:100vh}
-.adm-sidebar{width:220px;background:linear-gradient(180deg,#1A1214,#3D2B35);color:white;padding:18px 0 60px;position:fixed;top:0;left:0;height:100vh;overflow-y:auto;z-index:200;transition:transform .28s ease;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.1) transparent}
+.adm-sidebar{width:220px;background:linear-gradient(180deg,var(--dark,#1A1214),var(--rose-deep,#3D2B35));color:white;padding:18px 0 60px;position:fixed;top:0;left:0;height:100vh;overflow-y:auto;z-index:200;transition:transform .28s ease;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.1) transparent}
 .sb-brand{padding:0 18px 12px;border-bottom:1px solid rgba(255,255,255,.08);margin-bottom:6px}
 .sb-sub{font-size:9px;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:.15em}
 .nav-sec-ttl{font-size:8.5px;text-transform:uppercase;letter-spacing:.16em;color:rgba(255,255,255,.28);padding:10px 18px 2px}
@@ -292,7 +292,7 @@ h1,h2,h3,h4{font-family:'Cormorant Garamond',serif}
 .nav-item.active{background:rgba(155,77,106,.28);color:white;border-left-color:var(--rose-mid)}
 .nav-icon{font-size:13px;width:16px;text-align:center;flex-shrink:0}
 .sb-foot{padding:10px 0;border-top:1px solid rgba(255,255,255,.08);margin-top:6px}
-.adm-main{margin-left:220px;flex:1;background:#F4EEF2;min-height:100vh}
+.adm-main{margin-left:220px;flex:1;background:var(--cream,#F4EEF2);min-height:100vh}
 .adm-topbar{background:white;padding:14px 24px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);box-shadow:var(--sh-sm);position:sticky;top:0;z-index:100;gap:12px}
 .adm-ttl{font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:600;color:var(--dark)}
 .mob-menu{display:none;background:var(--rose);border:none;color:white;padding:7px 11px;border-radius:var(--r-sm);cursor:pointer;font-size:17px}
@@ -494,31 +494,56 @@ tr:hover td{background:#FAF3F6}
 <script>
 // Pre-load branding — runs before body renders to prevent color flash AND loading screen wrong name
 (function() {
-  fetch('/api/config').then(r => r.json()).then(cfg => {
+  // Inline shade helper for pre-load (before main JS loads)
+  function _shade(hex, pct) {
+    try {
+      var n=parseInt(hex.replace('#',''),16),
+          r=Math.min(255,Math.max(0,(n>>16)+Math.round(255*pct/100))),
+          g=Math.min(255,Math.max(0,((n>>8)&255)+Math.round(255*pct/100))),
+          b=Math.min(255,Math.max(0,(n&255)+Math.round(255*pct/100)));
+      return '#'+[r,g,b].map(function(v){return v.toString(16).padStart(2,'0');}).join('');
+    } catch(e){return hex;}
+  }
+  function _rgba(hex,a){
+    try{var n=parseInt(hex.replace('#',''),16);
+      return 'rgba('+((n>>16)&255)+','+((n>>8)&255)+','+(n&255)+','+a+')';}
+    catch(e){return hex;}
+  }
+  fetch('/api/config').then(function(r){return r.json();}).then(function(cfg) {
     if (!cfg || !cfg.primary_color) return;
     window._tenantConfig = cfg;
-    const root = document.documentElement.style;
-    // Set ALL CSS vars immediately
-    const p = cfg.primary_color, s = cfg.secondary_color || '#C49A3C';
-    root.setProperty('--rose',        p);
-    root.setProperty('--rose-deep',   p);
-    root.setProperty('--gold',        s);
-    // Update loading screen name as soon as DOM is ready (or immediately if already ready)
-    const updateLoadingScreen = () => {
-      const el = document.querySelector('.pl-brand');
+    var root = document.documentElement.style;
+    var p = cfg.primary_color, s = cfg.secondary_color || '#C49A3C';
+    // Set ALL CSS vars immediately — prevents color flash in admin panel
+    root.setProperty('--rose',         p);
+    root.setProperty('--rose-deep',    _shade(p, -20));
+    root.setProperty('--rose-light',   _rgba(p, 0.08));
+    root.setProperty('--rose-mid',     _rgba(p, 0.35));
+    root.setProperty('--gold',         s);
+    root.setProperty('--gold-light',   _rgba(s, 0.15));
+    root.setProperty('--gold-deep',    _shade(s, -20));
+    root.setProperty('--dark',         _shade(p, -70));
+    root.setProperty('--text',         _shade(p, -40));
+    root.setProperty('--text-light',   _rgba(p, 0.55));
+    root.setProperty('--border',       _rgba(p, 0.18));
+    root.setProperty('--border-light', _rgba(p, 0.10));
+    root.setProperty('--cream',        _rgba(p, 0.04));
+    // Update loading screen name
+    var updateLoad = function() {
+      var el = document.querySelector('.pl-brand');
       if (!el) return;
-      const name = cfg.business_name || 'Belle Planner';
-      const parts = name.split(' ');
+      var name = cfg.business_name || 'Belle Planner';
+      var parts = name.split(' ');
       el.innerHTML = parts.length >= 2
         ? parts[0] + ' <em>' + parts.slice(1).join(' ') + '</em>'
         : name;
     };
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', updateLoadingScreen);
+      document.addEventListener('DOMContentLoaded', updateLoad);
     } else {
-      updateLoadingScreen();
+      updateLoad();
     }
-  }).catch(() => {});
+  }).catch(function(){});
 })();
 </script>
 </head>
@@ -1221,7 +1246,7 @@ tr:hover td{background:#FAF3F6}
 // ══════════════════════════════════════════════════
 // VERSÃO — altere APENAS aqui; atualiza todos os rodapés
 // ══════════════════════════════════════════════════
-const APP_VERSION  = '2.6.2';
+const APP_VERSION  = '2.6.4';
 const APP_COPY     = `Versão: ${APP_VERSION} | ${(window._tenantConfig?.business_name || 'Belle Planner')} © ${new Date().getFullYear()}`;
 
 function renderFooters() {
@@ -1819,6 +1844,8 @@ async function doLogout() {
 function toggleSB(){document.getElementById('adm-sb').classList.toggle('open')}
 
 async function initAdmin() {
+  // Reaplica branding para garantir cores corretas no painel admin
+  await applyBranding();
   // Load cities for agenda filter
   await loadCities();
   document.getElementById('fl-city').innerHTML='<option value="">Todas as cidades</option>'+
