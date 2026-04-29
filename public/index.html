@@ -1279,7 +1279,7 @@ tr:hover td{background:#FAF3F6}
 // ══════════════════════════════════════════════════
 // VERSÃO — altere APENAS aqui; atualiza todos os rodapés
 // ══════════════════════════════════════════════════
-const APP_VERSION  = '2.7.0';
+const APP_VERSION  = '2.7.1';
 const APP_COPY     = `Versão: ${APP_VERSION} | ${(window._tenantConfig?.business_name || 'Belle Planner')} © ${new Date().getFullYear()}`;
 
 function renderFooters() {
@@ -4218,34 +4218,46 @@ function showPWABanner() {
     // iOS: mostrar dica manual (Safari não suporta beforeinstallprompt)
     const hint = document.createElement('div');
     hint.className = 'ios-hint';
-    hint.innerHTML = `
-      <button class="ios-close" onclick="dismissPWA(this.closest('.ios-hint'))">✕</button>
-      <div class="ios-hint-ttl">Instalar ` + ((window._tenantConfig && window._tenantConfig.business_name) ? window._tenantConfig.business_name : 'o app') + `</div>
-      <div class="ios-hint-body">
-        Toque em <strong>Compartilhar</strong> (□↑) e depois em
-        <strong>"Adicionar à Tela de Início"</strong> para acesso rápido.
-      </div>
-    \`;
+    const _iosName = (window._tenantConfig && window._tenantConfig.business_name) ? window._tenantConfig.business_name : 'o app';
+    hint.innerHTML =
+      '<button class="ios-close" onclick="dismissPWA(this.closest(\'.ios-hint\'))">✕</button>' +
+      '<div class="ios-hint-ttl">Instalar ' + _iosName + '</div>' +
+      '<div class="ios-hint-body">Toque em <strong>Compartilhar</strong> (□↑) e depois em <strong>"Adicionar à Tela de Início"</strong> para acesso rápido.</div>';
     document.body.appendChild(hint);
     return;
   }
 
-  if (deferredInstallPrompt) {
-    const banner = document.createElement('div');
-    banner.className = 'pwa-banner';
-    banner.id = 'pwa-banner';
-    const _tName = (window._tenantConfig && window._tenantConfig.business_name) ? window._tenantConfig.business_name : 'o app';
+  // Mostra banner de instalação — com prompt nativo (Android) ou instrução genérica
+  const _tName = (window._tenantConfig && window._tenantConfig.business_name) ? window._tenantConfig.business_name : 'o app';
   const _tIcon = (window._tenantConfig && window._tenantConfig.logo_url) ? window._tenantConfig.logo_url : '/favicon-dynamic.svg';
-  banner.innerHTML =
-      '<div class="pwa-icon"><img src="' + _tIcon + '" alt="' + _tName + '" style="width:48px;height:48px;object-fit:contain;border-radius:10px"></div>' +
-      '<div class="pwa-text"><strong>Instalar ' + _tName + '</strong><span>Acesso rápido direto da tela inicial</span></div>'
-      <div class="pwa-actions">
-        <button class="pwa-btn-install" onclick="installPWA()">Instalar</button>
-        <button class="pwa-btn-dismiss" onclick="dismissPWA(document.getElementById('pwa-banner'))">Agora não, obrigada(o)</button>
-      </div>
-    `;
-    document.body.appendChild(banner);
+  const banner = document.createElement('div');
+  banner.className = 'pwa-banner';
+  banner.id = 'pwa-banner';
+
+  if (deferredInstallPrompt) {
+    // Android Chrome — prompt nativo disponível
+    banner.innerHTML =
+      '<div class="pwa-icon"><img src="' + _tIcon + '" alt="' + _tName + '" style="width:48px;height:48px;object-fit:contain;border-radius:10px" onerror="this.style.display=\'none\'"></div>' +
+      '<div class="pwa-text"><strong>Instalar ' + _tName + '</strong><span>Acesso rápido na tela inicial</span></div>' +
+      '<div class="pwa-actions">' +
+        '<button class="pwa-btn-install" onclick="installPWA()">Instalar</button>' +
+        '<button class="pwa-btn-dismiss" onclick="dismissPWA(document.getElementById(\'pwa-banner\'))">Agora não</button>' +
+      '</div>';
+  } else {
+    // Sem prompt nativo — instrução genérica para Chrome/outros
+    const isChrome = /chrome/i.test(navigator.userAgent) && !/edg/i.test(navigator.userAgent);
+    const instruction = isChrome
+      ? 'Toque em ⋮ (menu) → <strong>Adicionar à tela inicial</strong>'
+      : 'Use o menu do navegador → <strong>Adicionar à tela inicial</strong>';
+    banner.innerHTML =
+      '<div class="pwa-icon"><img src="' + _tIcon + '" alt="' + _tName + '" style="width:48px;height:48px;object-fit:contain;border-radius:10px" onerror="this.style.display=\'none\'"></div>' +
+      '<div class="pwa-text"><strong>Instalar ' + _tName + '</strong><span>' + instruction + '</span></div>' +
+      '<div class="pwa-actions">' +
+        '<button class="pwa-btn-dismiss" onclick="dismissPWA(document.getElementById(\'pwa-banner\'))">Ok, entendi</button>' +
+      '</div>';
   }
+  document.body.appendChild(banner);
+
 }
 
 async function installPWA() {
