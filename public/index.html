@@ -4210,9 +4210,12 @@ function isIOS() {
   return /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
 }
 
+let _pwaShown = false; // guard: só mostra uma vez por sessão
 function showPWABanner() {
+  if (_pwaShown) return;
   if (isPWAInstalled()) return;
   if (sessionStorage.getItem(PWA_DISMISSED_KEY)) return;
+  _pwaShown = true;
 
   if (isIOS()) {
     // iOS: mostrar dica manual (Safari não suporta beforeinstallprompt)
