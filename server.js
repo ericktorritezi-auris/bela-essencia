@@ -403,8 +403,14 @@ async function tenantMiddleware(req, res, next) {
   try {
     const tenant = await getTenantByHost(host);
     if (tenant) {
-      // Tenant suspenso — serve página de suspensão com identidade visual
+      // Tenant suspenso — serve suspended.html EXCETO para /api/config (necessário para branding)
       if (!tenant.active) {
+        if (req.path === '/api/config') {
+          // Permite /api/config para que suspended.html possa carregar as cores do tenant
+          req.tenant     = tenant;
+          req.schemaName = tenant.schema_name;
+          return next();
+        }
         const path = require('path');
         return res.sendFile(path.join(__dirname, 'public', 'suspended.html'));
       }
@@ -664,6 +670,31 @@ async function initDB() {
       )
     `);
 
+    // Reparo startup: garante que todos os tenants têm admin_profile populado
+    const { rows: allTenants } = await client.query(
+      `SELECT t.id, t.schema_name, t.name, tc.admin_user, tc.admin_pass_hash, tc.business_name
+       FROM tenants t LEFT JOIN tenant_configs tc ON tc.tenant_id=t.id`
+    );
+    for (const t of allTenants) {
+      try {
+        const tc = await pool.connect();
+        try {
+          await tc.query(`SET search_path TO "${t.schema_name}", public`);
+          const { rows: apRows } = await tc.query(`SELECT COUNT(*) as n FROM admin_profile`);
+          if (Number(apRows[0].n) === 0 && t.admin_pass_hash) {
+            await tc.query(
+              `INSERT INTO admin_profile (name, email, login, pass_hash)
+               VALUES ($1, '', $2, $3)`,
+              [t.business_name || t.name || 'Profissional',
+               t.admin_user    || 'admin',
+               t.admin_pass_hash]
+            );
+            console.log(`[DB] admin_profile reparado para "${t.schema_name}"`);
+          }
+        } finally { tc.release(); }
+      } catch {}
+    }
+
     // Seed: onboarding da Ana Paula como completo
     const ob1 = await client.query(`SELECT 1 FROM tenant_onboarding WHERE tenant_id=(SELECT id FROM tenants WHERE slug='bela-essencia') LIMIT 1`);
     if (!ob1.rowCount) {
@@ -877,9 +908,25 @@ async function initDB() {
     // Migração v1.7.0: push_auth nos agendamentos (liga subscription ao agendamento)
     await client.query(`ALTER TABLE appointments ADD COLUMN IF NOT EXISTS push_auth TEXT`);
 
-    // Migração: cidades — adiciona uf e neighborhood se não existirem
+    // Migração: cidades — adiciona uf e neighborhood em public e em todos os schemas de tenant
     await client.query(`ALTER TABLE cities ADD COLUMN IF NOT EXISTS uf VARCHAR(2)`);
     await client.query(`ALTER TABLE cities ADD COLUMN IF NOT EXISTS neighborhood VARCHAR(100)`);
+    // Roda migration em todos os schemas de tenant existentes
+    const { rows: schemas } = await client.query(
+      `SELECT schema_name FROM tenants WHERE schema_name IS NOT NULL`
+    );
+    for (const { schema_name } of schemas) {
+      try {
+        await client.query(`ALTER TABLE "${schema_name}".cities ADD COLUMN IF NOT EXISTS uf VARCHAR(2)`);
+        await client.query(`ALTER TABLE "${schema_name}".cities ADD COLUMN IF NOT EXISTS neighborhood VARCHAR(100)`);
+        // Preenche UF=PR para cidades sem UF (padrão para cidades do Paraná)
+        await client.query(
+          `UPDATE "${schema_name}".cities SET uf='PR' WHERE (uf IS NULL OR uf='') AND id > 0`
+        );
+      } catch {}
+    }
+    // Preenche UF=PR no schema public também
+    await client.query(`UPDATE cities SET uf='PR' WHERE (uf IS NULL OR uf='') AND id > 0`);
 
     // Migração: mensalidade por tenant
     await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS monthly_fee NUMERIC(8,2) NOT NULL DEFAULT 100.00`);
@@ -2256,7 +2303,7 @@ app.get('/api/admin/profile/public', async (req, res) => {
 app.get('/api/admin/profile', requireAdmin, async (req, res) => {
   try {
     const { rows } = await req.db(
-      'SELECT id, name, phone, email, login FROM admin_profile LIMIT 1'
+      'SELECT id, name, email, login FROM admin_profile LIMIT 1'
     );
     res.json(rows[0] || {});
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -2264,11 +2311,11 @@ app.get('/api/admin/profile', requireAdmin, async (req, res) => {
 
 app.put('/api/admin/profile', requireAdmin, async (req, res) => {
   const { name, phone, email } = req.body;
-  if (!name||!phone||!email) return res.status(400).json({ error: 'Nome, telefone e e-mail são obrigatórios' });
+  if (!name || !email) return res.status(400).json({ error: 'Nome e e-mail são obrigatórios' });
   try {
     await req.db(
-      `UPDATE admin_profile SET name=$1, phone=$2, email=$3, updated_at=NOW() WHERE login='admin'`,
-      [name, phone, email]
+      `UPDATE admin_profile SET name=$1, email=$2 WHERE id IN (SELECT id FROM admin_profile LIMIT 1)`,
+      [name, email]
     );
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -2286,10 +2333,15 @@ app.put('/api/admin/password', requireAdmin, async (req, res) => {
   if (!/[0-9]/.test(newPass))
     return res.status(400).json({ error: 'Senha deve ter pelo menos um número' });
   try {
-    const { rows } = await req.db('SELECT password FROM admin_profile LIMIT 1');
-    const stored = rows.length ? rows[0].password : (process.env.ADMIN_PASS || '');
-    if (current !== stored) return res.status(401).json({ error: 'Senha atual incorreta' });
-    await req.db(`UPDATE admin_profile SET password=$1, updated_at=NOW() WHERE login='admin'`, [newPass]);
+    const { rows } = await req.db('SELECT pass_hash FROM admin_profile LIMIT 1');
+    const stored = rows.length ? rows[0].pass_hash : (process.env.ADMIN_PASS || '');
+    const bcrypt = require('bcryptjs');
+    const validCurrent = rows.length && rows[0].pass_hash
+      ? await bcrypt.compare(current, rows[0].pass_hash)
+      : (current === stored);
+    if (!validCurrent) return res.status(401).json({ error: 'Senha atual incorreta' });
+    const newHash = await bcrypt.hash(newPass, 10);
+    await req.db(`UPDATE admin_profile SET pass_hash=$1 WHERE id IN (SELECT id FROM admin_profile LIMIT 1)`, [newHash]);
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -3379,6 +3431,19 @@ app.get('/master/api/health/history', requireMaster, async (req, res) => {
       ORDER BY l.created_at DESC LIMIT 50`);
     res.json(rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Dynamic favicon SVG per tenant ──────────────────────────────────────────
+app.get('/favicon-dynamic.svg', async (req, res) => {
+  const color = req.tenant?.primary_color || '#9b4d6a';
+  const name  = (req.tenant?.business_name || 'BP').charAt(0).toUpperCase();
+  res.setHeader('Content-Type', 'image/svg+xml');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.send(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+    <rect width="32" height="32" rx="8" fill="${color}"/>
+    <text x="16" y="22" font-family="Georgia,serif" font-size="18" font-weight="bold"
+          fill="white" text-anchor="middle">${name}</text>
+  </svg>`);
 });
 
 // ── Dynamic manifest.json per tenant ────────────────────────────────────────
