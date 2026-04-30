@@ -2386,6 +2386,21 @@ app.put('/api/admin/profile', requireAdmin, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+
+// ── Alterar login do admin (pelo próprio profissional) ───────────────────────
+app.put('/api/admin/login', requireAdmin, async (req, res) => {
+  const { new_login } = req.body;
+  if (!new_login || new_login.trim().length < 3)
+    return res.status(400).json({ error: 'Login mínimo de 3 caracteres' });
+  if (!/^[a-zA-Z0-9._-]+$/.test(new_login.trim()))
+    return res.status(400).json({ error: 'Use letras, números, . _ -' });
+  try {
+    await req.db(`UPDATE admin_profile SET login=$1 WHERE id IN (SELECT id FROM admin_profile LIMIT 1)`, [new_login.trim()]);
+    await pool.query(`UPDATE tenant_configs SET admin_user=$1 WHERE tenant_id=(SELECT id FROM tenants WHERE schema_name=$2 LIMIT 1)`, [new_login.trim(), req.schemaName]);
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.put('/api/admin/password', requireAdmin, async (req, res) => {
   const { current, newPass, confirm } = req.body;
   if (!current||!newPass||!confirm) return res.status(400).json({ error: 'Preencha todos os campos' });
@@ -3121,6 +3136,35 @@ app.get('/master/api/report/csv', requireMaster, async (req, res) => {
       'attachment; filename="belle-planner-' + month + '.csv"');
     const csvContent = lines.join('\r\n');
     res.send(csvContent); // UTF-8
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Redefinir login do admin do tenant ───────────────────────────────────────
+app.put('/master/api/tenants/:id/reset-login', requireMaster, async (req, res) => {
+  const { new_login } = req.body;
+  if (!new_login || new_login.trim().length < 3) {
+    return res.status(400).json({ error: 'Login mínimo de 3 caracteres' });
+  }
+  try {
+    const { rows } = await pool.query(
+      `SELECT schema_name FROM tenants WHERE id=$1`, [req.params.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Tenant não encontrado' });
+    
+    // Atualiza no tenant_configs
+    await pool.query(
+      `UPDATE tenant_configs SET admin_user=$1 WHERE tenant_id=$2`,
+      [new_login.trim(), req.params.id]
+    );
+    // Atualiza no schema do tenant
+    const client = await pool.connect();
+    try {
+      await client.query(`SET search_path TO "${rows[0].schema_name}", public`);
+      await client.query(`UPDATE admin_profile SET login=$1`, [new_login.trim()]);
+    } finally { client.release(); }
+    
+    await logAction(req.params.id, 'login_reset', `Login do admin alterado para: ${new_login.trim()}`);
+    res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
