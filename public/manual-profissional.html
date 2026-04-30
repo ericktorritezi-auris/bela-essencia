@@ -8,16 +8,18 @@
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400;1,600&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
   <style>
     :root {
-      --rose:       #E8557A;
-      --rose-light: #fde8ef;
-      --rose-mid:   #f5a0b8;
-      --gold:       #C49A3C;
-      --gold-light: #fdf5e0;
-      --dark:       #2d1a22;
-      --text:       #3d2535;
-      --text-light: #8a6070;
-      --border:     #f0d8e0;
-      --cream:      #fdf5f8;
+      --rose:        #E8557A;
+      --rose-deep:   #c23d61;
+      --rose-light:  #fde8ef;
+      --rose-mid:    #f5a0b8;
+      --gold:        #C49A3C;
+      --gold-light:  #fdf5e0;
+      --dark:        #1f0d18;
+      --text:        #3d1a2a;
+      --text-light:  #9a6070;
+      --border:      #f0d0dc;
+      --cream:       #fdf5f8;
+      --white:       #ffffff;
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html { scroll-behavior: smooth; }
@@ -30,7 +32,8 @@
 
     /* ── HEADER ── */
     .header {
-      background: var(--dark);
+      background: linear-gradient(135deg, #2d1a22 0%, #4a1528 100%);
+      border-bottom: none;
       padding: 0 24px;
       position: sticky;
       top: 0;
@@ -38,8 +41,8 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      height: 60px;
-      box-shadow: 0 2px 16px rgba(0,0,0,.3);
+      height: 64px;
+      box-shadow: 0 2px 16px rgba(0,0,0,.25);
     }
     .header-brand {
       font-family: 'Cormorant Garamond', serif;
@@ -62,21 +65,16 @@
       letter-spacing: .08em;
     }
     .back-btn {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      background: rgba(255,255,255,.1);
-      border: 1.5px solid rgba(255,255,255,.2);
-      border-radius: 50px;
+      background: rgba(255,255,255,.15);
+      border: 1px solid rgba(255,255,255,.3);
+      color: white;
+      border-radius: 20px;
       padding: 6px 16px;
-      font-family: 'Nunito', sans-serif;
       font-size: 13px;
-      font-weight: 700;
-      color: rgba(255,255,255,.8);
       cursor: pointer;
-      text-decoration: none;
-      transition: all .2s;
+      transition: background .2s;
     }
+    .back-btn:hover { background: rgba(255,255,255,.25); }
     .back-btn:hover { background: rgba(255,255,255,.2); color: white; }
 
     /* ── HERO ── */
@@ -323,12 +321,15 @@
 
     /* ── FOOTER ── */
     .footer {
-      background: var(--dark);
-      color: rgba(255,255,255,.5);
+      background: #1f0d18;
+      color: rgba(255,255,255,.55);
       text-align: center;
       padding: 24px;
       font-size: 12px;
+      border-top: 3px solid #E8557A;
     }
+    .footer strong { color: #E8557A; }
+    .footer a { color: rgba(255,255,255,.7); text-decoration: none; }
     .footer strong { color: var(--rose-mid); }
   </style>
 </head>
@@ -336,7 +337,7 @@
 
   <!-- HEADER -->
   <header class="header">
-    <a href="/" class="header-brand"><img src="/icons/logo-belleplanner.png" alt="Belle Planner" style="height:36px;object-fit:contain;filter:brightness(0) invert(1)">
+    <a href="/" class="header-brand"><img src="/icons/logo-belleplanner.png" alt="Belle Planner" style="height:40px;object-fit:contain;mix-blend-mode:screen">
       Bela <span>Essência</span>
       <span class="header-badge">Admin</span>
     </a>
@@ -837,16 +838,16 @@
   </footer>
 
 <script>
-fetch('/api/config').then(r=>r.json()).then(cfg=>{
-  if(!cfg) return;
-  // Manuais: cores Belle Planner padrão (não sobrescrever)
-  // Apenas atualiza nome do tenant no conteúdo
-  if(cfg.business_name) {
-    const fn=document.getElementById('manual-footer-name');
-    if(fn) fn.textContent=cfg.business_name;
-    document.title='Manual — '+cfg.business_name;
-  }
-}).catch(()=>{});
+// Manuais Belle Planner — identidade padronizada, sem personalização por tenant
+document.addEventListener('DOMContentLoaded', function() {
+  // Apenas exibe o nome do tenant no rodapé, se disponível
+  fetch('/api/config').then(r=>r.json()).then(cfg=>{
+    if (cfg && cfg.business_name) {
+      const fn = document.getElementById('manual-footer-name');
+      if (fn) fn.textContent = 'Belle Planner';  // sempre Belle Planner
+    }
+  }).catch(()=>{});
+});
 </script>
 </body>
 </html>
