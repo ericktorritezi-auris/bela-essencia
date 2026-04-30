@@ -8,15 +8,15 @@
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400;1,600&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
   <style>
     :root {
-      --rose:       #9b4d6a;
-      --rose-light: #fdf0f4;
-      --rose-mid:   #d4a0b5;
+      --rose:       #E8557A;
+      --rose-light: #fde8ef;
+      --rose-mid:   #f5a0b8;
       --gold:       #C49A3C;
-      --gold-light: #fdf8ee;
+      --gold-light: #fdf5e0;
       --dark:       #2d1a22;
-      --text:       #4a3040;
+      --text:       #3d2535;
       --text-light: #8a6070;
-      --border:     #f0e0e8;
+      --border:     #f0d8e0;
       --cream:      #fdf5f8;
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -547,33 +547,14 @@
 
 <script>
 fetch('/api/config').then(r=>r.json()).then(cfg=>{
-  if(!cfg||!cfg.primary_color) return;
-  const root = document.documentElement.style;
-  const p = cfg.primary_color, s = cfg.secondary_color || '#C49A3C';
-  function shade(hex,pct){try{var n=parseInt(hex.replace('#',''),16),rv=Math.min(255,Math.max(0,(n>>16)+Math.round(255*pct/100))),gv=Math.min(255,Math.max(0,((n>>8)&255)+Math.round(255*pct/100))),bv=Math.min(255,Math.max(0,(n&255)+Math.round(255*pct/100)));return '#'+[rv,gv,bv].map(function(v){return v.toString(16).padStart(2,'0');}).join('');}catch(e){return hex;}}
-  function rgba(hex,a){try{var n=parseInt(hex.replace('#',''),16);return 'rgba('+((n>>16)&255)+','+((n>>8)&255)+','+(n&255)+','+a+')';}catch(e){return hex;}}
-  root.setProperty('--rose',       p);
-  root.setProperty('--rose-deep',  shade(p,-20));
-  root.setProperty('--rose-light', rgba(p,0.08));
-  root.setProperty('--rose-mid',   rgba(p,0.35));
-  root.setProperty('--gold',       s);
-  root.setProperty('--gold-light', rgba(s,0.15));
-  root.setProperty('--gold-deep',  shade(s,-20));
-  root.setProperty('--dark',       shade(p,-70));
-  root.setProperty('--text',       shade(p,-40));
-  root.setProperty('--text-light', rgba(p,0.55));
-  root.setProperty('--border',     rgba(p,0.18));
-  root.setProperty('--cream',      rgba(p,0.04));
+  if(!cfg) return;
+  // Manuais: cores Belle Planner padrão (não sobrescrever)
+  // Apenas atualiza nome do tenant no conteúdo
   if(cfg.business_name) {
-    document.querySelectorAll('.header-brand,[data-brand]').forEach(el=>{
-      const parts=cfg.business_name.split(' ');
-      el.innerHTML=parts.length>=2?parts[0]+' <span>'+parts.slice(1).join(' ')+'</span>':cfg.business_name;
-    });
-    document.title=cfg.business_name+' — Manual';
     const fn=document.getElementById('manual-footer-name');
     if(fn) fn.textContent=cfg.business_name;
+    document.title='Manual — '+cfg.business_name;
   }
-  if(cfg.tagline) document.querySelectorAll('.brand-tagline,[data-tagline]').forEach(el=>el.textContent=cfg.tagline);
 }).catch(()=>{});
 </script>
 </body>

@@ -4,7 +4,7 @@
 //   API (/api/*)       → Network Only  (nunca cacheia dados)
 //   Assets estáticos   → Cache First   (ícones, manifest)
 
-const CACHE_VERSION = 'bela-essencia-2.8.1';
+const CACHE_VERSION = 'bela-essencia-2.8.2';
 // Icons NOT cached — always fetched fresh from server so updates take effect immediately
 const STATIC_ASSETS = ['/manifest.json'];
 

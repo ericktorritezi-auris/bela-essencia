@@ -8,11 +8,9 @@
 <meta name="theme-color" content="#E8557A">
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" type="image/x-icon" href="/favicon.ico">
-  <link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-favicon.png">
-  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
-<link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-32.png">
-<link rel="icon" type="image/png" sizes="16x16" href="/icons/icon-16.png">
-<link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="/icons/icon-512.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Agenda Online">
@@ -1076,7 +1074,7 @@ tr:hover td{background:#FAF3F6}
                 <div class="fg"><label>Nome do Profissional</label><input type="text" id="pf-name" placeholder="Nome completo"></div>
                 <div class="fg"><label>WhatsApp (com DDD)</label><input type="tel" id="pf-phone" placeholder="(43) 99999-9999"></div>
                 <div class="fg"><label>E-mail</label><input type="email" id="pf-email" placeholder="email@exemplo.com"></div>
-                <div class="fg"><label>Login</label><input type="text" value="admin" disabled style="opacity:.5;cursor:not-allowed"></div>
+                <div class="fg"><label>Login</label><input type="text" id="pf-login" placeholder="Seu login de acesso" autocomplete="username"></div>
                 <button class="btn btn-primary" onclick="saveProfile()" style="width:auto;padding:10px 24px">Salvar dados</button>
                 <button class="btn btn-secondary" onclick="testSendEmail()" style="width:auto;padding:10px 20px;margin-left:8px">📧 Testar e-mail agora</button>
                 <a href="/manual-profissional.html" target="_blank" class="btn btn-secondary" style="width:auto;padding:10px 20px;margin-left:8px;text-decoration:none;display:inline-flex;align-items:center;gap:5px">📖 Manual da profissional</a>
@@ -1279,7 +1277,7 @@ tr:hover td{background:#FAF3F6}
 // ══════════════════════════════════════════════════
 // VERSÃO — altere APENAS aqui; atualiza todos os rodapés
 // ══════════════════════════════════════════════════
-const APP_VERSION  = '2.8.1';
+const APP_VERSION  = '2.8.3';
 const APP_COPY     = `Versão: ${APP_VERSION} | ${(window._tenantConfig?.business_name || 'Belle Planner')} © ${new Date().getFullYear()}`;
 
 function renderFooters() {
@@ -3280,6 +3278,8 @@ async function loadProfile() {
     document.getElementById('pf-name').value  = p.name  || '';
     document.getElementById('pf-phone').value = p.phone || '';
     document.getElementById('pf-email').value = p.email || '';
+    const loginEl = document.getElementById('pf-login');
+    if (loginEl) loginEl.value = p.login || '';
   } catch(e){showToast('Erro ao carregar perfil','error')}
 }
 
@@ -3300,11 +3300,17 @@ async function saveProfile() {
   const name  = document.getElementById('pf-name').value.trim();
   const phone = document.getElementById('pf-phone').value.trim();
   const email = document.getElementById('pf-email').value.trim();
+  const loginEl = document.getElementById('pf-login');
+  const newLogin = loginEl ? loginEl.value.trim() : '';
   if(!name||!email){showToast('Nome e e-mail são obrigatórios','error');return}
   try {
     await PUT('/api/admin/profile',{name,phone,email});
+    // Se login foi alterado, salva separadamente
+    if (newLogin && newLogin !== PROF.login) {
+      await PUT('/api/admin/login', { new_login: newLogin });
+      PROF.login = newLogin;
+    }
     showToast('Perfil atualizado!','ok');
-    // Reaplica em todo o sistema imediatamente
     PROF = { ...PROF, name, phone, email };
     applyProfProfile();
   } catch(e){showToast(e.message,'error')}

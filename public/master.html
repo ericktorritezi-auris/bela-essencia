@@ -307,8 +307,8 @@
   <!-- SIDEBAR -->
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-brand">
-      <div class="brand-logo">Belle <span>Planner</span></div>
-      <div class="brand-tag">Master Panel · Erick</div>
+      <img src="/icons/logo-belleplanner.png" alt="Belle Planner" style="height:38px;object-fit:contain;filter:brightness(0) invert(1);display:block;margin-bottom:4px" onerror="this.style.display='none'">
+      <div class="brand-tag" style="font-size:10px;color:rgba(255,255,255,.45);text-transform:uppercase;letter-spacing:.1em">Master Panel</div>
     </div>
     <nav class="nav">
       <div class="nav-section">Visão Geral</div>
@@ -967,6 +967,7 @@ function renderTenantsTable(containerId, list, compact=false) {
           <button class="icon-btn" onclick="openNotesModal(${t.id},'${(t.business_name||t.name).replace(/'/g,'')}')" title="Notas internas">📝</button>
           <button class="icon-btn" onclick="openOnboardingModal(${t.id},'${(t.business_name||t.name).replace(/'/g,'')}')" title="Checklist onboarding">✅</button>
           <button class="icon-btn" onclick="resetTenantPass(${t.id},'${(t.business_name||t.name).replace(/'/g,'')}')" title="Redefinir senha">🔑</button>
+          <button class="icon-btn" onclick="resetTenantLogin(${t.id},'${(t.business_name||t.name).replace(/'/g,'')}')" title="Redefinir login">👤</button>
           <button class="icon-btn" onclick="resendWelcome(${t.id},'${(t.business_name||t.name).replace(/'/g,'')}','${t.owner_email||''}')" title="Reenviar e-mail de boas-vindas">📧</button>
           ${(t.domain_custom||t.subdomain)?`<a href="https://${t.domain_custom||(t.subdomain+'.belleplanner.com.br')}" target="_blank" class="icon-btn" style="text-decoration:none" title="Abrir agenda">↗</a>`:''}
           <button class="icon-btn" onclick="syncTenant('${t.schema_name}','${t.business_name||t.name}')" title="Sync dados">⚙️</button>
@@ -1710,6 +1711,19 @@ async function resetTenantPass(id, name) {
   try {
     await API('PUT', '/master/api/tenants/' + id + '/reset-password', { new_pass: newPass.trim() });
     toast('✅ Senha redefinida para "' + name + '"', 'ok');
+  } catch(e) { toast('Erro: ' + e.message, 'err'); }
+}
+
+async function resetTenantLogin(id, name) {
+  const newLogin = prompt('Novo login para o admin de "' + name + '" (mín. 3 chars, sem espaços):');
+  if (!newLogin) return;
+  if (newLogin.trim().length < 3) { toast('Login mínimo: 3 caracteres', 'err'); return; }
+  if (!/^[a-zA-Z0-9._-]+$/.test(newLogin.trim())) {
+    toast('Login inválido — use apenas letras, números, . _ -', 'err'); return;
+  }
+  try {
+    await API('PUT', '/master/api/tenants/' + id + '/reset-login', { new_login: newLogin.trim() });
+    toast('✅ Login redefinido para "' + name + '": ' + newLogin.trim(), 'ok');
   } catch(e) { toast('Erro: ' + e.message, 'err'); }
 }
 
