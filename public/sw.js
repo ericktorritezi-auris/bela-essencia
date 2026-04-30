@@ -4,8 +4,9 @@
 //   API (/api/*)       → Network Only  (nunca cacheia dados)
 //   Assets estáticos   → Cache First   (ícones, manifest)
 
-const CACHE_VERSION = 'bela-essencia-2.8.0';
-const STATIC_ASSETS = ['/manifest.json', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png'];
+const CACHE_VERSION = 'bela-essencia-2.8.1';
+// Icons NOT cached — always fetched fresh from server so updates take effect immediately
+const STATIC_ASSETS = ['/manifest.json'];
 
 // ── Install: cacheia só assets estáticos ──────────────────────────
 self.addEventListener('install', (e) => {
@@ -37,6 +38,12 @@ self.addEventListener('activate', (e) => {
 // ── Fetch: estratégia por tipo de recurso ────────────────────────
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
+
+  // 0. Icons → sempre rede, nunca cacheia (garante que novos ícones apareçam)
+  if (url.pathname.startsWith('/icons/') || url.pathname === '/favicon.ico') {
+    e.respondWith(fetch(e.request));
+    return;
+  }
 
   // 1. API → sempre rede, nunca cacheia
   if (url.pathname.startsWith('/api/')) {
