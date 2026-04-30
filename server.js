@@ -3278,6 +3278,11 @@ async function sendTenantWelcomeEmail(tenant, { admin_user, admin_pass, business
 
   const adminUrl = url ? `${url}` : '(configure o domínio)';
 
+  // Belle Planner brand colors (same for all tenants)
+  const primaryColor = '#E8557A';
+  const secondaryColor = '#C49A3C';
+
+
   const html = `
     <div style="font-family:Arial,sans-serif;max-width:580px;margin:0 auto;background:#fdf5f8;padding:24px">
       <div style="text-align:center;margin-bottom:24px">
@@ -3375,7 +3380,7 @@ cron.schedule('0 11 * * *', async () => {
           <div style="text-align:center;margin-bottom:20px">
             <div style="font-family:Georgia,serif;font-size:24px;color:${primaryColor}">Belle Planner</div>
           </div>
-          <div style="background:linear-gradient(135deg,${t.primary_color||'#9b4d6a'},${t.secondary_color||'#C49A3C'});border-radius:12px;padding:20px;color:white;text-align:center;margin-bottom:20px">
+          <div style="background:linear-gradient(135deg,#E8557A,#C49A3C);border-radius:12px;padding:20px;color:white;text-align:center;margin-bottom:20px">
             <div style="font-size:32px;margin-bottom:8px">⚠️</div>
             <div style="font-family:Georgia,serif;font-size:20px">Sua agenda vence em 5 dias</div>
           </div>
@@ -3498,38 +3503,22 @@ app.get('/master/api/health/history', requireMaster, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// ── Dynamic favicon SVG per tenant ──────────────────────────────────────────
-app.get('/favicon-dynamic.svg', async (req, res) => {
-  const color = req.tenant?.primary_color || '#9b4d6a';
-  const name  = (req.tenant?.business_name || 'BP').charAt(0).toUpperCase();
-  res.setHeader('Content-Type', 'image/svg+xml');
-  res.setHeader('Cache-Control', 'public, max-age=3600');
-  res.send(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-    <rect width="32" height="32" rx="8" fill="${color}"/>
-    <text x="16" y="22" font-family="Georgia,serif" font-size="18" font-weight="bold"
-          fill="white" text-anchor="middle">${name}</text>
-  </svg>`);
-});
-
-// ── Dynamic manifest.json per tenant ────────────────────────────────────────
-app.get('/manifest.json', async (req, res) => {
-  const cfg = req.tenant || {};
-  const name      = cfg.business_name || 'Belle Planner';
-  const color     = cfg.primary_color  || '#9b4d6a';
-  const bgColor   = cfg.primary_color  || '#9b4d6a';
+// ── Static manifest.json — Belle Planner brand (same for all tenants) ───────
+app.get('/manifest.json', (req, res) => {
   res.json({
-    name,
-    short_name:       name.split(' ')[0],
-    description:      `Agendamento online — ${name}`,
+    name:             'Belle Planner',
+    short_name:       'Belle Planner',
+    description:      'Sua agenda online — Belle Planner',
     start_url:        '/',
     display:          'standalone',
     orientation:      'portrait',
-    background_color: bgColor,
-    theme_color:      color,
+    background_color: '#FAF0F5',
+    theme_color:      '#E8557A',
     icons: [
       { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
       { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
       { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+      { src: '/icons/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
     ],
   });
 });
@@ -4038,6 +4027,10 @@ async function sendDailyAgendaEmail() {
       console.log('[Email] E-mail do profissional não cadastrado.');
       return;
     }
+
+    // Belle Planner brand color for all emails
+    const emailColor = '#E8557A';
+
     const prof = profRows[0];
     const today = todayBrasilia();
 
@@ -4234,7 +4227,7 @@ cron.schedule('30 9 * * *', async () => {
         }
 
         const bizName = snap.business_name || snap.tenant_name;
-        const color   = snap.primary_color || '#9b4d6a';
+        const color   = '#E8557A'; // Belle Planner brand
 
         // Monta HTML do email com os agendamentos do snapshot
         const rows_html = appts.length ? appts.map(a =>
