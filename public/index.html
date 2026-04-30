@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>Agenda Online</title>
 <meta name="description" content="Agende agenda online de atendimento">
-<meta name="theme-color" content="#9B4D6A">
+<meta name="theme-color" content="#E8557A">
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" type="image/x-icon" href="/favicon.ico">
-  <link rel="icon" type="image/svg+xml" href="/favicon-dynamic.svg" id="favicon-dynamic">
-  <link rel="apple-touch-icon" href="/favicon-dynamic.svg" id="apple-icon-dynamic">
+  <link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-favicon.png">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="/icons/icon-16.png">
 <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
@@ -568,7 +568,7 @@ tr:hover td{background:#FAF3F6}
       
       // Apple touch icon meta
       var appleMeta = document.querySelector('meta[name="apple-mobile-web-app-title"]');
-      if (appleMeta) appleMeta.setAttribute('content', name);
+      if (appleMeta) appleMeta.setAttribute('content', 'Belle Planner');
     };
     
     if (document.readyState === 'loading') {
@@ -1279,7 +1279,7 @@ tr:hover td{background:#FAF3F6}
 // ══════════════════════════════════════════════════
 // VERSÃO — altere APENAS aqui; atualiza todos os rodapés
 // ══════════════════════════════════════════════════
-const APP_VERSION  = '2.7.1';
+const APP_VERSION  = '2.8.0';
 const APP_COPY     = `Versão: ${APP_VERSION} | ${(window._tenantConfig?.business_name || 'Belle Planner')} © ${new Date().getFullYear()}`;
 
 function renderFooters() {
@@ -4221,7 +4221,7 @@ function showPWABanner() {
     // iOS: mostrar dica manual (Safari não suporta beforeinstallprompt)
     const hint = document.createElement('div');
     hint.className = 'ios-hint';
-    const _iosName = (window._tenantConfig && window._tenantConfig.business_name) ? window._tenantConfig.business_name : 'o app';
+    const _iosName = 'Belle Planner';
     hint.innerHTML =
       '<button class="ios-close" onclick="dismissPWA(this.closest(\'.ios-hint\'))">✕</button>' +
       '<div class="ios-hint-ttl">Instalar ' + _iosName + '</div>' +
@@ -4231,8 +4231,8 @@ function showPWABanner() {
   }
 
   // Mostra banner de instalação — com prompt nativo (Android) ou instrução genérica
-  const _tName = (window._tenantConfig && window._tenantConfig.business_name) ? window._tenantConfig.business_name : 'o app';
-  const _tIcon = (window._tenantConfig && window._tenantConfig.logo_url) ? window._tenantConfig.logo_url : '/favicon-dynamic.svg';
+  const _tName = 'Belle Planner';
+  const _tIcon = '/icons/icon-192.png'; // Belle Planner standard PWA icon
   const banner = document.createElement('div');
   banner.className = 'pwa-banner';
   banner.id = 'pwa-banner';
