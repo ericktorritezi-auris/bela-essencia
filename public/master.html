@@ -939,6 +939,12 @@ async function loadDashboard() {
 
 function tenantStatus(t) {
   if (!t.active) return `<span class="badge badge-blocked"><span class="dot dot-red"></span>Bloqueado</span>`;
+  // Trial period
+  if (t.trial_ends_at && !t.plan_expires_at) {
+    const trialDays = Math.ceil((new Date(t.trial_ends_at) - new Date()) / 86400000);
+    if (trialDays < 0) return `<span class="badge badge-blocked"><span class="dot dot-red"></span>Trial expirado</span>`;
+    return `<span class="badge" style="background:rgba(155,89,182,.15);color:#9b59b6"><span class="dot" style="background:#9b59b6"></span>Trial ${trialDays}d</span>`;
+  }
   if (t.plan_expires_at) {
     const days = Math.ceil((new Date(t.plan_expires_at) - new Date()) / 86400000);
     if (days < 0)  return `<span class="badge badge-blocked"><span class="dot dot-red"></span>Expirado</span>`;
@@ -1233,7 +1239,13 @@ async function renderAlerts() {
 
     const blocked  = tenants.filter(t => !t.active);
     const expiring = tenants.filter(t => {
-      if (!t.active || !t.plan_expires_at) return false;
+      if (!t.active) return false;
+      // Trial expiring in 2 days
+      if (t.trial_ends_at && !t.plan_expires_at) {
+        const td = Math.ceil((new Date(t.trial_ends_at) - today) / 86400000);
+        return td >= 0 && td <= 2;
+      }
+      if (!t.plan_expires_at) return false;
       const days = Math.ceil((new Date(t.plan_expires_at) - today) / 86400000);
       return days >= 0 && days <= 7;
     });
