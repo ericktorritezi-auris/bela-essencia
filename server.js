@@ -262,12 +262,6 @@ async function createTenantSchema(schemaName) {
         login     VARCHAR(50)  NOT NULL DEFAULT 'admin',
         pass_hash TEXT
       )`,
-      `CREATE TABLE IF NOT EXISTS push_subscriptions (
-        id SERIAL PRIMARY KEY, endpoint TEXT NOT NULL UNIQUE, p256dh TEXT NOT NULL,
-        auth TEXT NOT NULL, role VARCHAR(20) NOT NULL DEFAULT 'client',
-        tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE,
-        appt_id VARCHAR(30), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      )`,
       `CREATE TABLE IF NOT EXISTS push_templates (
         id SERIAL PRIMARY KEY, title VARCHAR(100) NOT NULL, body VARCHAR(300) NOT NULL,
         is_system BOOLEAN NOT NULL DEFAULT FALSE, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -1176,6 +1170,7 @@ async function initDB() {
         p256dh       TEXT         NOT NULL,
         auth         TEXT         NOT NULL,
         role         VARCHAR(10)  NOT NULL DEFAULT 'client', -- 'client' | 'admin'
+        tenant_id    INTEGER      REFERENCES tenants(id) ON DELETE CASCADE,
         created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW()
       );
     `);
@@ -3914,10 +3909,12 @@ app.post('/api/push/subscribe/client', async (req, res) => {
   }
   console.log('[Push] Nova subscription cliente, appointmentId:', appointmentId);
   try {
-    await req.db(
-      `INSERT INTO push_subscriptions (endpoint, p256dh, auth, role, tenant_id)
+    // ALWAYS use pool (public schema) — push_subscriptions é tabela global
+    await pool.query(
+      `INSERT INTO public.push_subscriptions (endpoint, p256dh, auth, role, tenant_id)
        VALUES ($1, $2, $3, 'client', (SELECT id FROM tenants WHERE schema_name=$4 LIMIT 1))
-       ON CONFLICT (endpoint) DO UPDATE SET p256dh=$2, auth=$3, tenant_id=(SELECT id FROM tenants WHERE schema_name=$4 LIMIT 1)`,
+       ON CONFLICT (endpoint) DO UPDATE SET p256dh=$2, auth=$3,
+         tenant_id=(SELECT id FROM tenants WHERE schema_name=$4 LIMIT 1)`,
       [endpoint, keys.p256dh, keys.auth, req.schemaName || 'public']
     );
 
@@ -4053,10 +4050,12 @@ app.post('/api/push/subscribe/admin', requireAdmin, async (req, res) => {
     return res.status(400).json({ error: 'Dados de inscrição inválidos' });
   }
   try {
-    await req.db(
-      `INSERT INTO push_subscriptions (endpoint, p256dh, auth, role, tenant_id)
+    // ALWAYS use pool (public schema) — push_subscriptions é tabela global
+    await pool.query(
+      `INSERT INTO public.push_subscriptions (endpoint, p256dh, auth, role, tenant_id)
        VALUES ($1, $2, $3, 'admin', (SELECT id FROM tenants WHERE schema_name=$4 LIMIT 1))
-       ON CONFLICT (endpoint) DO UPDATE SET p256dh=$2, auth=$3, tenant_id=(SELECT id FROM tenants WHERE schema_name=$4 LIMIT 1)`,
+       ON CONFLICT (endpoint) DO UPDATE SET p256dh=$2, auth=$3,
+         role='admin', tenant_id=(SELECT id FROM tenants WHERE schema_name=$4 LIMIT 1)`,
       [endpoint, keys.p256dh, keys.auth, req.schemaName || 'public']
     );
     res.json({ ok: true });
