@@ -34,6 +34,7 @@
     .login-card {
       background:var(--card); border:1px solid var(--border); border-radius:16px;
       padding:40px 28px; width:min(360px, calc(100vw - 32px)); text-align:center;
+      display:flex; flex-direction:column; align-items:center; gap:12px;
     }
     .login-logo { font-family:'Cormorant Garamond',serif; font-size:32px; color:var(--rose); margin-bottom:4px; }
     .login-logo span { color:var(--gold); font-style:italic; }
@@ -291,7 +292,7 @@
 <!-- LOGIN -->
 <div id="login-screen">
   <div class="login-card">
-    <img src="/icons/logo-belleplanner.png" alt="Belle Planner" style="height:52px;object-fit:contain;mix-blend-mode:screen;margin-bottom:4px" onerror="this.outerHTML='<div class=\"login-logo\">Belle <span>Planner</span></div>'">
+    <img src="/icons/logo-belleplanner.png" alt="Belle Planner" style="height:52px;object-fit:contain;filter:brightness(0) invert(1);margin-bottom:0" onerror="this.outerHTML='<div class=\"login-logo\">Belle <span>Planner</span></div>'">
     <div class="login-badge">Master Panel</div>
     <input type="password" class="login-input" id="login-pass" placeholder="Senha master" autocomplete="new-password" onkeydown="if(event.key==='Enter')doLogin()">
     <button class="login-btn" onclick="doLogin()">Entrar</button>
@@ -307,7 +308,7 @@
   <!-- SIDEBAR -->
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-brand">
-      <img src="/icons/logo-belleplanner.png" alt="Belle Planner" style="height:38px;object-fit:contain;mix-blend-mode:screen;display:block;margin-bottom:4px" onerror="this.style.display='none'">
+      <img src="/icons/logo-belleplanner.png" alt="Belle Planner" style="height:38px;object-fit:contain;filter:brightness(0) invert(1);display:block;margin-bottom:4px" onerror="this.style.display='none'">
       <div class="brand-tag" style="font-size:10px;color:rgba(255,255,255,.45);text-transform:uppercase;letter-spacing:.1em">Master Panel</div>
     </div>
     <nav class="nav">
