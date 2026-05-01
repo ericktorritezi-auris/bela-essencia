@@ -265,6 +265,7 @@ async function createTenantSchema(schemaName) {
       `CREATE TABLE IF NOT EXISTS push_subscriptions (
         id SERIAL PRIMARY KEY, endpoint TEXT NOT NULL UNIQUE, p256dh TEXT NOT NULL,
         auth TEXT NOT NULL, role VARCHAR(20) NOT NULL DEFAULT 'client',
+        tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE,
         appt_id VARCHAR(30), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )`,
       `CREATE TABLE IF NOT EXISTS push_templates (
@@ -586,6 +587,7 @@ async function initDB() {
         active          BOOLEAN       NOT NULL DEFAULT TRUE,
         plan_id         INTEGER,
         plan_expires_at DATE,
+        trial_ends_at   DATE,
         schema_name     VARCHAR(50)   UNIQUE NOT NULL,
         created_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW()
       );
@@ -931,6 +933,8 @@ async function initDB() {
     await client.query(`ALTER TABLE cities ADD COLUMN IF NOT EXISTS neighborhood VARCHAR(100)`);
     // Migração: admin_profile — adiciona phone e torna pass_hash nullable (se existir)
     await client.query(`ALTER TABLE admin_profile ADD COLUMN IF NOT EXISTS phone VARCHAR(30)`);
+    await client.query(`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE`);
+    await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS trial_ends_at DATE`);
     await client.query(`
       DO $$ BEGIN
         IF EXISTS (
@@ -1522,6 +1526,7 @@ app.post('/api/appointments', async (req, res) => {
     });
 
     // Notificação assíncrona — não bloqueia a resposta
+    appt._schemaName = req.schemaName; // para isolamento de push por tenant
     notifyAdminNewBooking(appt).catch(e => console.error('[Push] notifyAdminNewBooking:', e.message));
     res.status(201).json(appt);
   } catch (err) {
@@ -2628,12 +2633,14 @@ app.post('/master/api/tenants', requireMaster, async (req, res) => {
 
     const mFee = req.body.monthly_fee !== undefined ? Number(req.body.monthly_fee) : 100;
     const sFee = req.body.setup_fee    !== undefined ? Number(req.body.setup_fee)    : 200;
+    const trialDate = plan_expires_at ? null : new Date(Date.now()+7*24*60*60*1000).toISOString().slice(0,10);
     const { rows } = await client.query(
       `INSERT INTO tenants (slug,name,owner_name,owner_email,owner_phone,
-        domain_custom,subdomain,active,schema_name,plan_expires_at,monthly_fee,setup_fee)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,TRUE,$8,$9,$10,$11) RETURNING *`,
+        domain_custom,subdomain,active,schema_name,plan_expires_at,trial_ends_at,monthly_fee,setup_fee)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,TRUE,$8,$9,$10,$11,$12) RETURNING *`,
       [slug,name,owner_name,owner_email,owner_phone||null,
-       domain_custom||null,subdomain||null,schemaName,plan_expires_at||null,mFee,sFee]
+       domain_custom||null,subdomain||null,schemaName,
+       plan_expires_at||null, trialDate, mFee, sFee]
     );
     const tenant = rows[0];
     await client.query(
@@ -2722,6 +2729,25 @@ app.patch('/master/api/tenants/:id/toggle', requireMaster, async (req, res) => {
     await logAction(req.params.id, rows[0].active ? 'tenant_enabled' : 'tenant_disabled',
       `Tenant ${rows[0].slug} ${rows[0].active ? 'ativado' : 'suspenso'}`);
     _tenantCache.clear();
+    // Envia e-mail de notificação ao owner quando suspenso
+    if (!rows[0].active) {
+      const { rows: ownerRows } = await pool.query(
+        `SELECT owner_email, owner_name, t.name FROM tenants t WHERE t.id=$1`, [req.params.id]
+      ).catch(() => ({ rows: [] }));
+      if (ownerRows[0]?.owner_email) {
+        sendEmail({
+          to: ownerRows[0].owner_email,
+          subject: 'Belle Planner — Acesso suspenso',
+          html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px">
+            <h2 style="color:#E8557A">Acesso suspenso</h2>
+            <p>Olá, <strong>${ownerRows[0].owner_name||ownerRows[0].name}</strong>.</p>
+            <p>Sua agenda <strong>${ownerRows[0].name}</strong> foi temporariamente suspensa.</p>
+            <p>Para reativar, entre em contato com o suporte Belle Planner.</p>
+            <p style="margin-top:20px;font-size:12px;color:#888">Belle Planner · Sua Agenda Online</p>
+          </div>`
+        }).catch(() => {});
+      }
+    }
     res.json({ active: rows[0].active });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -3398,10 +3424,24 @@ cron.schedule('0 11 * * *', async () => {
   try {
     const today = todayBrasilia();
 
+    // 0. Trial expirado → bloqueia (trial sem pagamento)
+    const { rows: trialExp } = await pool.query(
+      `UPDATE tenants SET active=FALSE
+       WHERE active=TRUE AND trial_ends_at IS NOT NULL AND trial_ends_at < $1::date
+         AND (plan_expires_at IS NULL OR plan_expires_at < $1::date)
+       RETURNING id, slug, owner_email, owner_name`,
+      [today]
+    );
+    for (const t of trialExp) {
+      await logAction(t.id, 'trial_expired', `Trial de ${t.slug} expirou`);
+      console.log(`[Cron] Trial expirado: ${t.slug}`);
+    }
+
     // 1. Bloqueia tenants vencidos há mais de 2 dias
     const { rows: toBlock } = await pool.query(
       `UPDATE tenants SET active=FALSE
        WHERE active=TRUE AND plan_expires_at < ($1::date - interval '2 days')
+         AND (trial_ends_at IS NULL OR trial_ends_at < $1::date)
        RETURNING id, slug, owner_email, owner_name`,
       [today]
     );
@@ -3431,7 +3471,7 @@ cron.schedule('0 11 * * *', async () => {
           <div style="background:white;border-radius:10px;padding:18px;margin-bottom:16px">
             <p>Olá, <strong>${t.owner_name || 'Profissional'}</strong>!</p>
             <p>Sua agenda <strong>${t.business_name}</strong> vence em <strong>5 dias</strong>. Para continuar usando sem interrupção, entre em contato para renovar sua assinatura.</p>
-            <p style="margin-top:12px"><strong>📱 WhatsApp:</strong> <a href="https://wa.me/5543999999999">Falar com suporte</a></p>
+            <p style="margin-top:12px"><strong>📱 WhatsApp:</strong> <a href="${process.env.SUPPORT_WHATSAPP ? 'https://wa.me/'+process.env.SUPPORT_WHATSAPP : 'mailto:erick.torritezi@gmail.com'}">Falar com suporte</a></p>
           </div>
           <p style="text-align:center;font-size:11px;color:#aaa">Belle Planner · Sistema de Agendamento Online</p>
         </div>`;
@@ -3803,9 +3843,13 @@ async function sendPush(subscriptions, title, body, data = {}) {
   console.log(`[Push] Resultado: ${ok}/${results.length} enviados com sucesso.`);
 }
 
-async function getSubsByRole(role) {
+async function getSubsByRole(role, tenantId) {
+  // If tenantId provided, only return subs for that tenant (isolation)
   const { rows } = await pool.query(
-    'SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE role=$1', [role]
+    tenantId
+      ? 'SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE role=$1 AND tenant_id=$2'
+      : 'SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE role=$1',
+    tenantId ? [role, tenantId] : [role]
   );
   return rows;
 }
@@ -3822,7 +3866,12 @@ async function getSubsByAuth(authKey) {
 
 // Notifica admin sobre novo agendamento
 async function notifyAdminNewBooking(appt) {
-  const subs = await getSubsByRole('admin');
+  // Filter by tenant to avoid cross-tenant push notifications
+  const { rows: tRows } = await pool.query(
+    `SELECT id FROM tenants WHERE schema_name=$1 LIMIT 1`, [appt._schemaName || 'public']
+  ).catch(() => ({ rows: [] }));
+  const tenantId = tRows[0]?.id || null;
+  const subs = await getSubsByRole('admin', tenantId);
   await sendPush(subs,
     '✨ Novo agendamento!',
     `${appt.name} · ${appt.proc_name} · ${String(appt.date).slice(0,10)} às ${String(appt.st).slice(0,5)}`,
@@ -3866,10 +3915,10 @@ app.post('/api/push/subscribe/client', async (req, res) => {
   console.log('[Push] Nova subscription cliente, appointmentId:', appointmentId);
   try {
     await req.db(
-      `INSERT INTO push_subscriptions (endpoint, p256dh, auth, role)
-       VALUES ($1, $2, $3, 'client')
-       ON CONFLICT (endpoint) DO UPDATE SET p256dh=$2, auth=$3`,
-      [endpoint, keys.p256dh, keys.auth]
+      `INSERT INTO push_subscriptions (endpoint, p256dh, auth, role, tenant_id)
+       VALUES ($1, $2, $3, 'client', (SELECT id FROM tenants WHERE schema_name=$4 LIMIT 1))
+       ON CONFLICT (endpoint) DO UPDATE SET p256dh=$2, auth=$3, tenant_id=(SELECT id FROM tenants WHERE schema_name=$4 LIMIT 1)`,
+      [endpoint, keys.p256dh, keys.auth, req.schemaName || 'public']
     );
 
     // Liga a subscription ao agendamento para notificações futuras
@@ -4005,10 +4054,10 @@ app.post('/api/push/subscribe/admin', requireAdmin, async (req, res) => {
   }
   try {
     await req.db(
-      `INSERT INTO push_subscriptions (endpoint, p256dh, auth, role)
-       VALUES ($1, $2, $3, 'admin')
-       ON CONFLICT (endpoint) DO UPDATE SET p256dh=$2, auth=$3`,
-      [endpoint, keys.p256dh, keys.auth]
+      `INSERT INTO push_subscriptions (endpoint, p256dh, auth, role, tenant_id)
+       VALUES ($1, $2, $3, 'admin', (SELECT id FROM tenants WHERE schema_name=$4 LIMIT 1))
+       ON CONFLICT (endpoint) DO UPDATE SET p256dh=$2, auth=$3, tenant_id=(SELECT id FROM tenants WHERE schema_name=$4 LIMIT 1)`,
+      [endpoint, keys.p256dh, keys.auth, req.schemaName || 'public']
     );
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
