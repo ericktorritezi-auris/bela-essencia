@@ -692,7 +692,9 @@ tr:hover td{background:#FAF3F6}
 <div id="admin-app" class="hidden">
   <div id="adm-login" class="adm-login-bg">
     <div class="adm-login-card">
-      <div class="brand-name" data-brand-name style="font-size:32px;margin-bottom:3px">Belle Planner</div>
+      <div id="adm-login-brand" style="margin-bottom:4px;text-align:center">
+        <div class="brand-name" data-brand-name style="font-size:28px;line-height:1.25">Belle Planner</div>
+      </div>
       <div style="font-size:10px;text-transform:uppercase;letter-spacing:.16em;color:var(--text-light);margin-bottom:28px">Painel Administrativo</div>
       <div class="notice err hidden" id="login-err">Credenciais inválidas</div>
       <div class="fg" style="text-align:left"><label>Usuário</label><input type="text" id="adm-user" value="admin"></div>
@@ -4368,6 +4370,27 @@ async function applyBranding() {
   document.querySelectorAll('[data-brand-name]').forEach(el => {
     el.textContent = bizName;
   });
+  // Tenant admin login: show logo if available, otherwise styled name
+  const loginBrand = document.getElementById('adm-login-brand');
+  if (loginBrand) {
+    if (cfg.logo_url) {
+      const img = document.createElement('img');
+      img.src = cfg.logo_url;
+      img.alt = bizName;
+      img.style.cssText = 'max-height:64px;max-width:220px;object-fit:contain;margin:0 auto;display:block';
+      img.onerror = function() {
+        this.style.display = 'none';
+        const txt = document.createElement('div');
+        txt.style.cssText = 'font-family:"Cormorant Garamond",serif;font-size:26px;font-weight:600;color:var(--rose-deep,#7b3050);line-height:1.2';
+        txt.textContent = bizName;
+        loginBrand.appendChild(txt);
+      };
+      loginBrand.innerHTML = '';
+      loginBrand.appendChild(img);
+    } else {
+      loginBrand.innerHTML = '<div style="font-family:\'Cormorant Garamond\',serif;font-size:26px;font-weight:600;color:var(--rose-deep,#7b3050);line-height:1.2;text-align:center">' + bizName + '</div>';
+    }
+  }
   document.querySelectorAll('[data-brand-tagline]').forEach(el => {
     if (tagline) el.textContent = tagline;
   });
