@@ -33,9 +33,11 @@
     }
     .login-card {
       background:var(--card); border:1px solid var(--border); border-radius:16px;
-      padding:40px 28px; width:min(360px, calc(100vw - 32px)); text-align:center;
-      display:flex; flex-direction:column; align-items:center; gap:12px;
+      padding:40px 28px; width:360px; max-width:calc(100vw - 32px); text-align:center;
+      display:flex !important; flex-direction:column !important;
+      align-items:center !important; gap:14px; box-sizing:border-box;
     }
+    .login-card input, .login-card button { width:100%; }
     .login-logo { font-family:'Cormorant Garamond',serif; font-size:32px; color:var(--rose); margin-bottom:4px; }
     .login-logo span { color:var(--gold); font-style:italic; }
     .login-badge { font-size:10px; text-transform:uppercase; letter-spacing:.15em; color:var(--muted); margin-bottom:32px; }
@@ -292,12 +294,24 @@
 <!-- LOGIN -->
 <div id="login-screen">
   <div class="login-card">
-    <img src="/icons/logo-belleplanner.png" alt="Belle Planner" style="height:52px;object-fit:contain;filter:brightness(0) invert(1);margin-bottom:0" onerror="this.outerHTML='<div class=\"login-logo\">Belle <span>Planner</span></div>'">
+    <div style="width:100%;text-align:center;margin-bottom:8px">
+      <img src="/icons/logo-belleplanner.png" alt="Belle Planner"
+           id="login-logo-img"
+           style="height:54px;object-fit:contain;filter:brightness(0) invert(1)">
+      <div class="login-logo" id="login-logo-txt" style="display:none">Belle <span>Planner</span></div>
+    </div>
     <div class="login-badge">Master Panel</div>
     <input type="password" class="login-input" id="login-pass" placeholder="Senha master" autocomplete="new-password" onkeydown="if(event.key==='Enter')doLogin()">
     <button class="login-btn" onclick="doLogin()">Entrar</button>
     <div class="login-err" id="login-err">Senha incorreta</div>
   </div>
+  <script>
+    // Graceful logo fallback
+    document.getElementById('login-logo-img').onerror = function() {
+      this.style.display = 'none';
+      document.getElementById('login-logo-txt').style.display = 'block';
+    };
+  </script>
 </div>
 
 <!-- APP -->
