@@ -1289,7 +1289,7 @@ function renderFooters() {
 // ══════════════════════════════════════════════════
 // CONFIG
 // ══════════════════════════════════════════════════
-const WA_PROF = 'https://wa.me/5543998734460';
+// WA_PROF removed — WhatsApp do profissional vem de PROF.phone (carregado do banco)
 
 // Perfil do profissional — carregado do banco, usado em todo o sistema
 let PROF = { name: 'Profissional', phone: '', email: '' };
@@ -1318,6 +1318,15 @@ function applyProfProfile() {
   // Botão WhatsApp na tela de sucesso
   const waBtn = document.getElementById('wa-link-label');
   if (waBtn) waBtn.textContent = `💬 Falar com ${PROF.name.split(' ')[0]}`;
+  // Atualiza href do WhatsApp com o telefone do profissional do tenant
+  const waLink = document.getElementById('wa-link');
+  if (waLink && PROF.phone) {
+    const d = PROF.phone.replace(/\D/g, '');
+    waLink.href = 'https://wa.me/' + (d.startsWith('55') ? d : '55' + d);
+    waLink.style.display = '';
+  } else if (waLink) {
+    waLink.style.display = 'none'; // sem telefone cadastrado
+  }
   // Topbar do admin
   const adminName = document.getElementById('admin-prof-name');
   if (adminName) adminName.textContent = PROF.name;
@@ -1831,7 +1840,13 @@ async function confirmBooking() {
         </div>
       `;
     }
-    document.getElementById('wa-link').href = WA_PROF;
+    // WhatsApp do profissional — usa PROF.phone carregado do banco
+    const _profPhone = PROF.phone ? PROF.phone.replace(/\D/g, '') : '';
+    const _waHref = _profPhone
+      ? 'https://wa.me/' + (_profPhone.startsWith('55') ? _profPhone : '55' + _profPhone)
+      : '#';
+    document.getElementById('wa-link').href = _waHref;
+    if (!_profPhone) document.getElementById('wa-link').style.display = 'none';
     goStep(7);
 
   } catch(e) {
