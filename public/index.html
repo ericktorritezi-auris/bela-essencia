@@ -85,6 +85,18 @@ h1,h2,h3,h4{font-family:'Cormorant Garamond',serif}
 .proc-list{display:grid;gap:8px}
 .proc-item{background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:13px 15px;cursor:pointer;transition:var(--tr);display:grid;grid-template-columns:1fr auto;align-items:center;gap:8px}
 .proc-item:hover,.proc-item.sel{border-color:var(--rose);background:var(--rose-light)}
+.proc-saiba{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;color:var(--rose);background:var(--rose-light);border:1px solid var(--rose-mid);border-radius:20px;padding:3px 10px;cursor:pointer;margin-top:5px;transition:var(--tr);text-decoration:none}
+.proc-saiba:hover{background:var(--rose);color:white}
+/* Popup Saiba Mais */
+.pm-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9000;display:flex;align-items:center;justify-content:center;padding:16px;animation:fdIn .2s ease}
+.pm-card{background:white;border-radius:var(--r-lg);max-width:480px;width:100%;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.25);animation:fsUp .3s ease}
+.pm-header{padding:20px 20px 0;flex-shrink:0}
+.pm-title{font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:700;color:var(--dark);margin-bottom:8px;line-height:1.2}
+.pm-badges{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.pm-divider{height:1px;background:var(--border);margin:0 -20px 0}
+.pm-body{padding:16px 20px 20px;overflow-y:auto;flex:1;font-size:14px;color:var(--text);line-height:1.75;white-space:pre-wrap}
+.pm-close{position:absolute;top:14px;right:16px;background:none;border:none;font-size:22px;cursor:pointer;color:var(--text-light);padding:4px 8px;border-radius:6px;line-height:1}
+.pm-close:hover{background:var(--rose-light);color:var(--rose)}
 .proc-item .pn{font-weight:700;font-size:13.5px;color:var(--dark)}
 .proc-meta{display:flex;gap:7px;margin-top:4px;flex-wrap:wrap}
 .badge-dur{font-size:11px;background:var(--gold-light);color:var(--gold-deep);padding:2px 7px;border-radius:10px;font-weight:700}
@@ -1450,7 +1462,10 @@ let CAL = { y:null, mo:null };
 let _procsCache = null;
 
 async function getProcs() {
-  if (!_procsCache) _procsCache = await GET('/api/procedures');
+  if (!_procsCache) {
+    _procsCache = await GET('/api/procedures');
+    window._procsCache = _procsCache; // exposto para showProcDetail
+  }
   return _procsCache;
 }
 function clearProcsCache() { _procsCache = null; }
@@ -1523,6 +1538,28 @@ function selCity(id) {
 // ══════════════════════════════════════════════════
 // STEP 2: PROCEDURES
 // ══════════════════════════════════════════════════
+async // ── Popup Saiba Mais ─────────────────────────────────────────────────────────
+function showProcDetail(procId) {
+  const procs = window._procsCache;
+  const p = procs && procs.find(x => x.id === procId);
+  if (!p || !p.description) return;
+  document.getElementById('pm-proc-title').textContent = p.name;
+  const badges = [
+    `<span class="badge-dur">⏱ ${fmtDur(p.dur)}</span>`,
+    p.pt !== 'none' && p.price ? `<span class="badge-price" style="background:var(--gold-light);color:var(--gold);padding:3px 8px;border-radius:12px;font-size:11px;font-weight:700">${fmtPrice(p)}</span>` : ''
+  ].filter(Boolean).join('');
+  document.getElementById('pm-proc-badges').innerHTML = badges;
+  document.getElementById('pm-proc-desc').textContent = p.description;
+  document.getElementById('pm-overlay').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+}
+function closeProcDetail() {
+  document.getElementById('pm-overlay').classList.add('hidden');
+  document.body.style.overflow = '';
+}
+// Fecha popup com Escape
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeProcDetail(); });
+
 async function renderProcs() {
   const list = document.getElementById('proc-list');
   list.innerHTML = '<div class="skel"></div><div class="skel" style="height:44px"></div><div class="skel"></div>';
@@ -1573,12 +1610,13 @@ async function renderProcs() {
       }
       return `
         <div class="proc-item" onclick="selProc(${p.id})">
-          <div>
+          <div style="flex:1">
             <div class="pn">${p.name}</div>
             <div class="proc-meta">
               <span class="badge-dur">⏱ ${fmtDur(p.dur)}</span>
               ${priceBadge}
             </div>
+            ${p.description ? `<span class="proc-saiba" onclick="event.stopPropagation();showProcDetail(${p.id})">📋 Saiba mais</span>` : ''}
           </div>
           <div class="proc-arr">›</div>
         </div>
@@ -2655,14 +2693,21 @@ function openProcModal(id) {
       <label>Valor (R$)</label>
       <input type="number" id="proc-modal-price" min="0" step="0.01" placeholder="0.00">
     </div>
+    <div class="fg">
+      <label>Descrição <small style="font-weight:400;color:var(--text-light)">(opcional — aparece como "Saiba mais" para o cliente)</small></label>
+      <textarea id="proc-modal-desc" rows="4"
+        placeholder="Descreva o procedimento, benefícios, detalhes, parcelamento..."
+        style="width:100%;background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:12px 14px;font-family:'Nunito',sans-serif;font-size:13px;color:var(--dark);outline:none;resize:vertical;line-height:1.6;box-sizing:border-box"></textarea>
+    </div>
     <div style="display:flex;gap:9px;margin-top:8px">
       <button class="btn btn-primary" onclick="saveProc(${id||'null'})" style="flex:1">Salvar</button>
       <button class="btn btn-secondary" onclick="closeModal()" style="flex:1;width:auto">Cancelar</button>
     </div>
-  `;
+  \`;
   if (id) {
     getProcs().then(list=>{
       const p=list.find(x=>x.id===id); if(!p) return;
+      if (p.description) document.getElementById('proc-modal-desc').value = p.description;
       document.getElementById('proc-modal-name').value=p.name;
       document.getElementById('proc-modal-dur').value=p.dur;
       document.getElementById('proc-modal-pt').value=p.pt;
@@ -2682,10 +2727,12 @@ async function saveProc(id) {
   const dur=parseInt(document.getElementById('proc-modal-dur').value);
   const pt=document.getElementById('proc-modal-pt').value;
   const price=pt==='fixed'?parseFloat(document.getElementById('proc-modal-price').value)||null:null;
+  const descEl=document.getElementById('proc-modal-desc');
+  const description=(descEl&&descEl.value.trim())||null;
   if(!name||!dur){showToast('Preencha nome e duração','error');return}
   try {
-    if(id) await PUT(`/api/procedures/${id}`,{name,dur,price,pt});
-    else await POST('/api/procedures',{name,dur,price,pt});
+    if(id) await PUT('/api/procedures/'+id,{name,dur,price,pt,description});
+    else await POST('/api/procedures',{name,dur,price,pt,description});
     clearProcsCache(); clearCitiesCache();
     showToast('Procedimento salvo','ok');
     closeModal(); renderProcsAdmin();
@@ -2694,7 +2741,7 @@ async function saveProc(id) {
 async function deleteProc(id) {
   if(!confirm('Remover procedimento? O histórico de agendamentos é preservado.')) return;
   try {
-    await DEL(`/api/procedures/${id}`);
+    await DEL('/api/procedures/'+id);
     clearProcsCache(); clearCitiesCache();
     showToast('Procedimento removido','ok'); renderProcsAdmin();
   } catch(e){ showToast(e.message,'error'); }
@@ -3145,13 +3192,13 @@ async function saveCity(cityId) {
 }
 
 async function toggleCity(id, active) {
-  try{ await PUT(`/api/cities/${id}`,{is_active:active}); clearCitiesCache(); renderCitiesAdmin(); }
+  try{ await PUT('/api/cities/'+id,{is_active:active}); clearCitiesCache(); renderCitiesAdmin(); }
   catch(e){showToast(e.message,'error')}
 }
 
 async function deleteCity(id) {
   if(!confirm('Excluir esta cidade? Os agendamentos existentes não serão afetados.'))return;
-  try{ await DEL(`/api/cities/${id}`); clearCitiesCache(); showToast('Cidade excluída','ok'); renderCitiesAdmin(); }
+  try{ await DEL('/api/cities/'+id); clearCitiesCache(); showToast('Cidade excluída','ok'); renderCitiesAdmin(); }
   catch(e){showToast(e.message,'error')}
 }
 
@@ -4660,5 +4707,18 @@ document.addEventListener('DOMContentLoaded', async () => {
   }, 3000);
 });
 </script>
+<!-- POPUP SAIBA MAIS PROCEDIMENTO -->
+<div id="pm-overlay" class="pm-overlay hidden" onclick="if(event.target===this)closeProcDetail()">
+  <div class="pm-card" style="position:relative">
+    <button class="pm-close" onclick="closeProcDetail()">✕</button>
+    <div class="pm-header">
+      <div class="pm-title" id="pm-proc-title"></div>
+      <div class="pm-badges" id="pm-proc-badges"></div>
+      <div class="pm-divider"></div>
+    </div>
+    <div class="pm-body" id="pm-proc-desc"></div>
+  </div>
+</div>
+
 </body>
 </html>
