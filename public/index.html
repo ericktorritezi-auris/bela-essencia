@@ -72,6 +72,7 @@ h1,h2,h3,h4{font-family:'Cormorant Garamond',serif}
 .dot.active{background:var(--rose);transform:scale(1.35)}
 .dot.done{background:var(--rose-mid)}
 .step-card{background:var(--white);border-radius:var(--r-lg);padding:26px 22px;box-shadow:var(--sh-md);border:1px solid var(--border);animation:fsUp .38s ease both}
+@keyframes fdIn{from{opacity:0}to{opacity:1}}
 @keyframes fsUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
 .step-ttl{font-size:26px;font-weight:600;color:var(--dark);margin-bottom:3px;line-height:1.2}
 .step-ttl em{font-style:italic;color:var(--rose)}
@@ -1308,7 +1309,7 @@ tr:hover td{background:#FAF3F6}
 // ══════════════════════════════════════════════════
 // VERSÃO — altere APENAS aqui; atualiza todos os rodapés
 // ══════════════════════════════════════════════════
-const APP_VERSION  = '2.8.3';
+const APP_VERSION  = '2.8.5';
 const APP_COPY     = `Versão: ${APP_VERSION} | ${(window._tenantConfig?.business_name || 'Belle Planner')} © ${new Date().getFullYear()}`;
 
 function renderFooters() {
@@ -1610,7 +1611,7 @@ async function renderProcs() {
       }
       return `
         <div class="proc-item" onclick="selProc(${p.id})">
-          <div style="flex:1">
+          <div>
             <div class="pn">${p.name}</div>
             <div class="proc-meta">
               <span class="badge-dur">⏱ ${fmtDur(p.dur)}</span>
