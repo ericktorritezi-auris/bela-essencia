@@ -195,6 +195,7 @@ async function createTenantSchema(schemaName) {
       `CREATE TABLE IF NOT EXISTS procedures (
         id SERIAL PRIMARY KEY, name VARCHAR(200) NOT NULL, dur INTEGER NOT NULL,
         price NUMERIC(10,2), pt VARCHAR(10) NOT NULL DEFAULT 'fixed',
+        description TEXT,
         active BOOLEAN NOT NULL DEFAULT TRUE, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )`,
       `CREATE TABLE IF NOT EXISTS cities (
@@ -928,6 +929,11 @@ async function initDB() {
     // Migração: admin_profile — adiciona phone e torna pass_hash nullable (se existir)
     await client.query(`ALTER TABLE admin_profile ADD COLUMN IF NOT EXISTS phone VARCHAR(30)`);
     await client.query(`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE`);
+    await client.query(`ALTER TABLE procedures ADD COLUMN IF NOT EXISTS description TEXT`);
+    // Migration em todos os schemas de tenant existentes
+    for (const { schema_name } of (await client.query(`SELECT schema_name FROM tenants WHERE schema_name IS NOT NULL`)).rows) {
+      try { await client.query(`ALTER TABLE "${schema_name}".procedures ADD COLUMN IF NOT EXISTS description TEXT`); } catch {}
+    }
     await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS trial_ends_at DATE`);
     await client.query(`
       DO $$ BEGIN
@@ -1450,12 +1456,12 @@ app.get('/api/procedures', async (req, res) => {
 });
 
 app.post('/api/procedures', requireAdmin, async (req, res) => {
-  const { name, dur, price, pt } = req.body;
+  const { name, dur, price, pt, description } = req.body;
   if (!name || !dur) return res.status(400).json({ error: 'Nome e duração obrigatórios' });
   try {
     const { rows } = await req.db(
-      'INSERT INTO procedures (name, dur, price, pt) VALUES ($1, $2, $3, $4) RETURNING *',
-      [name, parseInt(dur), price || null, pt || 'fixed']
+      'INSERT INTO procedures (name, dur, price, pt, description) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [name, parseInt(dur), price || null, pt || 'fixed', description || null]
     );
     res.status(201).json(rows[0]);
   } catch (err) {
@@ -1464,11 +1470,11 @@ app.post('/api/procedures', requireAdmin, async (req, res) => {
 });
 
 app.put('/api/procedures/:id', requireAdmin, async (req, res) => {
-  const { name, dur, price, pt } = req.body;
+  const { name, dur, price, pt, description } = req.body;
   try {
     const { rows } = await req.db(
-      'UPDATE procedures SET name=$1, dur=$2, price=$3, pt=$4 WHERE id=$5 RETURNING *',
-      [name, parseInt(dur), price || null, pt || 'fixed', req.params.id]
+      'UPDATE procedures SET name=$1, dur=$2, price=$3, pt=$4, description=$5 WHERE id=$6 RETURNING *',
+      [name, parseInt(dur), price || null, pt || 'fixed', description || null, req.params.id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Procedimento não encontrado' });
     res.json(rows[0]);
