@@ -2704,7 +2704,7 @@ function openProcModal(id) {
       <button class="btn btn-primary" onclick="saveProc(${id||'null'})" style="flex:1">Salvar</button>
       <button class="btn btn-secondary" onclick="closeModal()" style="flex:1;width:auto">Cancelar</button>
     </div>
-  \`;
+  `;
   if (id) {
     getProcs().then(list=>{
       const p=list.find(x=>x.id===id); if(!p) return;
