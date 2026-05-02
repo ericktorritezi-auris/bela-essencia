@@ -1631,6 +1631,9 @@ app.put('/api/appointments/:id', requireAdmin, async (req, res) => {
     const edited = rows[0];
     // Notifica o cliente sobre a alteração
     notifyClientEdit(edited).catch(e => console.error('[Push] notifyClientEdit:', e.message));
+    // Notifica o profissional também sobre a edição
+    edited._schemaName = req.schemaName;
+    notifyAdminEdit(edited).catch(e => console.error('[Push] notifyAdminEdit:', e.message));
     res.json(edited);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -3875,6 +3878,19 @@ async function notifyAdminNewBooking(appt) {
 }
 
 // Notifica cliente específico sobre alteração
+async function notifyAdminEdit(appt) {
+  const { rows: tRows } = await pool.query(
+    `SELECT id FROM tenants WHERE schema_name=$1 LIMIT 1`, [appt._schemaName || 'public']
+  ).catch(() => ({ rows: [] }));
+  const tenantId = tRows[0]?.id || null;
+  const subs = await getSubsByRole('admin', tenantId);
+  await sendPush(subs,
+    '✏️ Agendamento editado',
+    `${appt.name} · ${appt.proc_name} · ${String(appt.date).slice(0,10)} às ${String(appt.st).slice(0,5)}`,
+    { url: '/#admin', type: 'booking_edited' }
+  );
+}
+
 async function notifyClientEdit(appt) {
   const subs = await getSubsByAuth(appt.push_auth);
   await sendPush(subs,
