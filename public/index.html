@@ -1616,7 +1616,7 @@ async function renderProcs() {
               <span class="badge-dur">⏱ ${fmtDur(p.dur)}</span>
               ${priceBadge}
             </div>
-            ${p.description ? `<span class="proc-saiba" onclick="event.stopPropagation();showProcDetail(${p.id})">📋 Saiba mais</span>` : ''}
+            ${p.description ? '<span class="proc-saiba" onclick="event.stopPropagation();showProcDetail('+p.id+')">📋 Saiba mais</span>' : ''}
           </div>
           <div class="proc-arr">›</div>
         </div>
