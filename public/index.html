@@ -1136,6 +1136,23 @@ tr:hover td{background:#FAF3F6}
 
           <!-- SEC: WEB PUSH -->
           <div id="sec-webpush" class="hidden">
+            <!-- Ativação do push para o próprio profissional -->
+            <div class="tbl-wrap" id="push-activation-box" style="margin-bottom:16px;border:2px solid var(--rose);background:linear-gradient(135deg,var(--rose-light),white)">
+              <div style="padding:20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+                <div style="font-size:36px">🔔</div>
+                <div style="flex:1">
+                  <div style="font-weight:700;font-size:15px;color:var(--dark);margin-bottom:4px">Ativar notificações do painel</div>
+                  <div style="font-size:13px;color:var(--text-light)">Receba alertas em tempo real quando um cliente agendar um procedimento.</div>
+                </div>
+                <div id="push-admin-status" style="text-align:center">
+                  <button class="btn btn-primary" id="btn-activate-push" onclick="activateAdminPush()" style="width:auto;padding:10px 24px;white-space:nowrap">
+                    🔔 Ativar notificações
+                  </button>
+                  <div id="push-admin-msg" style="font-size:12px;margin-top:6px;color:var(--text-light)"></div>
+                </div>
+              </div>
+            </div>
+
             <!-- Subscribers count -->
             <div class="stats-grid" id="push-stats" style="margin-bottom:16px"></div>
 
@@ -3573,6 +3590,74 @@ async function manSave() {
 // ══════════════════════════════════════════════════
 async function initWebPush() {
   await Promise.all([loadPushStats(), loadPushTemplates()]);
+  checkAdminPushStatus(); // verifica se notificações já estão ativas
+}
+
+async function checkAdminPushStatus() {
+  const btn  = document.getElementById('btn-activate-push');
+  const msg  = document.getElementById('push-admin-msg');
+  const box  = document.getElementById('push-activation-box');
+  if (!btn || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+    if (box) box.style.display = 'none'; // dispositivo não suporta push
+    return;
+  }
+  const perm = Notification.permission;
+  if (perm === 'granted') {
+    // Verifica se já tem subscription ativa
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) {
+      btn.textContent = '✅ Notificações ativas';
+      btn.disabled = true;
+      btn.style.background = 'var(--success,#27ae60)';
+      if (msg) msg.textContent = 'Você receberá alertas de novos agendamentos.';
+      return;
+    }
+  }
+  if (perm === 'denied') {
+    btn.textContent = '🚫 Notificações bloqueadas';
+    btn.disabled = true;
+    btn.style.background = 'var(--rose-mid)';
+    if (msg) msg.innerHTML = 'Desbloqueie nas configurações do navegador e recarregue a página.';
+  }
+}
+
+async function activateAdminPush() {
+  const btn = document.getElementById('btn-activate-push');
+  const msg = document.getElementById('push-admin-msg');
+  btn.disabled = true;
+  btn.textContent = '⏳ Ativando...';
+  try {
+    // 1. Pedir permissão
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') {
+      btn.textContent = '🚫 Permissão negada';
+      btn.style.background = 'var(--rose-mid)';
+      if (msg) msg.textContent = 'Permita notificações no navegador e tente novamente.';
+      btn.disabled = false;
+      return;
+    }
+    // 2. Registrar service worker e obter subscription
+    const reg = await navigator.serviceWorker.ready;
+    const vapidData = await GET('/api/push/vapid-public');
+    const vapidKey  = vapidData.key;
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(vapidKey)
+    });
+    // 3. Enviar subscription para o servidor
+    const subJson = sub.toJSON();
+    await POST('/api/push/subscribe/admin', { endpoint: sub.endpoint, keys: subJson.keys });
+    btn.textContent = '✅ Notificações ativas!';
+    btn.style.background = 'var(--success,#27ae60)';
+    if (msg) msg.textContent = 'Pronto! Você receberá alertas de novos agendamentos.';
+    showToast('✅ Notificações ativadas com sucesso!', 'ok');
+  } catch (e) {
+    btn.textContent = '🔔 Ativar notificações';
+    btn.disabled = false;
+    if (msg) msg.textContent = 'Erro: ' + e.message;
+    showToast('Erro ao ativar notificações: ' + e.message, 'error');
+  }
 }
 
 async function loadPushStats() {
