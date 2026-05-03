@@ -1553,7 +1553,33 @@ app.post('/api/appointments/retroativo', requireAdmin, async (req, res) => {
 
   try {
     const appt = await tenantTransaction(req, async (client) => {
-      // Única restrição: conflito com agendamentos existentes (mesmo SQL do booking normal)
+      // Validação 1: data deve ser um dia de trabalho ou data liberada para a cidade
+      const dateObj = new Date(date + 'T12:00:00');
+      const dow = dateObj.getUTCDay(); // 0=Dom ... 6=Sáb
+
+      const workDay = await client.query(
+        `SELECT is_active FROM work_configs
+         WHERE scope='city_day' AND city_id=$1 AND day_of_week=$2 LIMIT 1`,
+        [cityId, dow]
+      );
+      const isWorkDay = workDay.rows[0]?.is_active === true;
+
+      const releasedDay = await client.query(
+        `SELECT id FROM released_dates
+         WHERE date=$1::date AND (cardinality(city_ids)=0 OR $2=ANY(city_ids))
+         LIMIT 1`,
+        [date, cityId]
+      );
+      const isReleasedDay = releasedDay.rowCount > 0;
+
+      if (!isWorkDay && !isReleasedDay) {
+        throw Object.assign(
+          new Error(`A data ${date} não é um dia de atendimento para esta cidade. Verifique os dias de trabalho ou as datas liberadas.`),
+          { code: 422 }
+        );
+      }
+
+      // Validação 2: conflito com agendamentos existentes
       const { rowCount } = await client.query(
         `SELECT id FROM appointments
          WHERE date = $1 AND status != 'cancelled'
@@ -2193,6 +2219,25 @@ app.get('/api/backup/export', requireAdmin, async (req, res) => {
 });
 
 // ── Cidades ──────────────────────────────────────────────────────────────────
+// ── Todas as cidades ativas (para Agenda Retroativa — sem filtro de agenda) ──
+app.get('/api/cities/all', requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await req.db('SELECT * FROM cities WHERE is_active=TRUE ORDER BY name');
+    for (const city of rows) {
+      const pr = await req.db(
+        `SELECT p.id, p.name, p.dur, p.price, p.pt
+         FROM procedures p
+         LEFT JOIN city_procedures cp ON cp.proc_id=p.id AND cp.city_id=$1
+         WHERE p.active=TRUE
+           AND (cp.enabled IS NULL OR cp.enabled=TRUE)
+         ORDER BY p.name`, [city.id]
+      );
+      city.procedures = pr.rows;
+    }
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.get('/api/cities', async (req, res) => {
   try {
     const { rows } = await req.db(
