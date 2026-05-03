@@ -1536,6 +1536,62 @@ app.post('/api/appointments', async (req, res) => {
   }
 });
 
+// ── Agendamento Retroativo (admin) ───────────────────────────────────────────
+// Permite lançar atendimentos já realizados sem restrição de horário de trabalho.
+// Única regra: não pode conflitar (OVERLAPS) com agendamentos existentes.
+app.post('/api/appointments/retroativo', requireAdmin, async (req, res) => {
+  const { cityId, cityName, procId, procName, date, st, et, name, phone, price, pt, status } = req.body;
+
+  if (!cityId || !procId || !date || !st || !et || !name) {
+    return res.status(400).json({ error: 'Campos obrigatórios: cidade, procedimento, data, horário e nome do cliente.' });
+  }
+
+  // Validate time format
+  if (!/^\d{2}:\d{2}$/.test(st) || !/^\d{2}:\d{2}$/.test(et)) {
+    return res.status(400).json({ error: 'Formato de horário inválido (HH:MM).' });
+  }
+
+  try {
+    const appt = await tenantTransaction(req, async (client) => {
+      // Única restrição: conflito com agendamentos existentes (mesmo SQL do booking normal)
+      const { rowCount } = await client.query(
+        `SELECT id FROM appointments
+         WHERE date = $1 AND status != 'cancelled'
+           AND (st, et) OVERLAPS ($2::time, $3::time)
+         FOR UPDATE`,
+        [date, st, et]
+      );
+      if (rowCount > 0) {
+        throw Object.assign(
+          new Error(`Conflito de horário: já existe um agendamento em ${date} entre ${st}–${et}. Escolha outro horário.`),
+          { code: 409 }
+        );
+      }
+
+      const id = 'retro_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+      const finalStatus = ['realizado','confirmed','cancelled'].includes(status) ? status : 'realizado';
+
+      const { rows } = await client.query(
+        `INSERT INTO appointments
+           (id, city_id, city_name, proc_id, proc_name, date, st, et, name, phone, price, pt, status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+        [id, cityId, cityName, procId, procName, date, st, et,
+         name, phone || null, price || null, pt || 'fixed', finalStatus]
+      );
+      return rows[0];
+    });
+
+    await logAction(null, 'retroativo_created',
+      `Ag. retroativo: ${name} · ${date} ${st}–${et} · ${procName}`);
+
+    res.status(201).json(appt);
+  } catch (err) {
+    const status = err.code === 409 ? 409 : 500;
+    res.status(status).json({ error: err.message });
+  }
+});
+
+
 // Auto-marca confirmados passados como "realizado" (fuso Brasília)
 async function autoCompleteAppointments() {
   try {
