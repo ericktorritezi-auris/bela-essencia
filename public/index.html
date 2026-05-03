@@ -729,6 +729,7 @@ tr:hover td{background:#FAF3F6}
           <div class="nav-sec-ttl">Agenda</div>
           <div class="nav-item active" id="nav-agenda" onclick="showSec('agenda')"><span class="nav-icon">📅</span> Agenda</div>
           <div class="nav-item" id="nav-manual" onclick="showSec('manual')"><span class="nav-icon">✏️</span> Agenda Manual</div>
+          <div class="nav-item" id="nav-retro" onclick="showSec('retro')"><span class="nav-icon">⏮️</span> Ag. Retroativa</div>
           <div class="nav-item" id="nav-blocked" onclick="showSec('blocked')"><span class="nav-icon">🚫</span> Bloquear Datas</div>
           <div class="nav-item" id="nav-released" onclick="showSec('released')"><span class="nav-icon">✅</span> Liberar Datas</div>
           <div class="nav-item" id="nav-nps" onclick="showSec('nps')"><span class="nav-icon">⭐</span> NPS</div>
@@ -914,6 +915,80 @@ tr:hover td{background:#FAF3F6}
                   </div>
                 </div>
 
+              </div>
+            </div>
+          </div>
+
+          <div id="sec-retro" class="hidden">
+            <div class="tbl-wrap">
+              <div style="padding:20px 20px 0">
+                <div class="tbl-ttl" style="margin-bottom:4px">Agenda Retroativa ⏮️</div>
+                <p style="font-size:12px;color:var(--text-light);margin-bottom:18px;line-height:1.7">
+                  Lance atendimentos já realizados que não foram agendados pelo sistema.
+                  Qualquer data e horário são aceitos — apenas conflitos com agendamentos existentes são bloqueados.
+                </p>
+              </div>
+
+              <!-- Formulário retroativo -->
+              <div style="padding:0 20px 24px;display:flex;flex-direction:column;gap:14px" id="retro-form">
+                <!-- Cidade -->
+                <div class="fg">
+                  <label>Cidade <span style="color:var(--rose)">*</span></label>
+                  <select id="retro-city" onchange="retroLoadProcs()" style="width:100%;background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:12px 14px;font-family:'Nunito',sans-serif;font-size:13px;color:var(--dark)">
+                    <option value="">Selecione a cidade...</option>
+                  </select>
+                </div>
+                <!-- Procedimento -->
+                <div class="fg">
+                  <label>Procedimento <span style="color:var(--rose)">*</span></label>
+                  <select id="retro-proc" onchange="retroCalcEnd()" style="width:100%;background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:12px 14px;font-family:'Nunito',sans-serif;font-size:13px;color:var(--dark)">
+                    <option value="">Selecione o procedimento...</option>
+                  </select>
+                </div>
+                <!-- Data e Horário lado a lado -->
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                  <div class="fg">
+                    <label>Data <span style="color:var(--rose)">*</span></label>
+                    <input type="date" id="retro-date" style="width:100%;background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:12px 14px;font-family:'Nunito',sans-serif;font-size:13px;color:var(--dark);box-sizing:border-box">
+                  </div>
+                  <div class="fg">
+                    <label>Início <span style="color:var(--rose)">*</span></label>
+                    <input type="time" id="retro-st" onchange="retroCalcEnd()" style="width:100%;background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:12px 14px;font-family:'Nunito',sans-serif;font-size:13px;color:var(--dark);box-sizing:border-box">
+                  </div>
+                </div>
+                <!-- Fim calculado -->
+                <div class="fg">
+                  <label>Término (calculado automaticamente)</label>
+                  <input type="time" id="retro-et" readonly style="width:100%;background:var(--border);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:12px 14px;font-family:'Nunito',sans-serif;font-size:13px;color:var(--text-light);box-sizing:border-box">
+                </div>
+                <!-- Cliente -->
+                <div class="fg">
+                  <label>Nome do cliente <span style="color:var(--rose)">*</span></label>
+                  <input type="text" id="retro-name" placeholder="Nome completo" style="width:100%;background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:12px 14px;font-family:'Nunito',sans-serif;font-size:13px;color:var(--dark);box-sizing:border-box">
+                </div>
+                <div class="fg">
+                  <label>WhatsApp</label>
+                  <input type="tel" id="retro-phone" placeholder="(43) 99999-9999" style="width:100%;background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:12px 14px;font-family:'Nunito',sans-serif;font-size:13px;color:var(--dark);box-sizing:border-box">
+                </div>
+                <!-- Status -->
+                <div class="fg">
+                  <label>Status</label>
+                  <select id="retro-status" style="width:100%;background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:12px 14px;font-family:'Nunito',sans-serif;font-size:13px;color:var(--dark)">
+                    <option value="realizado">✅ Realizado</option>
+                    <option value="confirmed">📅 Confirmado</option>
+                  </select>
+                </div>
+                <!-- Valor -->
+                <div class="fg">
+                  <label>Valor cobrado (R$) <span style="font-size:11px;color:var(--text-light)">— opcional</span></label>
+                  <input type="number" id="retro-price" min="0" step="0.01" placeholder="0.00" style="width:100%;background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:12px 14px;font-family:'Nunito',sans-serif;font-size:13px;color:var(--dark);box-sizing:border-box">
+                </div>
+                <!-- Conflict warning -->
+                <div id="retro-conflict-msg" style="display:none;background:#fff0f0;border:1px solid #ffb3b3;border-radius:var(--r-sm);padding:12px 14px;font-size:13px;color:#c0392b"></div>
+                <!-- Save button -->
+                <button class="btn btn-primary" id="retro-save-btn" onclick="retroSave()" style="padding:14px">
+                  ⏮️ Lançar agendamento retroativo
+                </button>
               </div>
             </div>
           </div>
@@ -1976,6 +2051,7 @@ function showSec(name){
   document.getElementById('adm-ttl').textContent=SEC_TITLES[name]||name;
   if(name==='agenda'){resetValuesVisibility();renderStats();renderAgenda();subscribePush('admin').catch(()=>{})}
   if(name==='manual') initManualBooking();
+  if(name==='retro') initRetro();
   if(name==='released'){renderReleased();renderReleasedSlots();renderReleaseCityCheckboxes()}
   if(name==='nps') renderNPSDashboard();
   if(name==='blocked'){renderBlocked();renderBlockedSlots();renderBlockCityCheckboxes()}
@@ -2746,6 +2822,110 @@ async function deleteProc(id) {
     clearProcsCache(); clearCitiesCache();
     showToast('Procedimento removido','ok'); renderProcsAdmin();
   } catch(e){ showToast(e.message,'error'); }
+}
+
+// ── AGENDA RETROATIVA ─────────────────────────────
+const RETRO = { cityId: null, procDur: 0 };
+
+async function initRetro() {
+  const sel = document.getElementById('retro-city');
+  if (!sel) return;
+  await loadCities();
+  sel.innerHTML = '<option value="">Selecione a cidade...</option>' +
+    CITIES.map(c => `<option value="${c.id}">${c.short || c.name}</option>`).join('');
+  const dateEl = document.getElementById('retro-date');
+  if (dateEl && !dateEl.value) dateEl.value = new Date().toISOString().slice(0,10);
+  document.getElementById('retro-conflict-msg').style.display = 'none';
+}
+
+async function retroLoadProcs() {
+  const cityId = document.getElementById('retro-city').value;
+  RETRO.cityId = cityId;
+  const sel = document.getElementById('retro-proc');
+  sel.innerHTML = '<option value="">Carregando...</option>';
+  try {
+    const procs = await getProcs();
+    const city  = CITIES.find(c => Number(c.id) === Number(cityId));
+    let available = procs.filter(p => p.active !== false);
+    if (city && city.procedures && city.procedures.length > 0) {
+      const ids = new Set(city.procedures.map(p => Number(p.id)));
+      available = available.filter(p => ids.has(Number(p.id)));
+    }
+    sel.innerHTML = '<option value="">Selecione o procedimento...</option>' +
+      available.map(p =>
+        '<option value="' + p.id + '" data-dur="' + p.dur + '" data-price="' + (p.price||0) + '" data-pt="' + (p.pt||'fixed') + '">' +
+        p.name + ' — ' + fmtDur(p.dur) + (p.price ? ' · ' + fmtPrice(p) : '') + '</option>'
+      ).join('');
+  } catch(e) {
+    sel.innerHTML = '<option value="">Erro ao carregar</option>';
+  }
+}
+
+function retroCalcEnd() {
+  const procSel = document.getElementById('retro-proc');
+  const stEl    = document.getElementById('retro-st');
+  const etEl    = document.getElementById('retro-et');
+  const opt = procSel.options[procSel.selectedIndex];
+  if (!opt || !opt.dataset.dur || !stEl.value) { etEl.value = ''; return; }
+  etEl.value = m2t(t2m(stEl.value) + parseInt(opt.dataset.dur));
+}
+
+async function retroSave() {
+  const cityId  = document.getElementById('retro-city').value;
+  const procSel = document.getElementById('retro-proc');
+  const date    = document.getElementById('retro-date').value;
+  const st      = document.getElementById('retro-st').value;
+  const et      = document.getElementById('retro-et').value;
+  const name    = document.getElementById('retro-name').value.trim();
+  const phone   = document.getElementById('retro-phone').value.trim();
+  const status  = document.getElementById('retro-status').value;
+  const priceV  = document.getElementById('retro-price').value;
+  const msgEl   = document.getElementById('retro-conflict-msg');
+
+  if (!cityId)         { showToast('Selecione a cidade','error'); return; }
+  if (!procSel.value)  { showToast('Selecione o procedimento','error'); return; }
+  if (!date)           { showToast('Informe a data','error'); return; }
+  if (!st)             { showToast('Informe o horário de início','error'); return; }
+  if (!et)             { showToast('Calcule o horário de término','error'); return; }
+  if (!name || name.length < 2) { showToast('Informe o nome do cliente','error'); return; }
+
+  const opt  = procSel.options[procSel.selectedIndex];
+  const city = CITIES.find(c => Number(c.id) === Number(cityId));
+  const price = priceV ? parseFloat(priceV) : (parseFloat(opt.dataset.price) || null);
+
+  msgEl.style.display = 'none';
+  const btn = document.getElementById('retro-save-btn');
+  btn.disabled = true;
+  btn.textContent = 'Salvando...';
+
+  try {
+    await POST('/api/appointments/retroativo', {
+      cityId:   Number(cityId),
+      cityName: city ? (city.name || city.short) : '',
+      procId:   Number(procSel.value),
+      procName: opt.text.split(' —')[0].trim(),
+      date, st, et, name, phone,
+      price, pt: opt.dataset.pt || 'fixed', status,
+    });
+    showToast('✅ Lançado: ' + name + ' · ' + date + ' ' + st, 'ok', 5000);
+    document.getElementById('retro-name').value  = '';
+    document.getElementById('retro-phone').value = '';
+    document.getElementById('retro-price').value = '';
+    document.getElementById('retro-st').value    = '';
+    document.getElementById('retro-et').value    = '';
+    msgEl.style.display = 'none';
+  } catch(e) {
+    const msg = e.message || 'Erro ao salvar';
+    if (msg.toLowerCase().includes('horário') || msg.toLowerCase().includes('conflito')) {
+      msgEl.textContent = '⚠️ Conflito de horário: ' + msg;
+      msgEl.style.display = 'block';
+    } else {
+      showToast(msg, 'error');
+    }
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '⏮️ Lançar agendamento retroativo';
+  }
 }
 
 // ── PROMOÇÕES ────────────────────────────────────
