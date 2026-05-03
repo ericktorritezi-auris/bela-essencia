@@ -2813,9 +2813,19 @@ const RETRO = { cityId: null, procDur: 0 };
 async function initRetro() {
   const sel = document.getElementById('retro-city');
   if (!sel) return;
-  await loadCities();
-  sel.innerHTML = '<option value="">Selecione a cidade...</option>' +
-    CITIES.map(c => `<option value="${c.id}">${c.short || c.name}</option>`).join('');
+  try {
+    // Usa /api/cities/all para mostrar TODAS as cidades (incluindo sem agenda ativa)
+    const allCities = await GET('/api/cities/all');
+    sel.innerHTML = '<option value="">Selecione a cidade...</option>' +
+      allCities.map(c => '<option value="' + c.id + '" data-procs="' + encodeURIComponent(JSON.stringify(c.procedures||[])) + '">' + (c.name||c.short) + '</option>').join('');
+    window._retroCities = allCities;
+  } catch(e) {
+    // Fallback to regular cities
+    await loadCities();
+    sel.innerHTML = '<option value="">Selecione a cidade...</option>' +
+      CITIES.map(c => '<option value="' + c.id + '">' + (c.short||c.name) + '</option>').join('');
+    window._retroCities = CITIES;
+  }
   const dateEl = document.getElementById('retro-date');
   if (dateEl && !dateEl.value) dateEl.value = new Date().toISOString().slice(0,10);
   document.getElementById('retro-conflict-msg').style.display = 'none';
@@ -2825,19 +2835,18 @@ async function retroLoadProcs() {
   const cityId = document.getElementById('retro-city').value;
   RETRO.cityId = cityId;
   const sel = document.getElementById('retro-proc');
+  if (!cityId) { sel.innerHTML = '<option value="">Selecione a cidade primeiro</option>'; return; }
   sel.innerHTML = '<option value="">Carregando...</option>';
   try {
-    const procs = await getProcs();
-    const city  = CITIES.find(c => Number(c.id) === Number(cityId));
-    let available = procs.filter(p => p.active !== false);
-    if (city && city.procedures && city.procedures.length > 0) {
-      const ids = new Set(city.procedures.map(p => Number(p.id)));
-      available = available.filter(p => ids.has(Number(p.id)));
-    }
+    // Usa os procedimentos vindos de /api/cities/all (incluídos no data-procs)
+    const citySrc = window._retroCities ? window._retroCities.find(c => Number(c.id) === Number(cityId)) : null;
+    let procs = citySrc && citySrc.procedures && citySrc.procedures.length > 0
+      ? citySrc.procedures
+      : await getProcs();
     sel.innerHTML = '<option value="">Selecione o procedimento...</option>' +
-      available.map(p =>
+      procs.map(p =>
         '<option value="' + p.id + '" data-dur="' + p.dur + '" data-price="' + (p.price||0) + '" data-pt="' + (p.pt||'fixed') + '">' +
-        p.name + ' — ' + fmtDur(p.dur) + (p.price ? ' · ' + fmtPrice(p) : '') + '</option>'
+        p.name + ' — ' + fmtDur(p.dur) + (p.price && p.pt !== 'none' ? ' · R$ ' + Number(p.price).toFixed(2).replace('.',',') : '') + '</option>'
       ).join('');
   } catch(e) {
     sel.innerHTML = '<option value="">Erro ao carregar</option>';
@@ -2899,9 +2908,10 @@ async function retroSave() {
     msgEl.style.display = 'none';
   } catch(e) {
     const msg = e.message || 'Erro ao salvar';
-    if (msg.toLowerCase().includes('horário') || msg.toLowerCase().includes('conflito')) {
-      msgEl.textContent = '⚠️ Conflito de horário: ' + msg;
+    if (msg.includes('Conflito') || msg.includes('horário') || msg.includes('dia de atendimento')) {
+      msgEl.textContent = '⚠️ ' + msg;
       msgEl.style.display = 'block';
+      msgEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
     } else {
       showToast(msg, 'error');
     }
