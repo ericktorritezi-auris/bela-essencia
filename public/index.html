@@ -738,6 +738,7 @@ tr:hover td{background:#FAF3F6}
         <div style="margin-top:2px">
           <div class="nav-sec-ttl">Financeiro</div>
           <div class="nav-item" id="nav-revenue" onclick="showSec('revenue')"><span class="nav-icon">💰</span> Receita</div>
+          <div class="nav-item" id="nav-cockpit" onclick="showSec('cockpit')"><span class="nav-icon">🎯</span> Cockpit</div>
         </div>
         <div style="margin-top:2px">
           <div class="nav-sec-ttl">Marketing</div>
@@ -1037,6 +1038,39 @@ tr:hover td{background:#FAF3F6}
               <div class="pag-wrap hidden" id="rev-pag"></div>
             </div>
           </div>
+          <div id="sec-cockpit" class="hidden">
+            <!-- Header com filtro de ano -->
+            <div class="tbl-wrap" style="margin-bottom:16px">
+              <div style="padding:18px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+                <div>
+                  <div class="tbl-ttl" style="margin-bottom:4px">🎯 Cockpit Financeiro</div>
+                  <p style="font-size:12px;color:var(--text-light);margin:0">Evolução mês a mês — agendamentos e faturamento</p>
+                </div>
+                <div style="display:flex;align-items:center;gap:10px">
+                  <label style="font-size:12px;color:var(--text-light)">Ano:</label>
+                  <select id="cockpit-year" onchange="initCockpit()" style="background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:7px 12px;font-size:13px;color:var(--dark)">
+                    <option value="">Carregando...</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            <!-- Cards mensais -->
+            <div id="cockpit-cards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;padding:0 0 8px"></div>
+            <!-- Tabela resumo -->
+            <div class="tbl-wrap" style="margin-top:16px">
+              <div style="padding:14px 20px 0"><div class="tbl-ttl" style="font-size:14px">Resumo Anual</div></div>
+              <div style="overflow-x:auto;padding-bottom:4px">
+                <table style="min-width:500px">
+                  <thead><tr>
+                    <th>Mês</th><th>Agendamentos</th><th style="text-align:right">Var. %</th>
+                    <th>Faturamento</th><th style="text-align:right">Var. %</th>
+                  </tr></thead>
+                  <tbody id="cockpit-tbody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
           <div id="sec-procs" class="hidden">
             <div class="tbl-wrap">
               <div class="tbl-head"><div class="tbl-ttl">Procedimentos</div><button class="btn btn-primary" onclick="openProcModal(null)" style="width:auto;padding:8px 16px">+ Novo</button></div>
@@ -2020,11 +2054,11 @@ async function initAdmin() {
 
 const SEC_TITLES={
   agenda:'Agenda',manual:'Agenda Manual',retro:'Agenda Retroativa',blocked:'Bloquear Datas',released:'Liberar Datas',nps:'NPS — Satisfação',
-  revenue:'Receita',promos:'Promoções',commem:'Datas Comemorativas',webpush:'Web Push',
+  revenue:'Receita',cockpit:'Cockpit Financeiro',promos:'Promoções',commem:'Datas Comemorativas',webpush:'Web Push',
   cities:'Cidades',schedules:'Configuração de Horários',
   procs:'Procedimentos',profile:'Perfil & Senha',backup:'Backup'
 };
-const ALL_SECS = ['agenda','manual','retro','blocked','released','nps','revenue','promos','commem','webpush','cities','schedules','procs','profile','backup'];
+const ALL_SECS = ['agenda','manual','retro','blocked','released','nps','revenue','cockpit','promos','commem','webpush','cities','schedules','procs','profile','backup'];
 
 function showSec(name){
   ALL_SECS.forEach(s=>{
@@ -2035,6 +2069,7 @@ function showSec(name){
   if(name==='agenda'){resetValuesVisibility();renderStats();renderAgenda();subscribePush('admin').catch(()=>{})}
   if(name==='manual') initManualBooking();
   if(name==='retro') initRetro();
+  if(name==='cockpit') initCockpit();
   if(name==='released'){renderReleased();renderReleasedSlots();renderReleaseCityCheckboxes()}
   if(name==='nps') renderNPSDashboard();
   if(name==='blocked'){renderBlocked();renderBlockedSlots();renderBlockCityCheckboxes()}
@@ -2631,14 +2666,24 @@ async function removeBlockSlot(id) {
 // ── REVENUE ──────────────────────────────────────
 async function renderRevCards() {
   try {
-    const s=await GET('/api/revenue/summary');
-    document.getElementById('rev-cards').innerHTML=`
-      <div class="rc"><div class="rc-per">Hoje</div><div class="rc-val">${_valuesVisible?fmtCurr(s.today.total):'<span class="val-mask">••••••</span>'}</div><div class="rc-cnt">${s.today.cnt} agendamento${s.today.cnt!=1?'s':''}</div></div>
-      <div class="rc"><div class="rc-per">Esta Semana</div><div class="rc-val">${_valuesVisible?fmtCurr(s.week.total):'<span class="val-mask">••••••</span>'}</div><div class="rc-cnt">${s.week.cnt} agendamento${s.week.cnt!=1?'s':''}</div></div>
-      <div class="rc"><div class="rc-per">Este Mês</div><div class="rc-val">${_valuesVisible?fmtCurr(s.month.total):'<span class="val-mask">••••••</span>'}</div><div class="rc-cnt">${s.month.cnt} agendamento${s.month.cnt!=1?'s':''}</div></div>
-      <div class="rc"><div class="rc-per">Este Ano</div><div class="rc-val">${_valuesVisible?fmtCurr(s.year.total):'<span class="val-mask">••••••</span>'}</div><div class="rc-cnt">${s.year.cnt} agendamento${s.year.cnt!=1?'s':''}</div></div>
-    `;
-  } catch{}
+    const mf = document.getElementById('fl-month')?.value || '';
+    const url = mf ? '/api/revenue/summary?month=' + mf : '/api/revenue/summary';
+    const s = await GET(url);
+    // Label do card: "Este Mês" ou o mês selecionado formatado
+    const MONTHS_PT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    let monthLabel = 'Este Mês';
+    if (mf) {
+      const [y, m] = mf.split('-');
+      monthLabel = MONTHS_PT[parseInt(m)-1] + '/' + y;
+    }
+    const v = x => _valuesVisible ? fmtCurr(x) : '<span class="val-mask">••••••</span>';
+    const c = n => n + ' agendamento' + (n!=1?'s':'');
+    document.getElementById('rev-cards').innerHTML =
+      '<div class="rc"><div class="rc-per">Hoje</div><div class="rc-val">' + v(s.today.total) + '</div><div class="rc-cnt">' + c(s.today.cnt) + '</div></div>' +
+      '<div class="rc"><div class="rc-per">Esta Semana</div><div class="rc-val">' + v(s.week.total) + '</div><div class="rc-cnt">' + c(s.week.cnt) + '</div></div>' +
+      '<div class="rc rc-highlight"><div class="rc-per">' + monthLabel + '</div><div class="rc-val">' + v(s.month.total) + '</div><div class="rc-cnt">' + c(s.month.cnt) + '</div></div>' +
+      '<div class="rc"><div class="rc-per">Este Ano</div><div class="rc-val">' + v(s.year.total) + '</div><div class="rc-cnt">' + c(s.year.cnt) + '</div></div>';
+  } catch(e) { console.error('renderRevCards', e); }
 }
 let _revAllData = [];
 let _revPage    = 1;
@@ -2664,6 +2709,7 @@ function renderRevPage(page) {
 
 async function renderRevTable() {
   const mf=document.getElementById('fl-month').value;
+  renderRevCards(); // atualiza card do mês ao mudar filtro
   const tbody=document.getElementById('rev-body');
   tbody.innerHTML='<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-light)">Carregando...</td></tr>';
   try {
@@ -2805,6 +2851,178 @@ async function deleteProc(id) {
     clearProcsCache(); clearCitiesCache();
     showToast('Procedimento removido','ok'); renderProcsAdmin();
   } catch(e){ showToast(e.message,'error'); }
+}
+
+// ── COCKPIT FINANCEIRO ────────────────────────────
+const MONTHS_NAMES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+                      'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+const MONTHS_SHORT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+
+async function initCockpit() {
+  const yearSel = document.getElementById('cockpit-year');
+  const cardsEl = document.getElementById('cockpit-cards');
+  const tbodyEl = document.getElementById('cockpit-tbody');
+
+  cardsEl.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:32px;color:var(--text-light)">Carregando...</div>';
+  tbodyEl.innerHTML = '';
+
+  try {
+    const year = yearSel.value || new Date().getFullYear();
+    const data = await GET('/api/revenue/cockpit?year=' + year);
+
+    // Populate year selector
+    if (data.available_years && data.available_years.length > 0) {
+      const curYear = String(year);
+      yearSel.innerHTML = data.available_years.map(y =>
+        '<option value="' + y + '"' + (y === curYear ? ' selected' : '') + '>' + y + '</option>'
+      ).join('');
+    }
+
+    if (!data.months || data.months.length === 0) {
+      cardsEl.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:32px;color:var(--text-light)">Nenhum dado para ' + year + '</div>';
+      return;
+    }
+
+    // Build cards and table
+    let cardsHtml = '';
+    let rowsHtml  = '';
+
+    data.months.forEach((m, i) => {
+      const prev   = i > 0 ? data.months[i-1] : null;
+      const cntDiff = prev ? Number(m.cnt) - Number(prev.cnt) : null;
+      const totDiff = prev ? Number(m.total) - Number(prev.total) : null;
+      const cntPct  = prev && Number(prev.cnt) > 0 ? ((cntDiff / Number(prev.cnt)) * 100) : null;
+      const totPct  = prev && Number(prev.total) > 0 ? ((totDiff / Number(prev.total)) * 100) : null;
+
+      const monthName = MONTHS_NAMES[parseInt(m.month_num)-1];
+      const monthShort = MONTHS_SHORT[parseInt(m.month_num)-1];
+
+      // Build comparison badge
+      const badge = (pct, label) => {
+        if (pct === null) return '<span style="font-size:11px;color:var(--text-light)">—</span>';
+        const color = pct > 0 ? '#27ae60' : pct < 0 ? '#e74c3c' : '#888';
+        const arrow = pct > 0 ? '▲' : pct < 0 ? '▼' : '→';
+        return '<span style="font-size:11px;font-weight:700;color:' + color + '">' + arrow + ' ' + Math.abs(pct).toFixed(1) + '%</span>';
+      };
+
+      // Card
+      cardsHtml += '<div class="tbl-wrap" style="padding:16px 18px">' +
+        '<div style="font-size:13px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">' + monthName + '</div>' +
+        '<div style="font-size:22px;font-weight:800;color:var(--dark);margin-bottom:2px">' +
+          (_valuesVisible ? fmtCurr(m.total) : '<span class="val-mask">••••••</span>') +
+        '</div>' +
+        '<div style="font-size:12px;color:var(--text-light);margin-bottom:8px">' + m.cnt + ' agendamento' + (m.cnt!=1?'s':'') + '</div>' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">' +
+          '<div style="display:flex;gap:10px;flex-wrap:wrap">' +
+            (cntPct !== null ? '<div style="font-size:11px">📅 ' + badge(cntPct) + '</div>' : '') +
+            (totPct !== null ? '<div style="font-size:11px">💰 ' + badge(totPct) + '</div>' : '') +
+          '</div>' +
+          '<button data-ym="' + m.ym + '" onclick="openCockpitMonth(this.getAttribute(\'data-ym\'))" style="font-size:11px;font-weight:700;color:var(--rose);background:var(--rose-light);border:1px solid var(--rose-mid);border-radius:20px;padding:3px 10px;cursor:pointer">📊 Detalhes</button>' +
+        '</div>' +
+        '</div>';
+
+      // Table row
+      const fmtPct = (pct) => {
+        if (pct === null) return '<td style="text-align:right;color:#aaa">—</td>';
+        const color = pct > 0 ? '#27ae60' : pct < 0 ? '#e74c3c' : '#888';
+        const arrow = pct > 0 ? '▲' : pct < 0 ? '▼' : '→';
+        return '<td style="text-align:right;color:' + color + ';font-weight:700">' + arrow + ' ' + Math.abs(pct).toFixed(1) + '%</td>';
+      };
+      rowsHtml += '<tr>' +
+        '<td style="font-weight:600">' + monthShort + '/' + m.ym.slice(0,4) + '</td>' +
+        '<td>' + m.cnt + '</td>' + fmtPct(cntPct) +
+        '<td>' + (_valuesVisible ? fmtCurr(m.total) : '<span class="val-mask">••••••</span>') + '</td>' + fmtPct(totPct) +
+        '</tr>';
+    });
+
+    cardsEl.innerHTML = cardsHtml;
+    tbodyEl.innerHTML = rowsHtml;
+  } catch(e) {
+    cardsEl.innerHTML = '<div style="color:var(--error);padding:24px">Erro ao carregar cockpit: ' + e.message + '</div>';
+  }
+}
+
+// ── COCKPIT MONTH DETAIL ────────────────────────────
+async function openCockpitMonth(ym) {
+  const overlay = document.getElementById('cm-overlay');
+  const titleEl = document.getElementById('cm-title');
+  const badgesEl = document.getElementById('cm-badges');
+  const bodyEl   = document.getElementById('cm-body');
+
+  const MONTHS_PT_FULL = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+                          'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  const [y, m] = ym.split('-');
+  titleEl.textContent = MONTHS_PT_FULL[parseInt(m)-1] + ' de ' + y;
+  badgesEl.innerHTML  = '';
+  bodyEl.innerHTML    = '<div style="text-align:center;padding:32px;color:var(--text-light)">Carregando...</div>';
+  overlay.classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+
+  try {
+    const d = await GET('/api/revenue/cockpit/month?month=' + ym);
+    const v = x => _valuesVisible ? fmtCurr(x) : '••••••';
+
+    // Summary badges
+    badgesEl.innerHTML =
+      '<span class="badge-dur" style="background:var(--rose-light);color:var(--rose);border:1px solid var(--rose-mid)">📅 ' + d.cnt + ' agendamentos</span>' +
+      '<span class="badge-dur" style="background:var(--gold-light);color:#7a5c00;border:1px solid #e0c060">💰 ' + v(d.total) + '</span>' +
+      '<span class="badge-dur" style="background:#f0f9ff;color:#1a6080;border:1px solid #b0d8f0">🎯 Ticket médio: ' + v(d.avg_ticket) + '</span>';
+
+    // Build body content
+    let html_body = '';
+
+    // Top 3 ranking
+    if (d.top3 && d.top3.length > 0) {
+      const medals = ['🥇','🥈','🥉'];
+      html_body += '<div style="margin-bottom:20px">';
+      html_body += '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-light);margin-bottom:10px">🏆 Top ' + d.top3.length + ' Procedimentos</div>';
+      d.top3.forEach((p, i) => {
+        html_body += '<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--cream);border-radius:var(--r-sm);margin-bottom:8px;border:1px solid var(--border)">' +
+          '<span style="font-size:20px">' + medals[i] + '</span>' +
+          '<div style="flex:1">' +
+            '<div style="font-weight:700;font-size:13px;color:var(--dark)">' + p.name + '</div>' +
+            '<div style="font-size:11px;color:var(--text-light);margin-top:2px">' + p.cnt + ' agendamento' + (p.cnt!==1?'s':'') +
+              (p.total > 0 ? ' · ' + v(p.total) : '') + '</div>' +
+          '</div>' +
+          '<div style="font-size:18px;font-weight:800;color:var(--rose)">' + p.cnt + '</div>' +
+          '</div>';
+      });
+      html_body += '</div>';
+    }
+
+    // All procedures breakdown
+    if (d.by_procedure && d.by_procedure.length > 3) {
+      html_body += '<div>';
+      html_body += '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-light);margin-bottom:8px">📋 Todos os procedimentos</div>';
+      html_body += '<table style="width:100%;border-collapse:collapse;font-size:12px">';
+      html_body += '<thead><tr style="border-bottom:1px solid var(--border)">' +
+        '<th style="text-align:left;padding:6px 4px;color:var(--text-light)">Procedimento</th>' +
+        '<th style="text-align:center;padding:6px 4px;color:var(--text-light)">Qtd</th>' +
+        '<th style="text-align:right;padding:6px 4px;color:var(--text-light)">Total</th>' +
+        '</tr></thead><tbody>';
+      d.by_procedure.forEach(p => {
+        html_body += '<tr style="border-bottom:1px solid var(--border)">' +
+          '<td style="padding:7px 4px;color:var(--dark)">' + p.name + '</td>' +
+          '<td style="padding:7px 4px;text-align:center;font-weight:700;color:var(--rose)">' + p.cnt + '</td>' +
+          '<td style="padding:7px 4px;text-align:right;color:var(--dark)">' + (p.total > 0 ? v(p.total) : '—') + '</td>' +
+          '</tr>';
+      });
+      html_body += '</tbody></table></div>';
+    }
+
+    if (!html_body) {
+      html_body = '<div style="text-align:center;padding:24px;color:var(--text-light)">Nenhum dado disponível.</div>';
+    }
+
+    bodyEl.innerHTML = html_body;
+  } catch(e) {
+    bodyEl.innerHTML = '<div style="color:var(--error);padding:16px">Erro: ' + e.message + '</div>';
+  }
+}
+
+function closeCockpitMonth() {
+  document.getElementById('cm-overlay').classList.add('hidden');
+  document.body.style.overflow = '';
 }
 
 // ── AGENDA RETROATIVA ─────────────────────────────
@@ -4891,6 +5109,19 @@ document.addEventListener('DOMContentLoaded', async () => {
       <div class="pm-divider"></div>
     </div>
     <div class="pm-body" id="pm-proc-desc"></div>
+  </div>
+</div>
+
+<!-- POPUP COCKPIT MONTH DETAIL -->
+<div id="cm-overlay" class="pm-overlay hidden" onclick="if(event.target===this)closeCockpitMonth()">
+  <div class="pm-card" style="position:relative;max-width:520px">
+    <button class="pm-close" onclick="closeCockpitMonth()">✕</button>
+    <div class="pm-header">
+      <div class="pm-title" id="cm-title"></div>
+      <div class="pm-badges" id="cm-badges"></div>
+      <div class="pm-divider"></div>
+    </div>
+    <div class="pm-body" id="cm-body" style="white-space:normal"></div>
   </div>
 </div>
 
