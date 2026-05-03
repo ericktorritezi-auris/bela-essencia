@@ -2067,19 +2067,101 @@ app.get('/api/revenue/summary', requireAdmin, async (req, res) => {
     const month = monthBrasilia();
     const year  = yearBrasilia();
     const { ws, we } = weekBrasilia();
+    // Se passar ?month=YYYY-MM, usa esse mês para o card "Este Mês"
+    const filterMonth = req.query.month && /^\d{4}-\d{2}$/.test(req.query.month)
+      ? req.query.month : month;
 
-    // COUNT(*) conta TODOS os confirmados; SUM(price) ignora NULL naturalmente
     const q = (sql, p) => req.db(sql, p).then(r => r.rows[0]);
     const [todayRow, weekRow, monthRow, yearRow] = await Promise.all([
       q(`SELECT COALESCE(SUM(price),0) as total, COUNT(*) as cnt FROM appointments WHERE date=$1 AND status IN ('confirmed','realizado')`, [today]),
       q(`SELECT COALESCE(SUM(price),0) as total, COUNT(*) as cnt FROM appointments WHERE date>=$1 AND date<=$2 AND status IN ('confirmed','realizado')`, [ws, we]),
-      q(`SELECT COALESCE(SUM(price),0) as total, COUNT(*) as cnt FROM appointments WHERE to_char(date,'YYYY-MM')=$1 AND status IN ('confirmed','realizado')`, [month]),
+      q(`SELECT COALESCE(SUM(price),0) as total, COUNT(*) as cnt FROM appointments WHERE to_char(date,'YYYY-MM')=$1 AND status IN ('confirmed','realizado')`, [filterMonth]),
       q(`SELECT COALESCE(SUM(price),0) as total, COUNT(*) as cnt FROM appointments WHERE to_char(date,'YYYY')=$1 AND status IN ('confirmed','realizado')`, [year]),
     ]);
-    res.json({ today: todayRow, week: weekRow, month: monthRow, year: yearRow });
+    res.json({ today: todayRow, week: weekRow, month: monthRow, year: yearRow, filterMonth });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// ── Cockpit: resumo mês a mês por ano ────────────────────────────────────────
+app.get('/api/revenue/cockpit', requireAdmin, async (req, res) => {
+  await autoCompleteAppointments();
+  const year = req.query.year || yearBrasilia();
+  try {
+    // Meses com dados no ano solicitado
+    const { rows } = await req.db(
+      `SELECT
+         to_char(date,'MM') as month_num,
+         to_char(date,'YYYY-MM') as ym,
+         COALESCE(SUM(price),0)::numeric as total,
+         COUNT(*) as cnt
+       FROM appointments
+       WHERE to_char(date,'YYYY')=$1 AND status IN ('confirmed','realizado')
+       GROUP BY month_num, ym
+       ORDER BY ym`,
+      [year]
+    );
+    // Anos disponíveis (para o seletor)
+    const { rows: years } = await req.db(
+      `SELECT DISTINCT to_char(date,'YYYY') as yr
+       FROM appointments WHERE status IN ('confirmed','realizado')
+       ORDER BY yr`
+    );
+    res.json({ year, months: rows, available_years: years.map(r => r.yr) });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Cockpit: detalhes de 1 mês específico ────────────────────────────────────
+app.get('/api/revenue/cockpit/month', requireAdmin, async (req, res) => {
+  const { month } = req.query; // YYYY-MM
+  if (!month || !/^\d{4}-\d{2}$/.test(month)) {
+    return res.status(400).json({ error: 'Parâmetro month obrigatório (YYYY-MM)' });
+  }
+  await autoCompleteAppointments();
+  try {
+    const q = (sql, p) => req.db(sql, p).then(r => r.rows);
+    const q1 = (sql, p) => req.db(sql, p).then(r => r.rows[0]);
+
+    // Totais do mês
+    const totals = await q1(
+      `SELECT COALESCE(SUM(price),0)::numeric as total, COUNT(*) as cnt
+       FROM appointments
+       WHERE to_char(date,'YYYY-MM')=$1 AND status IN ('confirmed','realizado')`,
+      [month]
+    );
+
+    // Agendamentos por procedimento
+    const byProc = await q(
+      `SELECT proc_name, COUNT(*) as cnt, COALESCE(SUM(price),0)::numeric as total
+       FROM appointments
+       WHERE to_char(date,'YYYY-MM')=$1 AND status IN ('confirmed','realizado')
+       GROUP BY proc_name ORDER BY cnt DESC, total DESC`,
+      [month]
+    );
+
+    // Ticket médio
+    const avg = totals.cnt > 0
+      ? (Number(totals.total) / Number(totals.cnt))
+      : 0;
+
+    res.json({
+      month,
+      total:   Number(totals.total),
+      cnt:     Number(totals.cnt),
+      avg_ticket: avg,
+      by_procedure: byProc.map(r => ({
+        name:  r.proc_name,
+        cnt:   Number(r.cnt),
+        total: Number(r.total),
+      })),
+      top3: byProc.slice(0, 3).map(r => ({
+        name:  r.proc_name,
+        cnt:   Number(r.cnt),
+        total: Number(r.total),
+      })),
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ── Promoções ────────────────────────────────────────────────────────────────
