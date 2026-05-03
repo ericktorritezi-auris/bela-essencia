@@ -129,6 +129,7 @@ h1,h2,h3,h4{font-family:'Cormorant Garamond',serif}
 .no-slots{text-align:center;padding:32px;color:var(--text-light);font-size:14px}
 .fg{margin-bottom:15px}
 .fg label{display:block;font-size:11px;font-weight:800;color:var(--text-light);text-transform:uppercase;letter-spacing:.09em;margin-bottom:5px}
+.inp-base{width:100%;background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:12px 14px;font-family:'Nunito',sans-serif;font-size:13px;color:var(--dark);box-sizing:border-box;outline:none}
 .fg input,.fg select{width:100%;background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:13px 15px;font-family:'Nunito',sans-serif;font-size:15px;color:var(--dark);transition:var(--tr);outline:none;appearance:none}
 .fg input:focus,.fg select:focus{border-color:var(--rose);background:white;box-shadow:0 0 0 3px rgba(155,77,106,.1)}
 .fg input.err{border-color:var(--error)}
@@ -920,74 +921,56 @@ tr:hover td{background:#FAF3F6}
           </div>
 
           <div id="sec-retro" class="hidden">
-            <div class="tbl-wrap">
-              <div style="padding:20px 20px 0">
-                <div class="tbl-ttl" style="margin-bottom:4px">Agenda Retroativa ⏮️</div>
-                <p style="font-size:12px;color:var(--text-light);margin-bottom:18px;line-height:1.7">
-                  Lance atendimentos já realizados que não foram agendados pelo sistema.
-                  Qualquer data e horário são aceitos — apenas conflitos com agendamentos existentes são bloqueados.
+            <div class="tbl-wrap" style="margin-bottom:16px">
+              <div style="padding:18px 20px 0">
+                <div class="tbl-ttl" style="margin-bottom:6px">⏮️ Agenda Retroativa</div>
+                <p style="font-size:12px;color:var(--text-light);margin:0 0 18px;line-height:1.7">
+                  Lance atendimentos já realizados que não passaram pelo sistema.
+                  Qualquer data e horário são aceitos — conflitos com agendamentos existentes são bloqueados.
                 </p>
               </div>
-
-              <!-- Formulário retroativo -->
-              <div style="padding:0 20px 24px;display:flex;flex-direction:column;gap:14px" id="retro-form">
-                <!-- Cidade -->
-                <div class="fg">
-                  <label>Cidade <span style="color:var(--rose)">*</span></label>
-                  <select id="retro-city" onchange="retroLoadProcs()" style="width:100%;background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:12px 14px;font-family:'Nunito',sans-serif;font-size:13px;color:var(--dark)">
+              <div style="padding:0 20px 24px">
+                <div class="fg"><label>Cidade *</label>
+                  <select id="retro-city" onchange="retroLoadProcs()" class="inp-base">
                     <option value="">Selecione a cidade...</option>
                   </select>
                 </div>
-                <!-- Procedimento -->
-                <div class="fg">
-                  <label>Procedimento <span style="color:var(--rose)">*</span></label>
-                  <select id="retro-proc" onchange="retroCalcEnd()" style="width:100%;background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:12px 14px;font-family:'Nunito',sans-serif;font-size:13px;color:var(--dark)">
+                <div class="fg" style="margin-top:12px"><label>Procedimento *</label>
+                  <select id="retro-proc" onchange="retroCalcEnd()" class="inp-base">
                     <option value="">Selecione o procedimento...</option>
                   </select>
                 </div>
-                <!-- Data e Horário lado a lado -->
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-                  <div class="fg">
-                    <label>Data <span style="color:var(--rose)">*</span></label>
-                    <input type="date" id="retro-date" style="width:100%;background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:12px 14px;font-family:'Nunito',sans-serif;font-size:13px;color:var(--dark);box-sizing:border-box">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+                  <div class="fg"><label>Data *</label>
+                    <input type="date" id="retro-date" class="inp-base">
                   </div>
-                  <div class="fg">
-                    <label>Início <span style="color:var(--rose)">*</span></label>
-                    <input type="time" id="retro-st" onchange="retroCalcEnd()" style="width:100%;background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:12px 14px;font-family:'Nunito',sans-serif;font-size:13px;color:var(--dark);box-sizing:border-box">
+                  <div class="fg"><label>Início *</label>
+                    <input type="time" id="retro-st" onchange="retroCalcEnd()" class="inp-base">
                   </div>
                 </div>
-                <!-- Fim calculado -->
-                <div class="fg">
-                  <label>Término (calculado automaticamente)</label>
-                  <input type="time" id="retro-et" readonly style="width:100%;background:var(--border);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:12px 14px;font-family:'Nunito',sans-serif;font-size:13px;color:var(--text-light);box-sizing:border-box">
+                <div class="fg" style="margin-top:12px"><label>Término (automático)</label>
+                  <input type="time" id="retro-et" readonly class="inp-base" style="opacity:.6;cursor:not-allowed">
                 </div>
-                <!-- Cliente -->
-                <div class="fg">
-                  <label>Nome do cliente <span style="color:var(--rose)">*</span></label>
-                  <input type="text" id="retro-name" placeholder="Nome completo" style="width:100%;background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:12px 14px;font-family:'Nunito',sans-serif;font-size:13px;color:var(--dark);box-sizing:border-box">
+                <div class="fg" style="margin-top:12px"><label>Nome do cliente *</label>
+                  <input type="text" id="retro-name" placeholder="Nome completo" class="inp-base">
                 </div>
-                <div class="fg">
-                  <label>WhatsApp</label>
-                  <input type="tel" id="retro-phone" placeholder="(43) 99999-9999" style="width:100%;background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:12px 14px;font-family:'Nunito',sans-serif;font-size:13px;color:var(--dark);box-sizing:border-box">
+                <div class="fg" style="margin-top:12px"><label>WhatsApp</label>
+                  <input type="tel" id="retro-phone" placeholder="(43) 99999-9999" class="inp-base">
                 </div>
-                <!-- Status -->
-                <div class="fg">
-                  <label>Status</label>
-                  <select id="retro-status" style="width:100%;background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:12px 14px;font-family:'Nunito',sans-serif;font-size:13px;color:var(--dark)">
-                    <option value="realizado">✅ Realizado</option>
-                    <option value="confirmed">📅 Confirmado</option>
-                  </select>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+                  <div class="fg"><label>Status</label>
+                    <select id="retro-status" class="inp-base">
+                      <option value="realizado">✅ Realizado</option>
+                      <option value="confirmed">📅 Confirmado</option>
+                    </select>
+                  </div>
+                  <div class="fg"><label>Valor (R$)</label>
+                    <input type="number" id="retro-price" min="0" step="0.01" placeholder="0.00" class="inp-base">
+                  </div>
                 </div>
-                <!-- Valor -->
-                <div class="fg">
-                  <label>Valor cobrado (R$) <span style="font-size:11px;color:var(--text-light)">— opcional</span></label>
-                  <input type="number" id="retro-price" min="0" step="0.01" placeholder="0.00" style="width:100%;background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:12px 14px;font-family:'Nunito',sans-serif;font-size:13px;color:var(--dark);box-sizing:border-box">
-                </div>
-                <!-- Conflict warning -->
-                <div id="retro-conflict-msg" style="display:none;background:#fff0f0;border:1px solid #ffb3b3;border-radius:var(--r-sm);padding:12px 14px;font-size:13px;color:#c0392b"></div>
-                <!-- Save button -->
-                <button class="btn btn-primary" id="retro-save-btn" onclick="retroSave()" style="padding:14px">
-                  ⏮️ Lançar agendamento retroativo
+                <div id="retro-conflict-msg" style="display:none;margin-top:12px;background:#fff0f0;border:1px solid #ffb3b3;border-radius:var(--r-sm);padding:12px;font-size:13px;color:#c0392b"></div>
+                <button class="btn btn-primary" id="retro-save-btn" onclick="retroSave()" style="width:100%;margin-top:16px;padding:14px;font-size:14px">
+                  ⏮️ Lançar Retroativo
                 </button>
               </div>
             </div>
@@ -2036,12 +2019,12 @@ async function initAdmin() {
 }
 
 const SEC_TITLES={
-  agenda:'Agenda',manual:'Agenda Manual',blocked:'Bloquear Datas',released:'Liberar Datas',nps:'NPS — Satisfação',
+  agenda:'Agenda',manual:'Agenda Manual',retro:'Agenda Retroativa',blocked:'Bloquear Datas',released:'Liberar Datas',nps:'NPS — Satisfação',
   revenue:'Receita',promos:'Promoções',commem:'Datas Comemorativas',webpush:'Web Push',
   cities:'Cidades',schedules:'Configuração de Horários',
   procs:'Procedimentos',profile:'Perfil & Senha',backup:'Backup'
 };
-const ALL_SECS = ['agenda','manual','blocked','released','nps','revenue','promos','commem','webpush','cities','schedules','procs','profile','backup'];
+const ALL_SECS = ['agenda','manual','retro','blocked','released','nps','revenue','promos','commem','webpush','cities','schedules','procs','profile','backup'];
 
 function showSec(name){
   ALL_SECS.forEach(s=>{
