@@ -89,6 +89,12 @@ h1,h2,h3,h4{font-family:'Cormorant Garamond',serif}
 .proc-saiba{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;color:var(--rose);background:var(--rose-light);border:1px solid var(--rose-mid);border-radius:20px;padding:3px 10px;cursor:pointer;margin-top:5px;transition:var(--tr);text-decoration:none}
 .proc-saiba:hover{background:var(--rose);color:white}
 /* Popup Saiba Mais */
+.cockpit-grid{display:grid;grid-template-columns:1fr;gap:12px;padding:0 0 8px}
+.cockpit-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px}
+.cockpit-table{width:100%;min-width:320px}
+@media(min-width:480px){.cockpit-grid{grid-template-columns:repeat(2,1fr)}}
+@media(min-width:860px){.cockpit-grid{grid-template-columns:repeat(3,1fr)}}
+@media(min-width:1100px){.cockpit-grid{grid-template-columns:repeat(4,1fr)}}
 .pm-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9000;display:flex;align-items:center;justify-content:center;padding:16px;animation:fdIn .2s ease}
 .pm-card{background:white;border-radius:var(--r-lg);max-width:480px;width:100%;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.25);animation:fsUp .3s ease}
 .pm-header{padding:20px 20px 0;flex-shrink:0}
@@ -1039,31 +1045,34 @@ tr:hover td{background:#FAF3F6}
             </div>
           </div>
           <div id="sec-cockpit" class="hidden">
-            <!-- Header com filtro de ano -->
-            <div class="tbl-wrap" style="margin-bottom:16px">
-              <div style="padding:18px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
-                <div>
-                  <div class="tbl-ttl" style="margin-bottom:4px">🎯 Cockpit Financeiro</div>
-                  <p style="font-size:12px;color:var(--text-light);margin:0">Evolução mês a mês — agendamentos e faturamento</p>
+            <!-- Header com filtro de ano — mobile-first -->
+            <div class="tbl-wrap" style="margin-bottom:14px">
+              <div style="padding:16px 16px 14px">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+                  <div class="tbl-ttl" style="margin:0">🎯 Cockpit</div>
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <label style="font-size:11px;color:var(--text-light);white-space:nowrap">Ano:</label>
+                    <select id="cockpit-year" onchange="initCockpit()" style="background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;color:var(--dark);min-width:80px">
+                      <option value="">...</option>
+                    </select>
+                  </div>
                 </div>
-                <div style="display:flex;align-items:center;gap:10px">
-                  <label style="font-size:12px;color:var(--text-light)">Ano:</label>
-                  <select id="cockpit-year" onchange="initCockpit()" style="background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:7px 12px;font-size:13px;color:var(--dark)">
-                    <option value="">Carregando...</option>
-                  </select>
-                </div>
+                <p style="font-size:11px;color:var(--text-light);margin:6px 0 0;line-height:1.5">Evolução mês a mês — agendamentos e faturamento</p>
               </div>
             </div>
-            <!-- Cards mensais -->
-            <div id="cockpit-cards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;padding:0 0 8px"></div>
-            <!-- Tabela resumo -->
-            <div class="tbl-wrap" style="margin-top:16px">
-              <div style="padding:14px 20px 0"><div class="tbl-ttl" style="font-size:14px">Resumo Anual</div></div>
-              <div style="overflow-x:auto;padding-bottom:4px">
-                <table style="min-width:500px">
+            <!-- Cards mensais: 1 col mobile, 2 col tablet, 3+ col desktop -->
+            <div id="cockpit-cards" class="cockpit-grid"></div>
+            <!-- Tabela resumo — scroll horizontal em mobile -->
+            <div class="tbl-wrap" style="margin-top:14px">
+              <div style="padding:12px 16px 0"><div class="tbl-ttl" style="font-size:13px">Resumo Anual</div></div>
+              <div class="cockpit-table-wrap">
+                <table class="cockpit-table">
                   <thead><tr>
-                    <th>Mês</th><th>Agendamentos</th><th style="text-align:right">Var. %</th>
-                    <th>Faturamento</th><th style="text-align:right">Var. %</th>
+                    <th>Mês</th>
+                    <th style="text-align:center">Ag.</th>
+                    <th style="text-align:right">Var.%</th>
+                    <th style="text-align:right">Faturamento</th>
+                    <th style="text-align:right">Var.%</th>
                   </tr></thead>
                   <tbody id="cockpit-tbody"></tbody>
                 </table>
@@ -2160,6 +2169,7 @@ function toggleValues() {
     }
   }
   if (activeSec === 'revenue') { renderRevPage(_revPage); renderRevCards(); }
+  if (activeSec === 'cockpit') { initCockpit(); }
   if (activeSec === 'procs')   { renderProcsAdmin(); }
 }
 
@@ -2906,21 +2916,20 @@ async function initCockpit() {
       };
 
       // Card
-      cardsHtml += '<div class="tbl-wrap" style="padding:16px 18px">' +
-        '<div style="font-size:13px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">' + monthName + '</div>' +
-        '<div style="font-size:22px;font-weight:800;color:var(--dark);margin-bottom:2px">' +
+      // Card — mobile-first, coluna única, sem overflow
+      const ym_safe = m.ym.replace(/[^0-9-]/g,'');
+      cardsHtml += '<div class="tbl-wrap" style="padding:14px 16px">' +
+        '<div style="font-size:11px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">' + monthName + '</div>' +
+        '<div style="font-size:20px;font-weight:800;color:var(--dark);line-height:1.2;margin-bottom:2px;overflow-wrap:break-word">' +
           (_valuesVisible ? fmtCurr(m.total) : '<span class="val-mask">••••••</span>') +
         '</div>' +
-        '<div style="font-size:12px;color:var(--text-light);margin-bottom:8px">' + m.cnt + ' agendamento' + (m.cnt!=1?'s':'') + '</div>' +
-        '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">' +
-          '<div style="display:flex;gap:10px;flex-wrap:wrap">' +
-            (cntPct !== null ? '<div style="font-size:11px">📅 ' + badge(cntPct) + '</div>' : '') +
-            (totPct !== null ? '<div style="font-size:11px">💰 ' + badge(totPct) + '</div>' : '') +
-          '</div>' +
-          '<button data-ym="' + m.ym + '" onclick="openCockpitMonth(this.getAttribute(\'data-ym\'))" style="font-size:11px;font-weight:700;color:var(--rose);background:var(--rose-light);border:1px solid var(--rose-mid);border-radius:20px;padding:3px 10px;cursor:pointer">📊 Detalhes</button>' +
+        '<div style="font-size:12px;color:var(--text-light);margin-bottom:10px">' + m.cnt + ' agendamento' + (m.cnt!=1?'s':'') + '</div>' +
+        '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">' +
+          (cntPct !== null ? '<span style="font-size:11px;background:var(--cream);padding:2px 8px;border-radius:12px;border:1px solid var(--border)">📅 ' + badge(cntPct) + '</span>' : '') +
+          (totPct !== null ? '<span style="font-size:11px;background:var(--cream);padding:2px 8px;border-radius:12px;border:1px solid var(--border)">💰 ' + badge(totPct) + '</span>' : '') +
         '</div>' +
+        '<button id="cb-' + ym_safe + '" onclick="openCockpitMonth(this.id.slice(3))" style="width:100%;font-size:12px;font-weight:700;color:var(--rose);background:var(--rose-light);border:1px solid var(--rose-mid);border-radius:var(--r-sm);padding:8px;cursor:pointer">📊 Ver detalhes</button>' +
         '</div>';
-
       // Table row
       const fmtPct = (pct) => {
         if (pct === null) return '<td style="text-align:right;color:#aaa">—</td>';
@@ -2929,9 +2938,9 @@ async function initCockpit() {
         return '<td style="text-align:right;color:' + color + ';font-weight:700">' + arrow + ' ' + Math.abs(pct).toFixed(1) + '%</td>';
       };
       rowsHtml += '<tr>' +
-        '<td style="font-weight:600">' + monthShort + '/' + m.ym.slice(0,4) + '</td>' +
-        '<td>' + m.cnt + '</td>' + fmtPct(cntPct) +
-        '<td>' + (_valuesVisible ? fmtCurr(m.total) : '<span class="val-mask">••••••</span>') + '</td>' + fmtPct(totPct) +
+        '<td style="font-weight:600;white-space:nowrap">' + monthShort + '/' + m.ym.slice(0,4) + '</td>' +
+        '<td style="text-align:center">' + m.cnt + '</td>' + fmtPct(cntPct) +
+        '<td style="text-align:right;white-space:nowrap">' + (_valuesVisible ? fmtCurr(m.total) : '<span class="val-mask">••</span>') + '</td>' + fmtPct(totPct) +
         '</tr>';
     });
 
@@ -2964,9 +2973,11 @@ async function openCockpitMonth(ym) {
 
     // Summary badges
     badgesEl.innerHTML =
-      '<span class="badge-dur" style="background:var(--rose-light);color:var(--rose);border:1px solid var(--rose-mid)">📅 ' + d.cnt + ' agendamentos</span>' +
-      '<span class="badge-dur" style="background:var(--gold-light);color:#7a5c00;border:1px solid #e0c060">💰 ' + v(d.total) + '</span>' +
-      '<span class="badge-dur" style="background:#f0f9ff;color:#1a6080;border:1px solid #b0d8f0">🎯 Ticket médio: ' + v(d.avg_ticket) + '</span>';
+      '<div style="display:flex;flex-wrap:wrap;gap:8px">' +
+        '<span class="badge-dur" style="background:var(--rose-light);color:var(--rose);border:1px solid var(--rose-mid)">📅 ' + d.cnt + ' ag.</span>' +
+        '<span class="badge-dur" style="background:var(--gold-light);color:#7a5c00;border:1px solid #e0c060">💰 ' + v(d.total) + '</span>' +
+        '<span class="badge-dur" style="background:#f0f9ff;color:#1a6080;border:1px solid #b0d8f0">🎯 ' + v(d.avg_ticket) + '/ag.</span>' +
+      '</div>';
 
     // Build body content
     let html_body = '';
@@ -2994,7 +3005,7 @@ async function openCockpitMonth(ym) {
     if (d.by_procedure && d.by_procedure.length > 3) {
       html_body += '<div>';
       html_body += '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-light);margin-bottom:8px">📋 Todos os procedimentos</div>';
-      html_body += '<table style="width:100%;border-collapse:collapse;font-size:12px">';
+      html_body += '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch"><table style="width:100%;min-width:260px;border-collapse:collapse;font-size:12px">';
       html_body += '<thead><tr style="border-bottom:1px solid var(--border)">' +
         '<th style="text-align:left;padding:6px 4px;color:var(--text-light)">Procedimento</th>' +
         '<th style="text-align:center;padding:6px 4px;color:var(--text-light)">Qtd</th>' +
@@ -3007,7 +3018,7 @@ async function openCockpitMonth(ym) {
           '<td style="padding:7px 4px;text-align:right;color:var(--dark)">' + (p.total > 0 ? v(p.total) : '—') + '</td>' +
           '</tr>';
       });
-      html_body += '</tbody></table></div>';
+      html_body += '</tbody></table></div></div>';
     }
 
     if (!html_body) {
@@ -5114,7 +5125,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 <!-- POPUP COCKPIT MONTH DETAIL -->
 <div id="cm-overlay" class="pm-overlay hidden" onclick="if(event.target===this)closeCockpitMonth()">
-  <div class="pm-card" style="position:relative;max-width:520px">
+  <div class="pm-card" style="position:relative;max-width:520px;width:100%">
     <button class="pm-close" onclick="closeCockpitMonth()">✕</button>
     <div class="pm-header">
       <div class="pm-title" id="cm-title"></div>

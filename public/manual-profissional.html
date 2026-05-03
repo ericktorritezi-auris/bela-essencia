@@ -354,12 +354,14 @@
     <a href="#acesso" class="toc-link">🔐 Acesso</a>
     <a href="#agenda" class="toc-link">📅 Agenda</a>
     <a href="#manual-booking" class="toc-link">✏️ Ag. Manual</a>
+    <a href="#retro-booking" class="toc-link">⏮️ Ag. Retroativa</a>
     <a href="#bloquear" class="toc-link">🚫 Bloquear</a>
     <a href="#liberar" class="toc-link">✅ Liberar</a>
     <a href="#cidades" class="toc-link">📍 Cidades</a>
     <a href="#horarios" class="toc-link">⏰ Horários</a>
     <a href="#procedimentos" class="toc-link">💅 Procedimentos</a>
     <a href="#financeiro" class="toc-link">💰 Receita</a>
+    <a href="#cockpit" class="toc-link">🎯 Cockpit</a>
     <a href="#promocoes" class="toc-link">🏷️ Promoções</a>
     <a href="#push" class="toc-link">🔔 Push</a>
     <a href="#nps" class="toc-link">⭐ NPS</a>
@@ -551,6 +553,41 @@
         </div>
       </section>
 
+      <!-- AG. RETROATIVA -->
+      <section class="section" id="retro-booking">
+        <div class="section-header">
+          <div class="section-icon">⏮️</div>
+          <div class="section-title">Agenda Retroativa</div>
+        </div>
+        <div class="section-body">
+          <p>A Agenda Retroativa permite registrar atendimentos que já aconteceram mas não foram agendados pelo sistema — sem perder histórico nem faturamento.</p>
+          <div class="sub">
+            <h4>Quando usar</h4>
+            <p>Use sempre que um cliente aparecer sem agendamento prévio e for atendido na hora. Em vez de perder o registro, lance retroativamente após o atendimento.</p>
+          </div>
+          <div class="sub">
+            <h4>Como acessar</h4>
+            <p>Menu lateral → <strong>⏮️ Ag. Retroativa</strong></p>
+          </div>
+          <div class="sub">
+            <h4>Regras da Agenda Retroativa</h4>
+            <p>✅ Qualquer data aceita — passada ou futura<br>
+               ✅ Qualquer horário — sem restrição de grade<br>
+               ⚠️ A data precisa ser um dia de trabalho configurado para aquela cidade (dias da semana ou data pontualmente liberada)<br>
+               ❌ Não pode conflitar com agendamento já existente no mesmo horário</p>
+          </div>
+          <div class="sub">
+            <h4>Campos disponíveis</h4>
+            <p>Cidade · Procedimento · Data · Horário de início (término calculado automaticamente) · Nome do cliente · WhatsApp · Status (Realizado ou Confirmado) · Valor cobrado (opcional)</p>
+          </div>
+          <div class="tip">
+            <span>💡</span>
+            <p>O registro aparece normalmente na Agenda e no Financeiro, como qualquer outro agendamento.</p>
+          </div>
+        </div>
+      </section>
+
+
       <!-- BLOQUEAR DATAS -->
       <section class="section" id="bloquear">
         <div class="section-header">
@@ -700,8 +737,8 @@
             <p>Hoje / Esta Semana / Este Mês / Este Ano — com total de agendamentos e valor acumulado.</p>
           </div>
           <div class="sub">
-            <h4>Listagem por mês</h4>
-            <p>Selecione o mês no filtro para ver todos os procedimentos realizados e confirmados com seus respectivos valores.</p>
+            <h4>Listagem por mês e card dinâmico</h4>
+            <p>Ao selecionar um mês no campo <strong>Por Período</strong>, o card <em>Este Mês</em> atualiza automaticamente para mostrar o total do mês selecionado — o título do card muda para o mês escolhido (ex: <em>Abr/2026</em>). Sem filtro, exibe sempre o mês atual.<br><br>Selecione o mês no filtro para ver todos os procedimentos realizados e confirmados com seus respectivos valores.</p>
           </div>
           <div class="info-box">
             <span>ℹ️</span>
@@ -709,6 +746,48 @@
           </div>
         </div>
       </section>
+
+      <!-- COCKPIT -->
+      <section class="section" id="cockpit">
+        <div class="section-header">
+          <div class="section-icon">🎯</div>
+          <div class="section-title">Cockpit Financeiro</div>
+        </div>
+        <div class="section-body">
+          <p>O Cockpit é o painel estratégico do negócio — mostra a evolução mês a mês de agendamentos e faturamento, com comparativos percentuais automáticos.</p>
+          <div class="sub">
+            <h4>Como acessar</h4>
+            <p>Menu lateral → <strong>🎯 Cockpit</strong></p>
+          </div>
+          <div class="sub">
+            <h4>Cards mensais</h4>
+            <p>Cada mês com dados aparece como um card com: faturamento total, quantidade de agendamentos e variação percentual em relação ao mês anterior (▲ verde = crescimento, ▼ vermelho = queda).</p>
+          </div>
+          <div class="sub">
+            <h4>Filtro por ano</h4>
+            <p>No topo da página há um seletor de ano. Somente os anos com dados aparecem para seleção.</p>
+          </div>
+          <div class="sub">
+            <h4>📊 Detalhes do mês</h4>
+            <p>Cada card tem um botão <strong>📊 Detalhes</strong>. Ao clicar, abre um popup com:</p>
+            <ul>
+              <li>Total de agendamentos e faturamento</li>
+              <li><strong>Ticket médio</strong> — faturamento ÷ agendamentos</li>
+              <li><strong>🏆 Top 3 procedimentos</strong> mais agendados no mês</li>
+              <li>Tabela completa com todos os procedimentos, quantidade e valor</li>
+            </ul>
+          </div>
+          <div class="sub">
+            <h4>Tabela de resumo anual</h4>
+            <p>Abaixo dos cards, uma tabela consolida todos os meses com as variações percentuais de agendamentos e faturamento lado a lado.</p>
+          </div>
+          <div class="tip">
+            <span>💡</span>
+            <p>Use o botão de ocultar/exibir valores (👁) no topo do painel para que o Cockpit também esconda os números — útil em reuniões ou ao compartilhar a tela.</p>
+          </div>
+        </div>
+      </section>
+
 
       <!-- PROMOÇÕES -->
       <section class="section" id="promocoes">
