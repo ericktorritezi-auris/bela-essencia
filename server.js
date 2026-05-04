@@ -224,6 +224,9 @@ async function createTenantSchema(schemaName) {
         st TIME NOT NULL, et TIME NOT NULL, name VARCHAR(200) NOT NULL,
         phone VARCHAR(30) NOT NULL, price NUMERIC(10,2), pt VARCHAR(10),
         status VARCHAR(20) NOT NULL DEFAULT 'confirmed', push_auth TEXT,
+        privacy_consent BOOLEAN NOT NULL DEFAULT FALSE,
+        consent_at      TIMESTAMPTZ,
+        consent_version VARCHAR(10) NOT NULL DEFAULT 'v1.0',
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ
       )`,
       `CREATE TABLE IF NOT EXISTS blocked_dates (
@@ -978,6 +981,9 @@ async function initDB() {
     await client.query(`ALTER TABLE commemorative_dates ADD COLUMN IF NOT EXISTS to_day     INTEGER`);
     await client.query(`ALTER TABLE commemorative_dates ADD COLUMN IF NOT EXISTS to_month   INTEGER`);
     await client.query(`ALTER TABLE procedures ADD COLUMN IF NOT EXISTS description TEXT`);
+    await client.query(`ALTER TABLE appointments ADD COLUMN IF NOT EXISTS privacy_consent BOOLEAN NOT NULL DEFAULT FALSE`);
+    await client.query(`ALTER TABLE appointments ADD COLUMN IF NOT EXISTS consent_at TIMESTAMPTZ`);
+    await client.query(`ALTER TABLE appointments ADD COLUMN IF NOT EXISTS consent_version VARCHAR(10) NOT NULL DEFAULT 'v1.0'`);
     // Rename commemorative_dates.name → title if still old column
     await client.query(`DO $$ BEGIN
       IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='commemorative_dates' AND column_name='name') THEN
@@ -987,6 +993,9 @@ async function initDB() {
     // Migration em todos os schemas de tenant existentes
     for (const { schema_name } of (await client.query(`SELECT schema_name FROM tenants WHERE schema_name IS NOT NULL`)).rows) {
       try { await client.query(`ALTER TABLE "${schema_name}".procedures ADD COLUMN IF NOT EXISTS description TEXT`); } catch {}
+      try { await client.query(`ALTER TABLE "${schema_name}".appointments ADD COLUMN IF NOT EXISTS privacy_consent BOOLEAN NOT NULL DEFAULT FALSE`); } catch {}
+      try { await client.query(`ALTER TABLE "${schema_name}".appointments ADD COLUMN IF NOT EXISTS consent_at TIMESTAMPTZ`); } catch {}
+      try { await client.query(`ALTER TABLE "${schema_name}".appointments ADD COLUMN IF NOT EXISTS consent_version VARCHAR(10) NOT NULL DEFAULT 'v1.0'`); } catch {}
       try { await client.query(`ALTER TABLE "${schema_name}".commemorative_dates ADD COLUMN IF NOT EXISTS from_day   INTEGER`); } catch {}
       try { await client.query(`ALTER TABLE "${schema_name}".commemorative_dates ADD COLUMN IF NOT EXISTS from_month INTEGER`); } catch {}
       try { await client.query(`ALTER TABLE "${schema_name}".commemorative_dates ADD COLUMN IF NOT EXISTS to_day     INTEGER`); } catch {}
@@ -1559,7 +1568,10 @@ app.delete('/api/procedures/:id', requireAdmin, async (req, res) => {
 
 // Público: criar agendamento
 app.post('/api/appointments', async (req, res) => {
-  const { cityId, cityName, procId, procName, date, st, et, name, phone, price, pt } = req.body;
+  const { cityId, cityName, procId, procName, date, st, et, name, phone, price, pt, privacy_consent } = req.body;
+  if (!privacy_consent) {
+    return res.status(400).json({ error: 'Consentimento de privacidade é obrigatório.' });
+  }
   if (!cityId || !procId || !date || !st || !name || !phone) {
     return res.status(400).json({ error: 'Campos obrigatórios faltando' });
   }
@@ -1581,9 +1593,11 @@ app.post('/api/appointments', async (req, res) => {
       const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
       const { rows } = await client.query(
         `INSERT INTO appointments
-           (id, city_id, city_name, proc_id, proc_name, date, st, et, name, phone, price, pt)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
-        [id, cityId, cityName, procId, procName, date, st, et, name, phone, price||null, pt||'fixed']
+           (id, city_id, city_name, proc_id, proc_name, date, st, et, name, phone, price, pt,
+            privacy_consent, consent_at, consent_version)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
+        [id, cityId, cityName, procId, procName, date, st, et, name, phone, price||null, pt||'fixed',
+         true, new Date().toISOString(), 'v1.0']
       );
       return rows[0];
     });
@@ -1596,6 +1610,21 @@ app.post('/api/appointments', async (req, res) => {
     const status = err.code === 409 ? 409 : 500;
     res.status(status).json({ error: err.message });
   }
+});
+
+// ── Log LGPD — Registro de consentimentos (admin) ───────────────────────────
+app.get('/api/lgpd/consents', requireAdmin, async (req, res) => {
+  const { from, to } = req.query;
+  try {
+    let sql = `SELECT id, name, phone, date, privacy_consent, consent_at, consent_version
+               FROM appointments WHERE privacy_consent=TRUE`;
+    const params = [];
+    if (from) { params.push(from); sql += ` AND date >= $${params.length}`; }
+    if (to)   { params.push(to);   sql += ` AND date <= $${params.length}`; }
+    sql += ` ORDER BY consent_at DESC NULLS LAST`;
+    const { rows } = await req.db(sql, params);
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ── Agendamento Retroativo (admin) ───────────────────────────────────────────
@@ -2223,6 +2252,36 @@ app.get('/api/revenue/cockpit/month', requireAdmin, async (req, res) => {
         total: Number(r.total),
       })),
     });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Log LGPD Master — Todos os tenants ──────────────────────────────────────
+app.get('/master/api/lgpd/consents', requireMaster, async (req, res) => {
+  const { tenant_id, from, to } = req.query;
+  try {
+    // Busca tenants para montar query em cada schema
+    let tenantQuery = 'SELECT id, name, schema_name FROM tenants WHERE active=TRUE';
+    const tParams = [];
+    if (tenant_id) { tParams.push(tenant_id); tenantQuery += ` AND id=$1`; }
+    const { rows: tenants } = await pool.query(tenantQuery, tParams);
+
+    const allRows = [];
+    for (const t of tenants) {
+      try {
+        const client = await pool.connect();
+        try {
+          await client.query(`SET search_path TO "${t.schema_name}", public`);
+          let sql = `SELECT id, name, phone, date, privacy_consent, consent_at, consent_version FROM appointments WHERE privacy_consent=TRUE`;
+          const params = [];
+          if (from) { params.push(from); sql += ` AND date >= $${params.length}`; }
+          if (to)   { params.push(to);   sql += ` AND date <= $${params.length}`; }
+          const { rows } = await client.query(sql, params);
+          rows.forEach(r => allRows.push({ ...r, tenant_id: t.id, tenant_name: t.name }));
+        } finally { client.release(); }
+      } catch {}
+    }
+    allRows.sort((a, b) => new Date(b.consent_at||0) - new Date(a.consent_at||0));
+    res.json(allRows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
