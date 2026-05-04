@@ -727,15 +727,7 @@
 
     
     <!-- Modal detalhe do contrato -->
-<div class="modal-bg hidden" id="ct-modal-bg">
-  <div class="modal" style="max-width:560px">
-    <div class="modal-header">
-      <div class="modal-title">📑 Detalhes do Aceite</div>
-      <button class="modal-close" onclick="document.getElementById('ct-modal-bg').classList.add('hidden')">✕</button>
-    </div>
-    <div id="ct-modal-body" style="padding:20px 24px;font-size:13px;line-height:1.8;max-height:65vh;overflow-y:auto"></div>
-  </div>
-</div>
+
 
       <button class="modal-close" onclick="closeModal('lead')">✕</button>
     </div>
@@ -1988,11 +1980,9 @@ async function initContracts() {
 }
 
 function showContractDetail(tenantId) {
-  console.log('[Detail] called with id:', tenantId, typeof tenantId);
-  console.log('[Detail] _contractsData length:', _contractsData.length);
+
   const r = _contractsData.find(x => x.id === tenantId);
-  console.log('[Detail] record found:', r ? 'YES' : 'NO', r ? r.owner_name : '');
-  if (!r) { console.error('[Detail] Record NOT FOUND for id:', tenantId); return; }
+  if (!r) return;
   const baseUrl = 'https://adminpanel.belleplanner.com.br';
   const tokenLink = r.contract_token
     ? `<a href="${baseUrl}/contrato/aceite/${r.contract_token}" target="_blank" style="color:var(--rose);font-size:11px;word-break:break-all">${baseUrl}/contrato/aceite/${r.contract_token}</a>`
@@ -2018,10 +2008,8 @@ function showContractDetail(tenantId) {
     </div>`;
   document.getElementById('ct-modal-body').innerHTML = body;
   const modalEl = document.getElementById('ct-modal-bg');
-  console.log('[Detail] modal element:', modalEl ? 'found' : 'NOT FOUND');
-  console.log('[Detail] modal current classes:', modalEl?.className);
+
   if (modalEl) { modalEl.classList.remove('hidden'); }
-  console.log('[Detail] modal classes after remove:', modalEl?.className);
 }
 
 async function resendContractEmail(tenantId, name) {
@@ -2158,6 +2146,18 @@ if (_masterToken) {
   });
 }
 </script>
+
+<!-- Modal detalhe do contrato -->
+<div class="modal-bg hidden" id="ct-modal-bg">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-header">
+      <div class="modal-title">📑 Detalhes do Aceite</div>
+      <button class="modal-close" onclick="document.getElementById('ct-modal-bg').classList.add('hidden')">✕</button>
+    </div>
+    <div id="ct-modal-body" style="padding:20px 24px;font-size:13px;line-height:1.8;max-height:65vh;overflow-y:auto"></div>
+  </div>
+</div>
+
 </body>
 </html>
 <script>
