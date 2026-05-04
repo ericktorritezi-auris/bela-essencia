@@ -252,8 +252,17 @@ async function createTenantSchema(schemaName) {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )`,
       `CREATE TABLE IF NOT EXISTS commemorative_dates (
-        id SERIAL PRIMARY KEY, title VARCHAR(100) NOT NULL, day INTEGER NOT NULL,
-        month INTEGER NOT NULL, message VARCHAR(500), is_active BOOLEAN NOT NULL DEFAULT TRUE
+        id          SERIAL      PRIMARY KEY,
+        title       VARCHAR(100) NOT NULL,
+        day         INTEGER     NOT NULL,
+        month       INTEGER     NOT NULL,
+        message     VARCHAR(500),
+        -- Período de veiculação (opcional — se nulo, exibe apenas no dia exato)
+        from_day    INTEGER,
+        from_month  INTEGER,
+        to_day      INTEGER,
+        to_month    INTEGER,
+        is_active   BOOLEAN     NOT NULL DEFAULT TRUE
       )`,
       `CREATE TABLE IF NOT EXISTS admin_profile (
         id        SERIAL       PRIMARY KEY,
@@ -964,6 +973,10 @@ async function initDB() {
     // Migração: admin_profile — adiciona phone e torna pass_hash nullable (se existir)
     await client.query(`ALTER TABLE admin_profile ADD COLUMN IF NOT EXISTS phone VARCHAR(30)`);
     await client.query(`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE`);
+    await client.query(`ALTER TABLE commemorative_dates ADD COLUMN IF NOT EXISTS from_day   INTEGER`);
+    await client.query(`ALTER TABLE commemorative_dates ADD COLUMN IF NOT EXISTS from_month INTEGER`);
+    await client.query(`ALTER TABLE commemorative_dates ADD COLUMN IF NOT EXISTS to_day     INTEGER`);
+    await client.query(`ALTER TABLE commemorative_dates ADD COLUMN IF NOT EXISTS to_month   INTEGER`);
     await client.query(`ALTER TABLE procedures ADD COLUMN IF NOT EXISTS description TEXT`);
     // Rename commemorative_dates.name → title if still old column
     await client.query(`DO $$ BEGIN
@@ -974,6 +987,10 @@ async function initDB() {
     // Migration em todos os schemas de tenant existentes
     for (const { schema_name } of (await client.query(`SELECT schema_name FROM tenants WHERE schema_name IS NOT NULL`)).rows) {
       try { await client.query(`ALTER TABLE "${schema_name}".procedures ADD COLUMN IF NOT EXISTS description TEXT`); } catch {}
+      try { await client.query(`ALTER TABLE "${schema_name}".commemorative_dates ADD COLUMN IF NOT EXISTS from_day   INTEGER`); } catch {}
+      try { await client.query(`ALTER TABLE "${schema_name}".commemorative_dates ADD COLUMN IF NOT EXISTS from_month INTEGER`); } catch {}
+      try { await client.query(`ALTER TABLE "${schema_name}".commemorative_dates ADD COLUMN IF NOT EXISTS to_day     INTEGER`); } catch {}
+      try { await client.query(`ALTER TABLE "${schema_name}".commemorative_dates ADD COLUMN IF NOT EXISTS to_month   INTEGER`); } catch {}
       try { await client.query(`DO $$ BEGIN IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='${schema_name}' AND table_name='commemorative_dates' AND column_name='name') THEN ALTER TABLE "${schema_name}".commemorative_dates RENAME COLUMN name TO title; END IF; END $$`); } catch {}
     }
     await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS trial_ends_at DATE`);
@@ -2666,13 +2683,45 @@ app.put('/api/admin/password', requireAdmin, async (req, res) => {
 // ── Datas Comemorativas ───────────────────────────────────────────────────────
 app.get('/api/commemorative', async (req, res) => {
   try {
-    const brtNow = nowBrasilia();
+    const now = nowBrasilia();
+    const d = now.getDate();
+    const m = now.getMonth() + 1;
+    const y = now.getFullYear();
+    // Converte data atual em número de dia-do-ano para comparação de período
+    // (suporta períodos que cruzam virada de mês mas não de ano)
+    const toNum = (dy, mo) => mo * 100 + dy; // ex: 502 = 2 de maio
+    const todayNum = toNum(d, m);
+
     const { rows } = await req.db(
       `SELECT * FROM commemorative_dates
-       WHERE is_active=TRUE AND day=$1 AND month=$2 LIMIT 1`,
-      [brtNow.getDate(), brtNow.getMonth() + 1]
+       WHERE is_active=TRUE
+         AND (
+           -- Sem período: exibe apenas no dia exato
+           (from_day IS NULL AND day=$1 AND month=$2)
+           OR
+           -- Com período: exibe se hoje está entre from e to
+           (from_day IS NOT NULL AND to_day IS NOT NULL)
+         )
+       ORDER BY
+         -- Prefere a que tem período (mais específica)
+         (CASE WHEN from_day IS NOT NULL THEN 0 ELSE 1 END)
+       LIMIT 5`,
+      [d, m]
     );
-    res.json(rows[0] || null);
+    // Filtra em JS para período cruzando virada de mês
+    const match = rows.find(r => {
+      if (r.from_day == null) return true; // dia exato já verificado no SQL
+      const fromNum = toNum(r.from_day, r.from_month);
+      const toNum2  = toNum(r.to_day,   r.to_month);
+      if (fromNum <= toNum2) {
+        // Período normal: ex: 02/05 ao 10/05
+        return todayNum >= fromNum && todayNum <= toNum2;
+      } else {
+        // Período vira ano: ex: 28/12 ao 05/01
+        return todayNum >= fromNum || todayNum <= toNum2;
+      }
+    });
+    res.json(match || null);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -2684,13 +2733,20 @@ app.get('/api/commemorative/all', requireAdmin, async (req, res) => {
 });
 
 app.post('/api/commemorative', requireAdmin, async (req, res) => {
-  const { day, month, title, message } = req.body;
+  const { day, month, title, message, from_day, from_month, to_day, to_month } = req.body;
   if (!day||!month||!title||!message) return res.status(400).json({ error: 'Todos os campos obrigatórios' });
   if (message.length > 300) return res.status(400).json({ error: 'Mensagem máximo 300 caracteres' });
+  // Validação: se tem from, precisa ter to e vice-versa
+  const hasPeriod = from_day || to_day;
+  if (hasPeriod && (!from_day||!from_month||!to_day||!to_month)) {
+    return res.status(400).json({ error: 'Preencha início e fim do período de veiculação' });
+  }
   try {
     const { rows } = await req.db(
-      `INSERT INTO commemorative_dates (day,month,title,message) VALUES ($1,$2,$3,$4) RETURNING *`,
-      [day, month, title, message]
+      `INSERT INTO commemorative_dates (day,month,title,message,from_day,from_month,to_day,to_month)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      [day, month, title, message,
+       from_day||null, from_month||null, to_day||null, to_month||null]
     );
     res.status(201).json(rows[0]);
   } catch (err) { res.status(500).json({ error: err.message }); }
