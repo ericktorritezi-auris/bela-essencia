@@ -608,6 +608,35 @@ async function initDB() {
     } finally { preClient.release(); }
   } catch {}
 
+  // ── Pre-migration: contract columns on tenants table ─────────────────────────
+  // Must be committed BEFORE the main BEGIN so that the seed (which runs in a
+  // separate pool connection) can see contract_token and contract_status columns
+  try {
+    const preClient2 = await pool.connect();
+    try {
+      await preClient2.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS contract_status VARCHAR(20) NOT NULL DEFAULT 'accepted'`);
+      await preClient2.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS contract_token  VARCHAR(64)`);
+      await preClient2.query(`CREATE TABLE IF NOT EXISTS contract_acceptances (
+        id                SERIAL        PRIMARY KEY,
+        tenant_id         INTEGER       NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        token             VARCHAR(64)   NOT NULL UNIQUE,
+        accepted_privacy  BOOLEAN       NOT NULL DEFAULT FALSE,
+        accepted_terms    BOOLEAN       NOT NULL DEFAULT FALSE,
+        accepted_contract BOOLEAN       NOT NULL DEFAULT FALSE,
+        accepted_at       TIMESTAMPTZ,
+        ip_address        VARCHAR(45)   DEFAULT '0.0.0.0',
+        version_privacy   VARCHAR(10)   NOT NULL DEFAULT 'v1.0',
+        version_terms     VARCHAR(10)   NOT NULL DEFAULT 'v1.0',
+        version_contract  VARCHAR(10)   NOT NULL DEFAULT 'v1.0',
+        status            VARCHAR(20)   NOT NULL DEFAULT 'pending',
+        created_at        TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+      )`);
+    } catch(e) {
+      if (!e.message.includes('does not exist')) console.error('[Pre-migration] contract warn:', e.message);
+    } finally { preClient2.release(); }
+  } catch {}
+
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
