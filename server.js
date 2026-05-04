@@ -630,6 +630,8 @@ async function initDB() {
         plan_expires_at DATE,
         trial_ends_at   DATE,
         exempt          BOOLEAN       NOT NULL DEFAULT FALSE,
+        contract_status VARCHAR(20)   NOT NULL DEFAULT 'accepted', -- 'pending' | 'accepted'
+        contract_token  VARCHAR(64)   UNIQUE,
         schema_name     VARCHAR(50)   UNIQUE NOT NULL,
         created_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW()
       );
@@ -833,6 +835,23 @@ async function initDB() {
         created_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW()
       );
     `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS contract_acceptances (
+        id                SERIAL        PRIMARY KEY,
+        tenant_id         INTEGER       NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        token             VARCHAR(64)   NOT NULL UNIQUE,
+        accepted_privacy  BOOLEAN       NOT NULL DEFAULT FALSE,
+        accepted_terms    BOOLEAN       NOT NULL DEFAULT FALSE,
+        accepted_contract BOOLEAN       NOT NULL DEFAULT FALSE,
+        accepted_at       TIMESTAMPTZ,
+        ip_address        VARCHAR(45)   DEFAULT '0.0.0.0',
+        version_privacy   VARCHAR(10)   NOT NULL DEFAULT 'v1.0',
+        version_terms     VARCHAR(10)   NOT NULL DEFAULT 'v1.0',
+        version_contract  VARCHAR(10)   NOT NULL DEFAULT 'v1.0',
+        status            VARCHAR(20)   NOT NULL DEFAULT 'pending',
+        created_at        TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+      )
+    `);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_payments_tenant ON payments(tenant_id)`);
 
     await client.query(`
@@ -1006,6 +1025,29 @@ async function initDB() {
     await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS exempt BOOLEAN NOT NULL DEFAULT FALSE`);
     // Tenants existentes sem vencimento → marca como isentos automaticamente
     await client.query(`UPDATE tenants SET exempt=TRUE WHERE plan_expires_at IS NULL AND trial_ends_at IS NULL`);
+    // ── Seed: gera token e aceite contratual para tenants existentes ───────────
+    const { rows: noTokenTenants } = await client.query(
+      `SELECT id, slug, owner_name, name, owner_email, owner_phone FROM tenants WHERE contract_token IS NULL`
+    );
+    for (const t of noTokenTenants) {
+      const token = require('crypto').randomBytes(32).toString('hex');
+      await client.query(`UPDATE tenants SET contract_token=$1, contract_status='accepted' WHERE id=$2`, [token, t.id]);
+      const acceptDate = t.slug === 'bela-essencia'
+        ? '2026-04-15T15:37:41Z'   // Ana Paula — 12:37:41 BRT = 15:37:41 UTC
+        : '2026-04-25T18:18:37Z';  // Erick     — 15:18:37 BRT = 18:18:37 UTC
+      const { rowCount: already } = await client.query(
+        `SELECT 1 FROM contract_acceptances WHERE tenant_id=$1`, [t.id]
+      );
+      if (!already) {
+        await client.query(
+          `INSERT INTO contract_acceptances
+            (tenant_id, token, accepted_privacy, accepted_terms, accepted_contract,
+             accepted_at, ip_address, version_privacy, version_terms, version_contract, status)
+           VALUES ($1,$2,TRUE,TRUE,TRUE,$3::timestamptz,'0.0.0.0','v1.0','v1.0','v1.0','accepted')`,
+          [t.id, token, acceptDate]
+        );
+      }
+    }
     await client.query(`
       DO $$ BEGIN
         IF EXISTS (
@@ -1040,6 +1082,8 @@ async function initDB() {
     // Migração: mensalidade por tenant
     await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS monthly_fee NUMERIC(8,2) NOT NULL DEFAULT 100.00`);
     await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS setup_fee NUMERIC(8,2) NOT NULL DEFAULT 200.00`);
+    await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS contract_status VARCHAR(20) NOT NULL DEFAULT 'accepted'`);
+    await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS contract_token VARCHAR(64)`);
     // Ana Paula: mensalidade 0 (cliente original)
     await client.query(`UPDATE tenants SET monthly_fee=0, setup_fee=0 WHERE slug='bela-essencia' AND monthly_fee=100`);
 
@@ -2282,6 +2326,138 @@ app.delete('/master/api/push/reset/:tenantId', requireMaster, async (req, res) =
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ── Aceite Contratual — página pública ───────────────────────────────────────
+// Serve a página HTML de aceite (handled by static file + token route below)
+app.get('/contrato/aceite/:token', (req, res) => {
+  res.sendFile(require('path').join(__dirname, 'public', 'contrato-aceite.html'));
+});
+
+// Dados do tenant para a página de aceite (sem autenticação — público por token)
+app.get('/api/contrato/:token', async (req, res) => {
+  const { token } = req.params;
+  try {
+    const { rows } = await pool.query(
+      `SELECT t.id, t.owner_name, t.name, t.owner_email, t.owner_phone,
+              t.contract_status, tc.business_name, t.plan_expires_at, t.monthly_fee, t.setup_fee,
+              ca.status as acceptance_status, ca.accepted_at
+       FROM tenants t
+       LEFT JOIN tenant_configs tc ON tc.tenant_id=t.id
+       LEFT JOIN contract_acceptances ca ON ca.tenant_id=t.id
+       WHERE t.contract_token=$1 LIMIT 1`,
+      [token]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Link inválido ou expirado.' });
+    const t = rows[0];
+    res.json({
+      name:            t.owner_name || t.business_name || t.name,
+      business_name:   t.business_name || t.name,
+      email:           t.owner_email,
+      phone:           t.owner_phone,
+      plan_expires_at: t.plan_expires_at,
+      monthly_fee:     t.monthly_fee,
+      setup_fee:       t.setup_fee,
+      already_accepted: t.acceptance_status === 'accepted',
+      accepted_at:     t.accepted_at,
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Salva aceite e ativa o tenant
+app.post('/api/contrato/:token/aceitar', async (req, res) => {
+  const { token } = req.params;
+  const { accepted_privacy, accepted_terms, accepted_contract } = req.body;
+
+  if (!accepted_privacy || !accepted_terms || !accepted_contract) {
+    return res.status(400).json({ error: 'Todos os três documentos devem ser aceitos.' });
+  }
+  const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim()
+           || req.socket?.remoteAddress
+           || '0.0.0.0';
+  try {
+    const { rows: tRows } = await pool.query(
+      `SELECT id, contract_status FROM tenants WHERE contract_token=$1 LIMIT 1`, [token]
+    );
+    if (!tRows.length) return res.status(404).json({ error: 'Link inválido.' });
+    const tenant = tRows[0];
+    if (tenant.contract_status === 'accepted') {
+      return res.json({ ok: true, already: true, message: 'Documentos já aceitos anteriormente.' });
+    }
+
+    // Salva o aceite
+    await pool.query(
+      `INSERT INTO contract_acceptances
+        (tenant_id, token, accepted_privacy, accepted_terms, accepted_contract,
+         accepted_at, ip_address, status)
+       VALUES ($1,$2,$3,$4,$5,NOW(),$6,'accepted')
+       ON CONFLICT (token) DO UPDATE SET
+         accepted_privacy=$3, accepted_terms=$4, accepted_contract=$5,
+         accepted_at=NOW(), ip_address=$6, status='accepted'`,
+      [tenant.id, token, true, true, true, ip]
+    );
+
+    // Ativa o tenant automaticamente
+    await pool.query(
+      `UPDATE tenants SET active=TRUE, contract_status='accepted' WHERE id=$1`, [tenant.id]
+    );
+
+    await logAction(tenant.id, 'contract_accepted', `Aceite contratual registrado — IP: ${ip}`);
+    res.json({ ok: true, message: 'Aceite registrado com sucesso. Sua agenda foi ativada.' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Gestão de Contratos Master ────────────────────────────────────────────────
+app.get('/master/api/contracts', requireMaster, async (req, res) => {
+  const { status, from, to } = req.query;
+  try {
+    let sql = `SELECT t.id, t.slug, t.owner_name, t.name, t.owner_email, t.owner_phone,
+                      t.active, t.contract_status, t.contract_token,
+                      tc.business_name,
+                      ca.accepted_at, ca.ip_address, ca.status as accept_status,
+                      ca.accepted_privacy, ca.accepted_terms, ca.accepted_contract,
+                      ca.version_privacy, ca.version_terms, ca.version_contract,
+                      ca.token as accept_token
+               FROM tenants t
+               LEFT JOIN tenant_configs tc ON tc.tenant_id=t.id
+               LEFT JOIN contract_acceptances ca ON ca.tenant_id=t.id
+               WHERE 1=1`;
+    const params = [];
+    if (status === 'active')   { params.push(true);  sql += ` AND t.active=$${params.length}`; }
+    if (status === 'inactive') { params.push(false); sql += ` AND t.active=$${params.length}`; }
+    if (status === 'pending')  { sql += ` AND t.contract_status='pending'`; }
+    if (from) { params.push(from); sql += ` AND ca.accepted_at >= $${params.length}::date`; }
+    if (to)   { params.push(to);   sql += ` AND ca.accepted_at <= $${params.length}::date + interval '1 day'`; }
+    sql += ` ORDER BY t.created_at DESC`;
+    const { rows } = await pool.query(sql, params);
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Re-envia e-mail de aceite para tenant pendente
+app.post('/master/api/contracts/:tenantId/resend-email', requireMaster, async (req, res) => {
+  const { tenantId } = req.params;
+  try {
+    const { rows } = await pool.query(
+      `SELECT t.*, tc.business_name FROM tenants t
+       LEFT JOIN tenant_configs tc ON tc.tenant_id=t.id
+       WHERE t.id=$1 LIMIT 1`, [tenantId]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Tenant não encontrado' });
+    const t = rows[0];
+    const baseUrl = process.env.BASE_URL || 'https://adminpanel.belleplanner.com.br';
+    const acceptUrl = `${baseUrl}/contrato/aceite/${t.contract_token}`;
+    await sendEmail({
+      to: t.owner_email,
+      subject: 'Belle Planner — Lembrete: aceite necessário para ativação da sua agenda',
+      html: `<p>Olá, <strong>${t.owner_name||t.name}</strong>.<br><br>
+             Seu link de aceite contratual:<br><br>
+             <a href="${acceptUrl}" style="background:#9b4d6a;color:white;padding:12px 28px;border-radius:24px;text-decoration:none;font-weight:700">
+               LER E ACEITAR DOCUMENTOS
+             </a><br><br>Equipe Belle Planner</p>`,
+    });
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ── Log LGPD Master — Todos os tenants ──────────────────────────────────────
 app.get('/master/api/lgpd/consents', requireMaster, async (req, res) => {
   const { tenant_id, from, to } = req.query;
@@ -3007,18 +3183,19 @@ app.post('/master/api/tenants', requireMaster, async (req, res) => {
 
     const mFee = req.body.monthly_fee !== undefined ? Number(req.body.monthly_fee) : 100;
     const sFee = req.body.setup_fee    !== undefined ? Number(req.body.setup_fee)    : 200;
-    const trialDate = plan_expires_at ? null : new Date(Date.now()+7*24*60*60*1000).toISOString().slice(0,10);
     const isExempt = req.body.exempt === true || req.body.exempt === 'true';
-    // Isento: sem trial; não-isento sem vencimento → 7 dias trial
-    const finalTrialDate = (!isExempt && !plan_expires_at)
-      ? new Date(Date.now()+7*24*60*60*1000).toISOString().slice(0,10) : null;
+    // Gera token único de aceite contratual para este tenant
+    const contractToken = require('crypto').randomBytes(32).toString('hex');
+    // Novo tenant nasce PENDENTE (active=FALSE) — ativado após aceite dos documentos
     const { rows } = await client.query(
       `INSERT INTO tenants (slug,name,owner_name,owner_email,owner_phone,
-        domain_custom,subdomain,active,schema_name,plan_expires_at,trial_ends_at,exempt,monthly_fee,setup_fee)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,TRUE,$8,$9,$10,$11,$12,$13) RETURNING *`,
+        domain_custom,subdomain,active,schema_name,plan_expires_at,trial_ends_at,
+        exempt,monthly_fee,setup_fee,contract_status,contract_token)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,FALSE,$8,$9,$10,$11,$12,$13,'pending',$14) RETURNING *`,
       [slug,name,owner_name,owner_email,owner_phone||null,
        domain_custom||null,subdomain||null,schemaName,
-       isExempt ? null : (plan_expires_at||null), trialDate, isExempt, mFee, sFee]
+       isExempt ? null : (plan_expires_at||null), null,
+       isExempt, mFee, sFee, contractToken]
     );
     const tenant = rows[0];
     await client.query(
@@ -3053,13 +3230,37 @@ app.post('/master/api/tenants', requireMaster, async (req, res) => {
 
     await logAction(tenant.id, 'tenant_created', `Tenant ${slug} criado por master`);
 
-    // E-mail de boas-vindas
-    const tenantForEmail = { ...tenant, domain_custom: domain_custom||null, subdomain: subdomain||null, owner_name, owner_email };
-    await sendTenantWelcomeEmail(tenantForEmail, {
-      admin_user:    admin_user    || 'admin',
-      admin_pass:    finalPass,
-      business_name: business_name || name,
-    });
+    // E-mail de aceite contratual (substitui o welcome — tenant está PENDENTE)
+    const tenantForEmail = { ...tenant, domain_custom: domain_custom||null, subdomain: subdomain||null };
+    const baseUrl = process.env.BASE_URL || 'https://adminpanel.belleplanner.com.br';
+    const acceptUrl = `${baseUrl}/contrato/aceite/${contractToken}`;
+    await sendEmail({
+      to: owner_email,
+      subject: 'Bem-vindo(a) à Belle Planner — aceite necessário para ativação da sua agenda',
+      html: `<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#3d1a2a">
+        <div style="background:linear-gradient(135deg,#1f0d18,#4a1528);padding:28px 32px;border-radius:12px 12px 0 0">
+          <h1 style="color:white;margin:0;font-size:22px">Belle Planner</h1>
+          <p style="color:rgba(255,255,255,.75);margin:6px 0 0;font-size:13px">Sua agenda online</p>
+        </div>
+        <div style="background:#fff;padding:32px;border:1px solid #e8d0d8;border-top:none;border-radius:0 0 12px 12px">
+          <p style="font-size:15px;line-height:1.7">Olá, <strong>${owner_name || name}</strong>.</p>
+          <p style="line-height:1.7">Seja bem-vindo(a) à <strong>Belle Planner</strong>.</p>
+          <p style="line-height:1.7">Para ativarmos sua agenda online e seguirmos com a configuração do seu espaço digital, é necessário que você leia e aceite os documentos iniciais da plataforma:</p>
+          <ul style="line-height:2">
+            <li>Política de Privacidade</li>
+            <li>Termos de Uso</li>
+            <li>Contrato de Prestação de Serviços SaaS</li>
+          </ul>
+          <div style="text-align:center;margin:28px 0">
+            <a href="${acceptUrl}" style="background:#9b4d6a;color:white;padding:14px 36px;border-radius:30px;text-decoration:none;font-weight:700;font-size:15px;display:inline-block">
+              LER E ACEITAR DOCUMENTOS
+            </a>
+          </div>
+          <p style="line-height:1.7">Após a confirmação, sua agenda poderá ser ativada e configurada pela Belle Planner.</p>
+          <p style="margin-top:28px;color:#666;font-size:13px">Atenciosamente,<br><strong>Equipe Belle Planner</strong></p>
+        </div>
+      </body></html>`,
+    }).catch(e => console.error('[Email] Erro ao enviar aceite:', e.message));
 
     res.status(201).json({ ...tenant, provisioned: true, generated_pass: finalPass, admin_user: admin_user||'admin' });
   } catch (err) {
