@@ -2270,6 +2270,18 @@ app.get('/api/revenue/cockpit/month', requireAdmin, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ── Master: reset push subscriptions de um tenant ───────────────────────────
+app.delete('/master/api/push/reset/:tenantId', requireMaster, async (req, res) => {
+  const { tenantId } = req.params;
+  try {
+    const { rowCount } = await pool.query(
+      `DELETE FROM public.push_subscriptions WHERE tenant_id=$1`, [tenantId]
+    );
+    await logAction(tenantId, 'push_reset', `Push subscriptions removidas: ${rowCount}`);
+    res.json({ ok: true, removed: rowCount });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ── Log LGPD Master — Todos os tenants ──────────────────────────────────────
 app.get('/master/api/lgpd/consents', requireMaster, async (req, res) => {
   const { tenant_id, from, to } = req.query;
@@ -4181,7 +4193,7 @@ async function sendPush(subscriptions, title, body, data = {}) {
         console.error('[Push] Erro ao enviar:', err.statusCode, err.message);
         // Remove subscriptions inválidas/expiradas
         if (err.statusCode === 410 || err.statusCode === 404) {
-          await pool.query('DELETE FROM push_subscriptions WHERE endpoint=$1', [sub.endpoint]);
+          await pool.query('DELETE FROM public.push_subscriptions WHERE endpoint=$1', [sub.endpoint]);
           console.log('[Push] Subscription removida (expirada).');
         }
         throw err;
@@ -4194,11 +4206,12 @@ async function sendPush(subscriptions, title, body, data = {}) {
 }
 
 async function getSubsByRole(role, tenantId) {
-  // If tenantId provided, only return subs for that tenant (isolation)
+  // ALWAYS use 'public.push_subscriptions' explicitly to avoid search_path contamination
+  // from tenant connections (connections may have SET search_path TO "tenant_xxx", public)
   const { rows } = await pool.query(
     tenantId
-      ? 'SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE role=$1 AND tenant_id=$2'
-      : 'SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE role=$1',
+      ? 'SELECT endpoint, p256dh, auth FROM public.push_subscriptions WHERE role=$1 AND tenant_id=$2'
+      : 'SELECT endpoint, p256dh, auth FROM public.push_subscriptions WHERE role=$1',
     tenantId ? [role, tenantId] : [role]
   );
   return rows;
@@ -4207,7 +4220,7 @@ async function getSubsByRole(role, tenantId) {
 async function getSubsByAuth(authKey) {
   if (!authKey) return [];
   const { rows } = await pool.query(
-    `SELECT endpoint, p256dh, auth FROM push_subscriptions
+    `SELECT endpoint, p256dh, auth FROM public.push_subscriptions
      WHERE role='client' AND auth=$1`,
     [authKey]
   );
