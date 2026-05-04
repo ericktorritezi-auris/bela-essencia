@@ -574,6 +574,51 @@
         </table>
       </div>
     </div>
+
+    <div id="sec-contracts" class="sec">
+      <h2 class="sec-title">📑 Gestão de Contratos</h2>
+
+
+      <!-- Filtros -->
+      <div class="table-card" style="margin-bottom:16px">
+        <div class="table-head" style="flex-wrap:wrap;gap:10px">
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+            <div>
+              <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Status</div>
+              <select id="ct-status-filter" class="fi" style="padding:7px 10px;background:var(--card);color:var(--text);border:1px solid rgba(255,255,255,.1);border-radius:6px;font-size:13px">
+                <option value="">Todos</option>
+                <option value="active">Ativo</option>
+                <option value="inactive">Inativo</option>
+                <option value="pending">Pendente</option>
+              </select>
+            </div>
+            <div>
+              <div style="font-size:11px;color:var(--muted);margin-bottom:4px">De</div>
+              <input type="date" id="ct-from" style="padding:7px 10px;background:var(--card);color:var(--text);border:1px solid rgba(255,255,255,.1);border-radius:6px;font-size:13px">
+            </div>
+            <div>
+              <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Até</div>
+              <input type="date" id="ct-to" style="padding:7px 10px;background:var(--card);color:var(--text);border:1px solid rgba(255,255,255,.1);border-radius:6px;font-size:13px">
+            </div>
+            <button onclick="initContracts()" class="btn btn-ghost" style="padding:7px 16px;font-size:13px">Filtrar</button>
+          </div>
+          <button onclick="exportContractsCsv()" class="btn btn-ghost" style="padding:7px 16px;font-size:13px">📥 Exportar CSV</button>
+        </div>
+      </div>
+
+      <!-- Tabela -->
+      <div class="table-card" style="overflow-x:auto">
+        <table>
+          <thead><tr>
+            <th>ID</th><th>Profissional</th><th>Empresa</th>
+            <th>E-mail</th><th>Telefone</th>
+            <th>Status Tenant</th><th>Status Aceite</th>
+            <th>Data Aceite</th><th>Ações</th>
+          </tr></thead>
+          <tbody id="ct-tbody"></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -678,52 +723,7 @@
     <div class="modal-header">
       <div class="modal-title" id="lead-modal-title">Novo Lead</div>
 
-    <div id="sec-contracts" class="sec">
-      <h2 class="sec-title">📑 Gestão de Contratos</h2>
-      <div id="ct-debug" style="background:red;color:white;padding:10px;font-size:16px;font-weight:bold;margin-bottom:10px">
-        ✅ SEÇÃO ATIVA — aguardando dados...
-      </div>
-
-      <!-- Filtros -->
-      <div class="table-card" style="margin-bottom:16px">
-        <div class="table-head" style="flex-wrap:wrap;gap:10px">
-          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
-            <div>
-              <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Status</div>
-              <select id="ct-status-filter" class="fi" style="padding:7px 10px;background:var(--card);color:var(--text);border:1px solid rgba(255,255,255,.1);border-radius:6px;font-size:13px">
-                <option value="">Todos</option>
-                <option value="active">Ativo</option>
-                <option value="inactive">Inativo</option>
-                <option value="pending">Pendente</option>
-              </select>
-            </div>
-            <div>
-              <div style="font-size:11px;color:var(--muted);margin-bottom:4px">De</div>
-              <input type="date" id="ct-from" style="padding:7px 10px;background:var(--card);color:var(--text);border:1px solid rgba(255,255,255,.1);border-radius:6px;font-size:13px">
-            </div>
-            <div>
-              <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Até</div>
-              <input type="date" id="ct-to" style="padding:7px 10px;background:var(--card);color:var(--text);border:1px solid rgba(255,255,255,.1);border-radius:6px;font-size:13px">
-            </div>
-            <button onclick="initContracts()" class="btn btn-ghost" style="padding:7px 16px;font-size:13px">Filtrar</button>
-          </div>
-          <button onclick="exportContractsCsv()" class="btn btn-ghost" style="padding:7px 16px;font-size:13px">📥 Exportar CSV</button>
-        </div>
-      </div>
-
-      <!-- Tabela -->
-      <div class="table-card" style="overflow-x:auto">
-        <table>
-          <thead><tr>
-            <th>ID</th><th>Profissional</th><th>Empresa</th>
-            <th>E-mail</th><th>Telefone</th>
-            <th>Status Tenant</th><th>Status Aceite</th>
-            <th>Data Aceite</th><th>Ações</th>
-          </tr></thead>
-          <tbody id="ct-tbody"></tbody>
-        </table>
-      </div>
-    </div>
+    
 
     
     <!-- Modal detalhe do contrato -->
