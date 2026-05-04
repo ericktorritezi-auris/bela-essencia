@@ -336,6 +336,7 @@
       <div class="nav-sep"></div>
       <div class="nav-section">Sistema</div>
       <div class="nav-item" id="nav-lgpd" onclick="showSec('lgpd')"><span class="nav-icon">🔒</span> LGPD Tenants</div>
+      <div class="nav-item" id="nav-contracts" onclick="showSec('contracts')"><span class="nav-icon">📑</span> Gestão de Contratos</div>
       <div class="nav-item" id="nav-health" onclick="showSec('health')"><span class="nav-icon">🩺</span> Saúde do Sistema</div>
       <div class="nav-item" id="nav-logs" onclick="showSec('logs')"><span class="nav-icon">📋</span> Logs</div>
       <div class="nav-sep"></div>
@@ -676,6 +677,61 @@
   <div class="modal" style="max-width:500px">
     <div class="modal-header">
       <div class="modal-title" id="lead-modal-title">Novo Lead</div>
+
+    <div id="sec-contracts" class="sec">
+      <h2 class="sec-title">📑 Gestão de Contratos</h2>
+      <!-- Filtros -->
+      <div class="tbl-wrap" style="margin-bottom:14px">
+        <div style="padding:14px 18px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;justify-content:space-between">
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+            <div>
+              <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Status</div>
+              <select id="ct-status-filter" class="fi" style="padding:7px 10px;background:var(--card)">
+                <option value="">Todos</option>
+                <option value="active">Ativo</option>
+                <option value="inactive">Inativo</option>
+                <option value="pending">Pendente</option>
+              </select>
+            </div>
+            <div>
+              <div style="font-size:11px;color:var(--muted);margin-bottom:4px">De</div>
+              <input type="date" id="ct-from" class="fi" style="padding:7px 10px">
+            </div>
+            <div>
+              <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Até</div>
+              <input type="date" id="ct-to" class="fi" style="padding:7px 10px">
+            </div>
+            <button onclick="initContracts()" class="btn" style="padding:7px 16px;font-size:13px">Filtrar</button>
+          </div>
+          <button onclick="exportContractsCsv()" class="btn" style="padding:7px 16px;font-size:13px">📥 Exportar CSV</button>
+        </div>
+      </div>
+      <!-- Tabela -->
+      <div class="tbl-wrap" style="overflow-x:auto">
+        <table style="min-width:800px">
+          <thead><tr>
+            <th>ID</th><th>Profissional</th><th>Empresa</th>
+            <th>E-mail</th><th>Telefone</th>
+            <th style="text-align:center">Status Tenant</th>
+            <th style="text-align:center">Status Aceite</th>
+            <th>Data Aceite</th><th>Ações</th>
+          </tr></thead>
+          <tbody id="ct-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Modal detalhe do contrato -->
+    <div id="ct-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9900;overflow-y:auto">
+      <div style="background:var(--card);border-radius:12px;max-width:580px;width:calc(100% - 32px);margin:24px auto 40px;padding:0;overflow:hidden">
+        <div style="background:linear-gradient(135deg,#1f0d18,#4a1528);padding:16px 20px;display:flex;justify-content:space-between;align-items:center">
+          <span style="color:white;font-weight:700;font-size:14px">📑 Detalhes do Aceite</span>
+          <button onclick="document.getElementById('ct-modal-overlay').style.display='none'" style="background:rgba(255,255,255,.2);border:none;color:white;border-radius:50%;width:28px;height:28px;cursor:pointer">✕</button>
+        </div>
+        <div id="ct-modal-body" style="padding:24px;font-size:13px;line-height:1.8"></div>
+      </div>
+    </div>
+
       <button class="modal-close" onclick="closeModal('lead')">✕</button>
     </div>
     <div class="modal-body">
@@ -891,6 +947,7 @@ function showSec(name) {
   if (name === 'pipeline')  loadPipeline();
   if (name === 'comms')     loadComms();
   if (name === 'lgpd')      initMasterLgpd();
+  if (name === 'contracts') initContracts();
 }
 
 // ── INIT ───────────────────────────────────────────────────────────────────
@@ -990,6 +1047,10 @@ async function loadDashboard() {
 
 function tenantStatus(t) {
   if (!t.active) return `<span class="badge badge-blocked"><span class="dot dot-red"></span>Bloqueado</span>`;
+  // Pendente (aguardando aceite contratual)
+  if (t.contract_status === 'pending' || (!t.active && !t.plan_expires_at && !t.trial_ends_at && !t.exempt)) {
+    return `<span class="badge" style="background:rgba(255,152,0,.12);color:#e65100"><span class="dot" style="background:#ff9800"></span>Pendente</span>`;
+  }
   // Isento
   if (t.exempt) {
     return `<span class="badge" style="background:rgba(39,174,96,.12);color:#1a8a4a"><span class="dot" style="background:#27ae60"></span>Isento</span>`;
@@ -1864,6 +1925,118 @@ async function resetTenantPass(id, name) {
     await API('PUT', '/master/api/tenants/' + id + '/reset-password', { new_pass: newPass.trim() });
     toast('✅ Senha redefinida para "' + name + '"', 'ok');
   } catch(e) { toast('Erro: ' + e.message, 'err'); }
+}
+
+// ── Gestão de Contratos ──────────────────────────────────────────────────────
+let _contractsData = [];
+
+async function initContracts() {
+  const tbody = document.getElementById('ct-tbody');
+  const status = document.getElementById('ct-status-filter')?.value || '';
+  const from   = document.getElementById('ct-from')?.value || '';
+  const to     = document.getElementById('ct-to')?.value   || '';
+  tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--muted)">Carregando...</td></tr>';
+  try {
+    const params = [];
+    if (status) params.push('status=' + status);
+    if (from)   params.push('from='   + from);
+    if (to)     params.push('to='     + to);
+    const url = '/master/api/contracts' + (params.length ? '?' + params.join('&') : '');
+    _contractsData = await API('GET', url);
+
+    if (!_contractsData.length) {
+      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--muted)">Nenhum contrato encontrado.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = _contractsData.map(r => {
+      const tenantBadge = r.active
+        ? '<span style="background:#e8f5e9;color:#1b5e20;padding:2px 10px;border-radius:12px;font-size:11px;font-weight:700">Ativo</span>'
+        : r.contract_status === 'pending'
+          ? '<span style="background:#fff3e0;color:#e65100;padding:2px 10px;border-radius:12px;font-size:11px;font-weight:700">Pendente</span>'
+          : '<span style="background:#ffebee;color:#c62828;padding:2px 10px;border-radius:12px;font-size:11px;font-weight:700">Inativo</span>';
+      const acceptBadge = r.accept_status === 'accepted'
+        ? '<span style="background:#e8f5e9;color:#1b5e20;padding:2px 10px;border-radius:12px;font-size:11px;font-weight:700">✅ Aceito</span>'
+        : '<span style="background:#fff3e0;color:#e65100;padding:2px 10px;border-radius:12px;font-size:11px;font-weight:700">⏳ Pendente</span>';
+
+      const acceptDate = r.accepted_at ? fmtDate(r.accepted_at) : '—';
+      const escapedName = (r.owner_name||'').replace(/'/g,"\'");
+
+      return `<tr>
+        <td style="font-weight:700;font-size:12px">#${r.id}</td>
+        <td>${r.owner_name||'—'}</td>
+        <td style="font-size:12px">${r.business_name||r.name||'—'}</td>
+        <td style="font-size:12px">${r.owner_email||'—'}</td>
+        <td style="font-size:12px">${r.owner_phone||'—'}</td>
+        <td style="text-align:center">${tenantBadge}</td>
+        <td style="text-align:center">${acceptBadge}</td>
+        <td style="font-size:12px">${acceptDate}</td>
+        <td>
+          <button class="icon-btn" onclick="showContractDetail(${r.id})" title="Ver detalhes">👁</button>
+          ${r.contract_status==='pending'?`<button class="icon-btn" onclick="resendContractEmail(${r.id},'${escapedName}')" title="Reenviar e-mail">📧</button>`:''}
+        </td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="9" style="color:var(--red);padding:20px">${e.message}</td></tr>`;
+  }
+}
+
+function showContractDetail(tenantId) {
+  const r = _contractsData.find(x => x.id === tenantId);
+  if (!r) return;
+  const baseUrl = 'https://adminpanel.belleplanner.com.br';
+  const tokenLink = r.contract_token
+    ? `<a href="${baseUrl}/contrato/aceite/${r.contract_token}" target="_blank" style="color:var(--rose);font-size:11px;word-break:break-all">${baseUrl}/contrato/aceite/${r.contract_token}</a>`
+    : '—';
+  const body = `
+    <div style="display:grid;gap:10px">
+      <div><strong>Profissional:</strong> ${r.owner_name||'—'}</div>
+      <div><strong>Empresa:</strong> ${r.business_name||r.name||'—'}</div>
+      <div><strong>E-mail:</strong> ${r.owner_email||'—'}</div>
+      <div><strong>Telefone:</strong> ${r.owner_phone||'—'}</div>
+      <hr style="border-color:#e0c0cc">
+      <div><strong>Aceite da Política:</strong> ${r.accepted_privacy?'✅ Sim':'❌ Não'}</div>
+      <div><strong>Aceite dos Termos:</strong> ${r.accepted_terms?'✅ Sim':'❌ Não'}</div>
+      <div><strong>Aceite do Contrato:</strong> ${r.accepted_contract?'✅ Sim':'❌ Não'}</div>
+      <hr style="border-color:#e0c0cc">
+      <div><strong>Data/hora do aceite:</strong> ${r.accepted_at?new Date(r.accepted_at).toLocaleString('pt-BR'):'—'}</div>
+      <div><strong>IP:</strong> ${r.ip_address||'—'}</div>
+      <div><strong>Versão Política:</strong> ${r.version_privacy||'—'}</div>
+      <div><strong>Versão Termos:</strong> ${r.version_terms||'—'}</div>
+      <div><strong>Versão Contrato:</strong> ${r.version_contract||'—'}</div>
+      <hr style="border-color:#e0c0cc">
+      <div><strong>Link do documento:</strong><br>${tokenLink}</div>
+    </div>`;
+  document.getElementById('ct-modal-body').innerHTML = body;
+  document.getElementById('ct-modal-overlay').style.display = 'block';
+}
+
+async function resendContractEmail(tenantId, name) {
+  if (!confirm('Reenviar e-mail de aceite para "' + name + '"?')) return;
+  try {
+    await API('POST', '/master/api/contracts/' + tenantId + '/resend-email');
+    toast('✅ E-mail reenviado para "' + name + '"', 'ok');
+  } catch(e) { toast('Erro: ' + e.message, 'err'); }
+}
+
+function exportContractsCsv() {
+  if (!_contractsData.length) { toast('Nenhum dado para exportar','err'); return; }
+  const header = ['ID','Profissional','Empresa','E-mail','Telefone','Status Tenant','Status Aceite','Data Aceite','IP','Versão Política','Versão Termos','Versão Contrato'];
+  const rows = _contractsData.map(r => [
+    r.id, r.owner_name||'', r.business_name||r.name||'', r.owner_email||'', r.owner_phone||'',
+    r.active ? 'Ativo' : r.contract_status==='pending' ? 'Pendente' : 'Inativo',
+    r.accept_status==='accepted' ? 'Aceito' : 'Pendente',
+    r.accepted_at ? new Date(r.accepted_at).toLocaleString('pt-BR') : '',
+    r.ip_address||'', r.version_privacy||'', r.version_terms||'', r.version_contract||''
+  ].map(v => '"' + String(v).replace(/"/g,'""') + '"').join(','));
+  const csv  = [header.join(','), ...rows].join('\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a'); a.href = url;
+  a.download = 'belle-planner-contratos.csv'; a.click();
+  URL.revokeObjectURL(url);
+  toast('CSV exportado!','ok');
 }
 
 async function masterResetTenantPush(tenantId, name) {

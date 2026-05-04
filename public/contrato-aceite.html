@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Aceite Contratual — Belle Planner</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',Arial,sans-serif;background:#fdf5f8;color:#3d1a2a;line-height:1.75}
+  .header{background:linear-gradient(135deg,#1f0d18 0%,#4a1528 100%);padding:20px 24px;display:flex;align-items:center;gap:14px}
+  .header img{height:40px;object-fit:contain;mix-blend-mode:screen}
+  .header-info{color:white}
+  .header-info h1{font-size:18px;font-weight:800;margin-bottom:2px}
+  .header-info p{font-size:12px;opacity:.7}
+  .container{max-width:720px;margin:0 auto;padding:28px 20px 80px}
+  /* Tenant info card */
+  .tenant-card{background:white;border:1px solid #e8d0d8;border-radius:12px;padding:20px 24px;margin-bottom:28px}
+  .tenant-card h2{font-size:14px;text-transform:uppercase;letter-spacing:.08em;color:#9b4d6a;margin-bottom:12px}
+  .tenant-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 20px}
+  @media(max-width:480px){.tenant-grid{grid-template-columns:1fr}}
+  .tenant-field label{font-size:11px;color:#9a6070;font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+  .tenant-field span{display:block;font-size:14px;color:#3d1a2a;font-weight:600;margin-top:1px}
+  /* Documents */
+  .doc-section{background:white;border:1px solid #e8d0d8;border-radius:12px;margin-bottom:20px;overflow:hidden}
+  .doc-header{background:linear-gradient(90deg,#1f0d18,#4a1528);padding:14px 20px;display:flex;align-items:center;gap:10px}
+  .doc-header span.num{width:26px;height:26px;background:rgba(255,255,255,.2);color:white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex-shrink:0}
+  .doc-header h3{color:white;font-size:14px;font-weight:700}
+  .doc-body{padding:20px 24px;font-size:13px;color:#4a3040;line-height:1.8;max-height:320px;overflow-y:auto}
+  .doc-body p{margin-bottom:10px}
+  /* Checkboxes */
+  .consent-box{background:#fde8ef;border:1.5px solid #e8a0b8;border-radius:12px;padding:20px 24px;margin-bottom:24px}
+  .consent-box h3{font-size:14px;font-weight:700;color:#3d1a2a;margin-bottom:14px}
+  .check-item{display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid #f5c0d0}
+  .check-item:last-child{border-bottom:none;padding-bottom:0}
+  .check-item input[type=checkbox]{width:20px;height:20px;flex-shrink:0;margin-top:1px;accent-color:#9b4d6a;cursor:pointer}
+  .check-item label{font-size:13px;line-height:1.5;color:#3d1a2a;cursor:pointer}
+  /* CTA button */
+  #btn-accept{width:100%;background:#9b4d6a;color:white;border:none;border-radius:30px;padding:16px;font-size:16px;font-weight:800;cursor:pointer;transition:.2s;letter-spacing:.03em}
+  #btn-accept:disabled{opacity:.45;cursor:not-allowed}
+  #btn-accept:not(:disabled):hover{background:#7b3050}
+  /* Success state */
+  .success-box{background:#e8f5e9;border:2px solid #4caf50;border-radius:12px;padding:32px 28px;text-align:center;display:none}
+  .success-box .icon{font-size:48px;margin-bottom:12px}
+  .success-box h2{font-size:20px;color:#1b5e20;margin-bottom:8px}
+  .success-box p{font-size:14px;color:#2e7d32}
+  /* Already accepted */
+  .already-box{background:#e3f2fd;border:1.5px solid #90caf9;border-radius:12px;padding:24px;text-align:center;display:none}
+  .already-box h3{color:#0d47a1;margin-bottom:6px}
+  .already-box p{font-size:13px;color:#1565c0}
+  /* Loading */
+  #loading{text-align:center;padding:60px 20px;color:#9a6070}
+  .divider{height:1px;background:#f0d0dc;margin:8px 0}
+  .badge-pending{display:inline-block;background:#fff3e0;color:#e65100;border:1px solid #ffcc80;border-radius:20px;padding:3px 14px;font-size:12px;font-weight:700}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <img src="/icons/logo-belleplanner.png" alt="Belle Planner">
+  <div class="header-info">
+    <h1>Belle Planner</h1>
+    <p>Aceite Contratual Digital</p>
+  </div>
+</div>
+
+<div class="container">
+  <div id="loading">⏳ Carregando documentos...</div>
+
+  <!-- Conteúdo carregado via JS -->
+  <div id="content" style="display:none">
+
+    <!-- Dados do profissional -->
+    <div class="tenant-card" id="tenant-info">
+      <h2>📋 Seus dados de cadastro</h2>
+      <div class="tenant-grid" id="tenant-fields"></div>
+    </div>
+
+    <!-- Seção: já aceito -->
+    <div class="already-box" id="already-box">
+      <h3>✅ Documentos já aceitos</h3>
+      <p id="already-msg">Você já realizou o aceite destes documentos anteriormente.</p>
+    </div>
+
+    <!-- Documento 1: Política de Privacidade -->
+    <div class="doc-section">
+      <div class="doc-header">
+        <span class="num">1</span>
+        <h3>Política de Privacidade da Belle Planner</h3>
+      </div>
+      <div class="doc-body">
+        <p>A Belle Planner coleta e trata dados pessoais dos profissionais contratantes com a finalidade de cadastro, configuração, suporte, cobrança, comunicação operacional e prestação dos serviços da plataforma.</p>
+        <p>Os dados tratados podem incluir nome, nome comercial, e-mail, telefone, identidade visual, informações de plano, pagamentos, status da assinatura e registros de uso da plataforma.</p>
+        <p>A Belle Planner também poderá tratar dados dos clientes finais dos profissionais exclusivamente para viabilizar o funcionamento técnico da agenda online, incluindo agendamentos, notificações, confirmações e registros necessários à prestação do serviço.</p>
+        <p>Em relação aos dados dos clientes finais, o profissional contratante atua como controlador dos dados, sendo responsável pela definição da finalidade, base legal, atendimento aos direitos dos titulares e regularidade das informações inseridas na plataforma.</p>
+        <p>A Belle Planner atua como operadora dos dados dos clientes finais, tratando as informações conforme as instruções do profissional e exclusivamente para execução do serviço contratado.</p>
+        <p>Os dados poderão ser tratados por fornecedores técnicos essenciais ao funcionamento da plataforma, como serviços de hospedagem, banco de dados, envio de e-mails e notificações.</p>
+        <p>A Belle Planner adota medidas técnicas e organizacionais razoáveis para proteger os dados tratados, incluindo controle de acesso, autenticação, uso de ambiente seguro e segregação de dados por tenant.</p>
+        <p>O profissional poderá solicitar informações, correções ou exclusão de seus dados, observadas as obrigações legais, contratuais e técnicas aplicáveis.</p>
+        <p>Ao aceitar esta Política de Privacidade, o profissional declara ciência sobre o tratamento de seus dados e sobre sua responsabilidade em relação aos dados de seus próprios clientes.</p>
+      </div>
+    </div>
+
+    <!-- Documento 2: Termos de Uso -->
+    <div class="doc-section">
+      <div class="doc-header">
+        <span class="num">2</span>
+        <h3>Termos de Uso da Belle Planner</h3>
+      </div>
+      <div class="doc-body">
+        <p>A Belle Planner é uma plataforma SaaS de agenda online, disponibilizada a profissionais e pequenos negócios para gestão de agendamentos, procedimentos, horários, notificações e informações operacionais.</p>
+        <p>O profissional contratante é responsável por cadastrar informações corretas, manter seus dados atualizados e utilizar a plataforma de forma lícita, ética e compatível com a legislação aplicável.</p>
+        <p>O profissional é o único responsável pelos serviços prestados aos seus clientes finais, incluindo qualidade do atendimento, cumprimento de horários, cancelamentos, valores cobrados, procedimentos realizados e comunicações externas à plataforma.</p>
+        <p>A Belle Planner não presta os serviços profissionais cadastrados na agenda, atuando apenas como fornecedora da infraestrutura tecnológica.</p>
+        <p>É proibido utilizar a plataforma para fins ilícitos, fraudulentos, abusivos, discriminatórios ou em desconformidade com a legislação brasileira.</p>
+        <p>O profissional deve manter sigilo sobre seus dados de acesso e comunicar imediatamente qualquer suspeita de uso indevido.</p>
+        <p>A Belle Planner poderá suspender ou bloquear o acesso em caso de inadimplência, uso indevido, risco à segurança da plataforma ou descumprimento destes termos.</p>
+        <p>A continuidade do uso da plataforma implica concordância com estes Termos de Uso e com suas atualizações futuras, quando devidamente comunicadas.</p>
+      </div>
+    </div>
+
+    <!-- Documento 3: Contrato SaaS -->
+    <div class="doc-section">
+      <div class="doc-header">
+        <span class="num">3</span>
+        <h3>Contrato de Prestação de Serviços SaaS</h3>
+      </div>
+      <div class="doc-body">
+        <p>Pelo presente aceite eletrônico, o profissional contratante adere aos serviços da Belle Planner, plataforma digital de agenda online em modelo SaaS, destinada à gestão de agendamentos, clientes, procedimentos, horários, notificações e recursos administrativos.</p>
+        <p>A Belle Planner fornecerá ao profissional acesso à plataforma, configuração inicial da agenda, subdomínio vinculado ao domínio belleplanner.com.br, painel administrativo e funcionalidades contratadas conforme o plano definido no cadastro.</p>
+        <p>O profissional pagará os valores acordados no momento da contratação, incluindo, quando aplicável, taxa de implantação e mensalidade recorrente.</p>
+        <p>O não pagamento da mensalidade poderá gerar suspensão ou bloqueio da agenda, após vencimento e conforme regras operacionais da plataforma.</p>
+        <p>A Belle Planner não garante resultado financeiro, aumento de clientes, comparecimento aos atendimentos ou desempenho comercial do profissional, sendo responsável apenas pela disponibilização da infraestrutura tecnológica contratada.</p>
+        <p>O profissional reconhece que é o controlador dos dados pessoais de seus clientes finais, sendo responsável por coletar, utilizar e manter tais dados de acordo com a legislação aplicável, especialmente a Lei Geral de Proteção de Dados.</p>
+        <p>A Belle Planner atuará como operadora dos dados dos clientes finais, tratando-os apenas para viabilizar o funcionamento da agenda, envio de comunicações transacionais, registros operacionais e demais funcionalidades contratadas.</p>
+        <p>O profissional autoriza a Belle Planner a acessar dados técnicos e operacionais da agenda sempre que necessário para suporte, manutenção, segurança, correção de falhas, auditoria ou cumprimento de obrigação legal.</p>
+        <p>O código-fonte, arquitetura, layout-base, documentação, marca, funcionalidades e estrutura tecnológica da Belle Planner pertencem exclusivamente à Belle Planner, não havendo transferência de propriedade intelectual ao profissional.</p>
+        <p>A identidade visual, nome comercial, logomarca e informações fornecidas pelo profissional permanecem de sua titularidade, sendo licenciadas à Belle Planner apenas para configuração e funcionamento da agenda contratada.</p>
+        <p>O contrato poderá ser encerrado por qualquer das partes, observadas as obrigações financeiras pendentes, retenções técnicas necessárias e prazos mínimos eventualmente combinados.</p>
+        <p>O aceite eletrônico deste contrato possui validade jurídica e será registrado com data, hora, e-mail, telefone, tenant_id, versão contratual e demais informações técnicas disponíveis.</p>
+      </div>
+    </div>
+
+    <!-- Checkboxes de aceite (apenas quando pendente) -->
+    <div class="consent-box" id="consent-section">
+      <h3>✍️ Confirme seu aceite</h3>
+      <div class="check-item">
+        <input type="checkbox" id="chk-privacy" onchange="updateBtn()">
+        <label for="chk-privacy">Li e concordo com a <strong>Política de Privacidade</strong> da Belle Planner (v1.0)</label>
+      </div>
+      <div class="divider"></div>
+      <div class="check-item">
+        <input type="checkbox" id="chk-terms" onchange="updateBtn()">
+        <label for="chk-terms">Li e concordo com os <strong>Termos de Uso</strong> da Belle Planner (v1.0)</label>
+      </div>
+      <div class="divider"></div>
+      <div class="check-item">
+        <input type="checkbox" id="chk-contract" onchange="updateBtn()">
+        <label for="chk-contract">Li e concordo com o <strong>Contrato de Prestação de Serviços SaaS</strong> da Belle Planner (v1.0)</label>
+      </div>
+    </div>
+
+    <button id="btn-accept" disabled onclick="submitAcceptance()">
+      ✅ Aceitar e Ativar Cadastro
+    </button>
+
+    <!-- Sucesso -->
+    <div class="success-box" id="success-box">
+      <div class="icon">🎉</div>
+      <h2>Cadastro ativado com sucesso</h2>
+      <p>Seu aceite foi registrado com sucesso. A Belle Planner seguirá com a configuração e ativação da sua agenda online.</p>
+    </div>
+  </div><!-- #content -->
+
+  <p style="font-size:11px;color:#9a6070;text-align:center;margin-top:32px">
+    Belle Planner · Aceite Contratual Digital · Documentos v1.0 · LGPD — Lei 13.709/2018
+  </p>
+</div>
+
+<script>
+const token = location.pathname.split('/').pop();
+let alreadyAccepted = false;
+
+async function load() {
+  try {
+    const r = await fetch('/api/contrato/' + token);
+    if (!r.ok) {
+      document.getElementById('loading').textContent = '❌ Link inválido ou expirado.';
+      return;
+    }
+    const d = await r.json();
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('content').style.display = 'block';
+
+    // Popula dados do profissional
+    const fields = [
+      ['Profissional', d.name],
+      ['Empresa / Espaço', d.business_name],
+      ['E-mail', d.email],
+      ['WhatsApp', d.phone || '—'],
+      ['Mensalidade', d.monthly_fee != null ? 'R$ ' + Number(d.monthly_fee).toFixed(2).replace('.',',') : '—'],
+      ['Implantação', d.setup_fee ? 'R$ ' + Number(d.setup_fee).toFixed(2).replace('.',',') : '—'],
+    ];
+    document.getElementById('tenant-fields').innerHTML = fields.map(([l,v]) =>
+      `<div class="tenant-field"><label>${l}</label><span>${v||'—'}</span></div>`
+    ).join('');
+
+    if (d.already_accepted) {
+      alreadyAccepted = true;
+      const ab = document.getElementById('already-box');
+      ab.style.display = 'block';
+      if (d.accepted_at) {
+        document.getElementById('already-msg').textContent =
+          'Aceite registrado em ' + new Date(d.accepted_at).toLocaleString('pt-BR') + '.';
+      }
+      document.getElementById('consent-section').style.display = 'none';
+      document.getElementById('btn-accept').style.display = 'none';
+    }
+  } catch(e) {
+    document.getElementById('loading').textContent = '❌ Erro ao carregar: ' + e.message;
+  }
+}
+
+function updateBtn() {
+  const ok = document.getElementById('chk-privacy').checked
+          && document.getElementById('chk-terms').checked
+          && document.getElementById('chk-contract').checked;
+  const btn = document.getElementById('btn-accept');
+  btn.disabled = !ok;
+  btn.style.opacity = ok ? '1' : '0.45';
+}
+
+async function submitAcceptance() {
+  if (alreadyAccepted) return;
+  const btn = document.getElementById('btn-accept');
+  btn.disabled = true;
+  btn.textContent = 'Registrando aceite...';
+  try {
+    const r = await fetch('/api/contrato/' + token + '/aceitar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        accepted_privacy: true,
+        accepted_terms: true,
+        accepted_contract: true
+      })
+    });
+    const d = await r.json();
+    if (d.ok || d.already) {
+      document.getElementById('consent-section').style.display = 'none';
+      btn.style.display = 'none';
+      document.getElementById('success-box').style.display = 'block';
+      document.getElementById('success-box').scrollIntoView({ behavior: 'smooth' });
+    } else {
+      alert(d.error || 'Erro ao registrar aceite.');
+      btn.disabled = false;
+      btn.textContent = '✅ Aceitar e Ativar Cadastro';
+    }
+  } catch(e) {
+    alert('Erro: ' + e.message);
+    btn.disabled = false;
+    btn.textContent = '✅ Aceitar e Ativar Cadastro';
+  }
+}
+
+load();
+</script>
+</body>
+</html>
