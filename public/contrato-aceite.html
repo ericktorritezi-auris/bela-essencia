@@ -177,7 +177,12 @@
 </div>
 
 <script>
-const token = location.pathname.split('/').pop();
+// Extract token from any URL format:
+// /contrato/aceite/TOKEN  →  TOKEN
+// /TOKEN                  →  TOKEN
+// contratos.belleplanner.com.br/TOKEN  →  TOKEN
+const pathParts = location.pathname.split('/').filter(Boolean);
+const token = pathParts[pathParts.length - 1] || '';
 let alreadyAccepted = false;
 
 async function load() {
