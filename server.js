@@ -405,6 +405,16 @@ async function seedTenantData(schemaName, tenantData = {}) {
 async function tenantMiddleware(req, res, next) {
   const host = req.hostname;
 
+  // Subdomínio dedicado a contratos — tudo público, sem autenticação
+  if (host === 'contratos.belleplanner.com.br') {
+    return next(); // todas as rotas deste subdomínio são públicas
+  }
+
+  // Rotas públicas de contrato — acessíveis em qualquer domínio
+  if (req.path.startsWith('/contrato/') || req.path.startsWith('/api/contrato/')) {
+    return next(); // serve sem autenticação
+  }
+
   // Rotas do master (painel Erick) — sem tenant
   if (host === 'adminpanel.belleplanner.com.br' || req.path.startsWith('/master')) {
     req.isMaster = true;
@@ -2501,7 +2511,7 @@ app.post('/master/api/contracts/:tenantId/resend-email', requireMaster, async (r
     );
     if (!rows.length) return res.status(404).json({ error: 'Tenant não encontrado' });
     const t = rows[0];
-    const baseUrl = process.env.BASE_URL || 'https://adminpanel.belleplanner.com.br';
+    const baseUrl = process.env.CONTRACT_BASE_URL || 'https://contratos.belleplanner.com.br';
     const acceptUrl = `${baseUrl}/contrato/aceite/${t.contract_token}`;
     await sendEmail({
       to: t.owner_email,
@@ -3290,7 +3300,7 @@ app.post('/master/api/tenants', requireMaster, async (req, res) => {
 
     // E-mail de aceite contratual (substitui o welcome — tenant está PENDENTE)
     const tenantForEmail = { ...tenant, domain_custom: domain_custom||null, subdomain: subdomain||null };
-    const baseUrl = process.env.BASE_URL || 'https://adminpanel.belleplanner.com.br';
+    const baseUrl = process.env.CONTRACT_BASE_URL || 'https://contratos.belleplanner.com.br';
     const acceptUrl = `${baseUrl}/contrato/aceite/${contractToken}`;
     await sendEmail({
       to: owner_email,
@@ -4708,6 +4718,14 @@ app.post('/api/push/subscribe/admin', requireAdmin, async (req, res) => {
 app.use(express.static(path.join(__dirname, 'public')));
 
 // SPA fallback – qualquer rota não encontrada retorna o index.html
+// ── Subdomínio contratos.belleplanner.com.br — página de aceite contratual
+app.get('*', (req, res, next) => {
+  if (req.hostname === 'contratos.belleplanner.com.br') {
+    return res.sendFile(require('path').join(__dirname, 'public', 'contrato-aceite.html'));
+  }
+  next();
+});
+
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
