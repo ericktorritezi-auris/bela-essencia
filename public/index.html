@@ -3238,8 +3238,8 @@ function togglePromoCityScope() {
       </label>`
     ).join('');
   }
-  // Recarrega procedimentos quando cidades mudam
-  reloadPromoProcs();
+  // NÃO recarrega imediatamente — só recarrega quando uma cidade é desmarcada
+  // (evita filtrar a lista antes do usuário fazer qualquer seleção)
 }
 
 async function togglePromoScope() {
@@ -3261,8 +3261,10 @@ async function reloadPromoProcs() {
     if (citySelActive) {
       const selectedCityIds = [...document.querySelectorAll('input[name="pm-city"]:checked')]
         .map(el => Number(el.value));
-      if (selectedCityIds.length > 0) {
-        // Pega procedimentos habilitados em TODAS as cidades selecionadas (interseção)
+      const allCityIds = CITIES.map(c => Number(c.id));
+      const allSelected = allCityIds.every(id => selectedCityIds.includes(id));
+      if (selectedCityIds.length > 0 && !allSelected) {
+        // Filtra por interseção APENAS quando não estão todas selecionadas
         const sets = selectedCityIds.map(cid => {
           const city = CITIES.find(c => Number(c.id) === cid);
           if (!city || !city.procedures || !city.procedures.length) return null; // sem restrição = todos
