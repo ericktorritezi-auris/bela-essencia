@@ -1950,6 +1950,7 @@ async function initContracts() {
     if (!raw.ok) throw new Error('HTTP ' + raw.status + ': ' + text.slice(0, 100));
     _contractsData = JSON.parse(text);
     console.log('[Contracts] Data received:', _contractsData.length, 'rows');
+    console.log('[Contracts] sec-contracts active?', document.getElementById('sec-contracts')?.classList.contains('active'));
 
     if (!_contractsData.length) {
       tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--muted)">Nenhum contrato encontrado.</td></tr>';
@@ -1984,6 +1985,9 @@ async function initContracts() {
         </td>
       </tr>`;
     }).join('');
+    console.log('[Contracts] Render complete. tbody rows:', tbody.querySelectorAll('tr').length);
+    console.log('[Contracts] sec-contracts active after render?', document.getElementById('sec-contracts')?.classList.contains('active'));
+    console.log('[Contracts] tbody first 100 chars:', tbody.innerHTML.slice(0, 100));
   } catch(e) {
     console.error('[Contracts] Error:', e);
     if (tbody) tbody.innerHTML = `<tr><td colspan="9" style="color:var(--red);padding:20px">Erro: ${e.message}</td></tr>`;
