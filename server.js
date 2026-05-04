@@ -633,6 +633,32 @@ async function initDB() {
       )`);
     } catch(e) {
       if (!e.message.includes('does not exist')) console.error('[Pre-migration] contract warn:', e.message);
+      // ── Seed: tokens e aceites para tenants existentes (idempotente) ────────
+      const { rows: noToken } = await preClient2.query(
+        `SELECT id, slug, owner_name FROM tenants WHERE contract_token IS NULL`
+      );
+      for (const t of noToken) {
+        const token = require('crypto').randomBytes(32).toString('hex');
+        await preClient2.query(
+          `UPDATE tenants SET contract_token=$1, contract_status='accepted' WHERE id=$2`, [token, t.id]
+        );
+        const { rowCount: hasAccept } = await preClient2.query(
+          `SELECT 1 FROM contract_acceptances WHERE tenant_id=$1`, [t.id]
+        );
+        if (!hasAccept) {
+          const acceptDate = t.slug === 'bela-essencia'
+            ? '2026-04-15T15:37:41Z'
+            : '2026-04-25T18:18:37Z';
+          await preClient2.query(
+            `INSERT INTO contract_acceptances
+              (tenant_id,token,accepted_privacy,accepted_terms,accepted_contract,
+               accepted_at,ip_address,version_privacy,version_terms,version_contract,status)
+             VALUES ($1,$2,TRUE,TRUE,TRUE,$3::timestamptz,'0.0.0.0','v1.0','v1.0','v1.0','accepted')`,
+            [t.id, token, acceptDate]
+          );
+          console.log('[Seed] Aceite contratual criado para tenant:', t.slug);
+        }
+      }
     } finally { preClient2.release(); }
   } catch {}
 
@@ -2438,17 +2464,20 @@ app.post('/api/contrato/:token/aceitar', async (req, res) => {
 app.get('/master/api/contracts', requireMaster, async (req, res) => {
   const { status, from, to } = req.query;
   try {
-    let sql = `SELECT t.id, t.slug, t.owner_name, t.name, t.owner_email, t.owner_phone,
-                      t.active, t.contract_status, t.contract_token,
-                      tc.business_name,
-                      ca.accepted_at, ca.ip_address, ca.status as accept_status,
-                      ca.accepted_privacy, ca.accepted_terms, ca.accepted_contract,
-                      ca.version_privacy, ca.version_terms, ca.version_contract,
-                      ca.token as accept_token
-               FROM tenants t
-               LEFT JOIN tenant_configs tc ON tc.tenant_id=t.id
-               LEFT JOIN contract_acceptances ca ON ca.tenant_id=t.id
-               WHERE 1=1`;
+    let sql = `SELECT
+                t.id, t.slug, t.name, t.owner_name, t.owner_email, t.owner_phone,
+                t.active, t.contract_status, t.contract_token,
+                t.monthly_fee, t.setup_fee, t.created_at,
+                tc.business_name,
+                ca.accepted_at, ca.ip_address,
+                ca.status         AS accept_status,
+                ca.accepted_privacy, ca.accepted_terms, ca.accepted_contract,
+                ca.version_privacy, ca.version_terms, ca.version_contract,
+                ca.token          AS accept_token
+              FROM tenants t
+              LEFT JOIN tenant_configs        tc ON tc.tenant_id = t.id
+              LEFT JOIN contract_acceptances  ca ON ca.tenant_id = t.id
+              WHERE 1=1`;
     const params = [];
     if (status === 'active')   { params.push(true);  sql += ` AND t.active=$${params.length}`; }
     if (status === 'inactive') { params.push(false); sql += ` AND t.active=$${params.length}`; }
