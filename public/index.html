@@ -3301,7 +3301,7 @@ async function renderPromos() {
   const el = document.getElementById('promo-list');
   el.innerHTML = '<div style="color:var(--text-light);font-size:12px">Carregando...</div>';
   try {
-    const list = await api('GET', '/api/promotions');
+    const list = await GET('/api/promotions');
     if (!list.length) {
       el.innerHTML = '<div style="color:var(--text-light);font-size:13px">Nenhuma promoção cadastrada.</div>';
       return;
