@@ -252,7 +252,7 @@ async function createTenantSchema(schemaName) {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )`,
       `CREATE TABLE IF NOT EXISTS commemorative_dates (
-        id SERIAL PRIMARY KEY, name VARCHAR(100) NOT NULL, day INTEGER NOT NULL,
+        id SERIAL PRIMARY KEY, title VARCHAR(100) NOT NULL, day INTEGER NOT NULL,
         month INTEGER NOT NULL, message VARCHAR(500), is_active BOOLEAN NOT NULL DEFAULT TRUE
       )`,
       `CREATE TABLE IF NOT EXISTS admin_profile (
@@ -931,9 +931,16 @@ async function initDB() {
     await client.query(`ALTER TABLE admin_profile ADD COLUMN IF NOT EXISTS phone VARCHAR(30)`);
     await client.query(`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE`);
     await client.query(`ALTER TABLE procedures ADD COLUMN IF NOT EXISTS description TEXT`);
+    // Rename commemorative_dates.name → title if still old column
+    await client.query(`DO $$ BEGIN
+      IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='commemorative_dates' AND column_name='name') THEN
+        ALTER TABLE commemorative_dates RENAME COLUMN name TO title;
+      END IF;
+    END $$`);
     // Migration em todos os schemas de tenant existentes
     for (const { schema_name } of (await client.query(`SELECT schema_name FROM tenants WHERE schema_name IS NOT NULL`)).rows) {
       try { await client.query(`ALTER TABLE "${schema_name}".procedures ADD COLUMN IF NOT EXISTS description TEXT`); } catch {}
+      try { await client.query(`DO $$ BEGIN IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='${schema_name}' AND table_name='commemorative_dates' AND column_name='name') THEN ALTER TABLE "${schema_name}".commemorative_dates RENAME COLUMN name TO title; END IF; END $$`); } catch {}
     }
     await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS trial_ends_at DATE`);
     await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS exempt BOOLEAN NOT NULL DEFAULT FALSE`);
