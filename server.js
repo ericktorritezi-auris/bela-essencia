@@ -562,6 +562,40 @@ const DEFAULT_PROCS = [
 ];
 
 async function initDB() {
+  // ── Pre-migration: rename commemorative_dates.name → title ──────────────────
+  // Runs in a separate committed transaction BEFORE the main initDB transaction
+  // so that createTenantSchema (which opens its own connection) sees the renamed column
+  try {
+    const preClient = await pool.connect();
+    try {
+      await preClient.query(`DO $$ BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_name='commemorative_dates' AND column_name='name'
+                   AND table_schema='public') THEN
+          ALTER TABLE commemorative_dates RENAME COLUMN name TO title;
+        END IF;
+      END $$`);
+      // Also rename in all tenant schemas
+      const { rows: schemas } = await preClient.query(
+        `SELECT schema_name FROM tenants WHERE schema_name IS NOT NULL`
+      );
+      for (const { schema_name } of schemas) {
+        try {
+          await preClient.query(`DO $$ BEGIN
+            IF EXISTS (SELECT 1 FROM information_schema.columns
+                       WHERE table_schema='${schema_name}'
+                         AND table_name='commemorative_dates' AND column_name='name') THEN
+              ALTER TABLE "${schema_name}".commemorative_dates RENAME COLUMN name TO title;
+            END IF;
+          END $$`);
+        } catch {}
+      }
+    } catch(e) {
+      // Ignore if tenants table doesn't exist yet (first run)
+      if (!e.message.includes('does not exist')) console.error('[Pre-migration] warn:', e.message);
+    } finally { preClient.release(); }
+  } catch {}
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
