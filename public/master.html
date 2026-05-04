@@ -1979,28 +1979,59 @@ async function initContracts() {
   }
 }
 
-function openContractDoc(url) {
+async function openContractDoc(token) {
   var existing = document.getElementById('contract-doc-modal');
   if (existing) existing.remove();
+  // Fetch tenant data for the token
+  var tenantData = null;
+  try {
+    var resp = await fetch('/api/contrato/' + token);
+    if (resp.ok) tenantData = await resp.json();
+  } catch(e) {}
+  // Build inline document HTML
+  var acceptInfo = '';
+  if (tenantData && tenantData.already_accepted && tenantData.accepted_at) {
+    acceptInfo = '<div style="background:#e8f5e9;border:1px solid #a5d6a7;border-radius:8px;padding:12px 16px;margin-bottom:20px;font-size:13px;color:#1b5e20">' +
+      '✅ <strong>Aceite registrado em:</strong> ' + new Date(tenantData.accepted_at).toLocaleString("pt-BR") + '</div>';
+  }
+  var tenantInfo = tenantData ? (
+    '<div style="background:#f5f0f3;border:1px solid #e0d0d8;border-radius:8px;padding:14px 18px;margin-bottom:20px;font-size:13px">' +
+    '<strong>Profissional:</strong> ' + (tenantData.name||'—') + ' &nbsp;|&nbsp; ' +
+    '<strong>E-mail:</strong> ' + (tenantData.email||'—') + ' &nbsp;|&nbsp; ' +
+    '<strong>Telefone:</strong> ' + (tenantData.phone||'—') +
+    '</div>'
+  ) : '';
+  var docs = [
+    { num: '1', title: 'Política de Privacidade da Belle Planner', text: 'A Belle Planner coleta e trata dados pessoais dos profissionais contratantes com a finalidade de cadastro, configuração, suporte, cobrança, comunicação operacional e prestação dos serviços da plataforma. Os dados tratados podem incluir nome, nome comercial, e-mail, telefone, identidade visual, informações de plano, pagamentos, status da assinatura e registros de uso. A Belle Planner também poderá tratar dados dos clientes finais dos profissionais exclusivamente para viabilizar o funcionamento técnico da agenda online. Em relação aos dados dos clientes finais, o profissional contratante atua como controlador, sendo responsável pela finalidade, base legal e direitos dos titulares. A Belle Planner atua como operadora, tratando as informações conforme as instruções do profissional e exclusivamente para execução do serviço contratado. Os dados poderão ser tratados por fornecedores técnicos essenciais (hospedagem, e-mail, notificações). A Belle Planner adota medidas técnicas razoáveis para proteção dos dados. O profissional poderá solicitar informações, correções ou exclusão dos seus dados, observadas as obrigações legais aplicáveis.' },
+    { num: '2', title: 'Termos de Uso da Belle Planner', text: 'A Belle Planner é uma plataforma SaaS de agenda online disponibilizada a profissionais e pequenos negócios para gestão de agendamentos, procedimentos, horários, notificações e informações operacionais. O profissional contratante é responsável por cadastrar informações corretas, manter seus dados atualizados e utilizar a plataforma de forma lícita, ética e compatível com a legislação. O profissional é o único responsável pelos serviços prestados aos seus clientes finais, incluindo qualidade do atendimento, valores cobrados, cancelamentos e comunicações externas. A Belle Planner não presta os serviços profissionais cadastrados na agenda, atuando apenas como fornecedora da infraestrutura tecnológica. É proibido utilizar a plataforma para fins ilícitos, fraudulentos, abusivos ou discriminatórios. O profissional deve manter sigilo sobre seus dados de acesso. A Belle Planner poderá suspender o acesso em caso de inadimplência, uso indevido ou descumprimento destes termos. A continuidade do uso implica concordância com estas regras e suas atualizações futuras.' },
+    { num: '3', title: 'Contrato de Prestação de Serviços SaaS', text: 'Pelo presente aceite eletrônico, o profissional contratante adere aos serviços da Belle Planner em modelo SaaS destinado à gestão de agendamentos, clientes, procedimentos, horários, notificações e recursos administrativos. A Belle Planner fornecerá acesso à plataforma, configuração inicial, subdomínio vinculado ao domínio belleplanner.com.br, painel administrativo e funcionalidades conforme o plano definido. O profissional pagará os valores acordados na contratação, incluindo taxa de implantação e mensalidade recorrente quando aplicável. O não pagamento poderá gerar suspensão da agenda. A Belle Planner não garante resultado financeiro, aumento de clientes ou desempenho comercial do profissional. O profissional reconhece que é o controlador dos dados pessoais de seus clientes finais, responsável por coletar e tratar tais dados conforme a LGPD. A Belle Planner atuará como operadora dos dados dos clientes finais. O profissional autoriza a Belle Planner a acessar dados técnicos e operacionais sempre que necessário para suporte, manutenção, segurança e auditoria. O código-fonte, arquitetura, marca e funcionalidades da Belle Planner pertencem exclusivamente à Belle Planner, sem transferência de propriedade intelectual ao profissional. O aceite eletrônico possui validade jurídica e será registrado com data, hora, IP e demais informações técnicas disponíveis.' }
+  ];
+  var docsHtml = docs.map(function(d) {
+    return '<div style="margin-bottom:20px">' +
+      '<div style="background:#1f0d18;padding:12px 16px;border-radius:8px 8px 0 0;display:flex;gap:10px;align-items:center">' +
+        '<span style="background:rgba(255,255,255,.2);color:white;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex-shrink:0">' + d.num + '</span>' +
+        '<span style="color:white;font-weight:700;font-size:13px">' + d.title + '</span>' +
+      '</div>' +
+      '<div style="background:#fdf5f8;border:1px solid #e8d0d8;border-radius:0 0 8px 8px;padding:16px;font-size:12px;color:#4a3040;line-height:1.8">' + d.text + '</div>' +
+    '</div>';
+  }).join('');
+  // Build modal
   var modal = document.createElement('div');
   modal.id = 'contract-doc-modal';
-  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:9999;display:flex;flex-direction:column;padding:16px';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:9999;display:flex;flex-direction:column;padding:20px';
   var header = document.createElement('div');
-  header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:12px';
-  var title = document.createElement('span');
-  title.style.cssText = 'color:white;font-weight:700;font-size:15px';
-  title.textContent = '📄 Documento Contratual — somente leitura';
+  header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-shrink:0';
+  header.innerHTML = '<span style="color:white;font-weight:800;font-size:16px">📄 Documentos Contratuais — somente leitura</span>';
   var closeBtn = document.createElement('button');
-  closeBtn.textContent = '✕';
-  closeBtn.style.cssText = 'background:rgba(255,255,255,.2);color:white;border:none;border-radius:50%;width:32px;height:32px;font-size:18px;cursor:pointer;flex-shrink:0';
+  closeBtn.textContent = '✕ Fechar';
+  closeBtn.style.cssText = 'background:rgba(255,255,255,.15);color:white;border:1px solid rgba(255,255,255,.3);border-radius:20px;padding:6px 16px;font-size:13px;font-weight:700;cursor:pointer';
   closeBtn.onclick = function() { modal.remove(); };
-  header.appendChild(title);
   header.appendChild(closeBtn);
-  var iframe = document.createElement('iframe');
-  iframe.src = url;
-  iframe.style.cssText = 'flex:1;border:none;border-radius:8px;background:white;min-height:0';
+  var body = document.createElement('div');
+  body.style.cssText = 'flex:1;overflow-y:auto;background:white;border-radius:10px;padding:24px;-webkit-overflow-scrolling:touch';
+  body.innerHTML = acceptInfo + tenantInfo + docsHtml + '<p style="font-size:11px;color:#9a6070;text-align:center;margin-top:16px">Belle Planner · Documentos v1.0 · LGPD — Lei 13.709/2018</p>';
   modal.appendChild(header);
-  modal.appendChild(iframe);
+  modal.appendChild(body);
   document.body.appendChild(modal);
 }
 
@@ -2008,12 +2039,12 @@ function showContractDetail(tenantId) {
 
   const r = _contractsData.find(x => x.id === tenantId);
   if (!r) return;
-  const baseUrl = window.location.origin;
-  const contractUrl = r.contract_token ? (baseUrl + '/contrato/aceite/' + r.contract_token) : null;
+  const contractBaseUrl = 'https://contratos.belleplanner.com.br';
+  const contractUrl = r.contract_token ? (contractBaseUrl + '/' + r.contract_token) : null;
   const tokenLink = contractUrl
     ? '<div style="display:flex;flex-direction:column;gap:6px">' +
         '<code style="font-size:10px;color:var(--muted);word-break:break-all">' + contractUrl + '</code>' +
-        '<button onclick="openContractDoc(\'' + contractUrl + '\')" style="background:var(--rose);color:white;border:none;border-radius:6px;padding:8px 16px;cursor:pointer;font-size:13px;font-weight:700;width:fit-content">📄 Ver documento</button>' +
+        '<button onclick="openContractDoc(\'' + r.contract_token + '\')" style="background:var(--rose);color:white;border:none;border-radius:6px;padding:8px 16px;cursor:pointer;font-size:13px;font-weight:700;width:fit-content">📄 Ver documento</button>' +
       '</div>'
     : '—';
   const body = `
