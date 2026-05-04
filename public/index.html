@@ -1318,7 +1318,10 @@ tr:hover td{background:#FAF3F6}
                   <button class="btn btn-primary" id="btn-activate-push" onclick="activateAdminPush()" style="width:auto;padding:10px 24px;white-space:nowrap">
                     🔔 Ativar notificações
                   </button>
-                  <div id="push-admin-msg" style="font-size:12px;margin-top:6px;color:var(--text-light)"></div>
+                  <button class="btn" onclick="resetAndResubscribePush()" style="width:auto;padding:10px 18px;font-size:12px;margin-top:6px;white-space:nowrap;border-color:var(--rose);color:var(--rose)">
+                    🔄 Reconectar push
+                  </button>
+                  <div id="push-admin-msg" style="font-size:12px;margin-top:6px;color:var(--text-light)">Se parou de receber notificações, clique em "Reconectar push"</div>
                 </div>
               </div>
             </div>
@@ -3227,6 +3230,35 @@ async function openCockpitMonth(ym) {
 function closeCockpitMonth() {
   document.getElementById('cm-overlay').classList.add('hidden');
   document.body.style.overflow = '';
+}
+
+// ── PUSH RECONECTAR ──────────────────────────────────────────────────────────
+async function resetAndResubscribePush() {
+  const msg = document.getElementById('push-admin-msg');
+  if (msg) msg.textContent = 'Reconectando...';
+  try {
+    // 1. Cancela subscription existente no browser
+    const reg = await navigator.serviceWorker.ready;
+    const existing = await reg.pushManager.getSubscription();
+    if (existing) {
+      await existing.unsubscribe();
+      console.log('[Push] Subscription cancelada no browser');
+    }
+    // 2. Remove no servidor
+    await fetch('/api/push/subscribe/admin', {
+      method: 'DELETE', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    console.log('[Push] Subscription removida no servidor');
+    // 3. Re-inscreve
+    await subscribePush('admin');
+    if (msg) msg.textContent = '✅ Push reconectado com sucesso!';
+    showToast('✅ Notificações push reconectadas!', 'ok');
+  } catch(e) {
+    console.error('[Push] Erro ao reconectar:', e);
+    if (msg) msg.textContent = '❌ Erro: ' + e.message;
+    showToast('Erro ao reconectar push: ' + e.message, 'error');
+  }
 }
 
 // ── LGPD CONSENT ─────────────────────────────────────────────────────────────
