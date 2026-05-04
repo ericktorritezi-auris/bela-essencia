@@ -1935,6 +1935,7 @@ async function initContracts() {
   const status = document.getElementById('ct-status-filter')?.value || '';
   const from   = document.getElementById('ct-from')?.value || '';
   const to     = document.getElementById('ct-to')?.value   || '';
+  if (!tbody) { console.error('[Contracts] ct-tbody element not found!'); return; }
   tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--muted)">Carregando...</td></tr>';
   try {
     const params = [];
@@ -1978,7 +1979,8 @@ async function initContracts() {
       </tr>`;
     }).join('');
   } catch(e) {
-    tbody.innerHTML = `<tr><td colspan="9" style="color:var(--red);padding:20px">${e.message}</td></tr>`;
+    console.error('[Contracts] Error:', e);
+    if (tbody) tbody.innerHTML = `<tr><td colspan="9" style="color:var(--red);padding:20px">Erro: ${e.message}</td></tr>`;
   }
 }
 
