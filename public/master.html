@@ -1931,19 +1931,25 @@ async function resetTenantPass(id, name) {
 let _contractsData = [];
 
 async function initContracts() {
+  console.log('[Contracts] initContracts called');
   const tbody = document.getElementById('ct-tbody');
-  const status = document.getElementById('ct-status-filter')?.value || '';
-  const from   = document.getElementById('ct-from')?.value || '';
-  const to     = document.getElementById('ct-to')?.value   || '';
-  if (!tbody) { console.error('[Contracts] ct-tbody element not found!'); return; }
+  console.log('[Contracts] tbody element:', tbody);
+  if (!tbody) { console.error('[Contracts] ct-tbody element NOT FOUND in DOM'); return; }
   tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--muted)">Carregando...</td></tr>';
   try {
-    const params = [];
-    if (status) params.push('status=' + status);
-    if (from)   params.push('from='   + from);
-    if (to)     params.push('to='     + to);
-    const url = '/master/api/contracts' + (params.length ? '?' + params.join('&') : '');
-    _contractsData = await API('GET', url);
+    const url = '/master/api/contracts';
+    console.log('[Contracts] Calling API:', url);
+    const raw = await fetch(url, {
+      method: 'GET',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', 'x-master-token': _masterToken }
+    });
+    console.log('[Contracts] Response status:', raw.status);
+    const text = await raw.text();
+    console.log('[Contracts] Response body (first 300):', text.slice(0, 300));
+    if (!raw.ok) throw new Error('HTTP ' + raw.status + ': ' + text.slice(0, 100));
+    _contractsData = JSON.parse(text);
+    console.log('[Contracts] Data received:', _contractsData.length, 'rows');
 
     if (!_contractsData.length) {
       tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--muted)">Nenhum contrato encontrado.</td></tr>';
