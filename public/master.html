@@ -335,6 +335,7 @@
       <div class="nav-item" id="nav-financial" onclick="showSec('financial')"><span class="nav-icon">💰</span> Financeiro</div>
       <div class="nav-sep"></div>
       <div class="nav-section">Sistema</div>
+      <div class="nav-item" id="nav-lgpd" onclick="showSec('lgpd')"><span class="nav-icon">🔒</span> LGPD Tenants</div>
       <div class="nav-item" id="nav-health" onclick="showSec('health')"><span class="nav-icon">🩺</span> Saúde do Sistema</div>
       <div class="nav-item" id="nav-logs" onclick="showSec('logs')"><span class="nav-icon">📋</span> Logs</div>
       <div class="nav-sep"></div>
@@ -533,6 +534,44 @@
         </div>
       </div>
 
+    </div>
+
+    <div id="sec-lgpd" class="sec">
+      <h2 class="sec-title">🔒 LGPD Tenants — Registro de Consentimentos</h2>
+      <!-- Filtros -->
+      <div class="tbl-wrap" style="margin-bottom:14px">
+        <div style="padding:14px 18px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;justify-content:space-between">
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+            <div>
+              <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Tenant</div>
+              <select id="lgpd-tenant-filter" class="fi" style="padding:7px 10px;background:var(--card)">
+                <option value="">Todos os tenants</option>
+              </select>
+            </div>
+            <div>
+              <div style="font-size:11px;color:var(--muted);margin-bottom:4px">De</div>
+              <input type="date" id="lgpd-master-from" class="fi" style="padding:7px 10px">
+            </div>
+            <div>
+              <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Até</div>
+              <input type="date" id="lgpd-master-to" class="fi" style="padding:7px 10px">
+            </div>
+            <button onclick="initMasterLgpd()" class="btn" style="padding:7px 16px;font-size:13px">Filtrar</button>
+          </div>
+          <button onclick="exportMasterLgpdCsv()" class="btn" style="padding:7px 16px;font-size:13px">📥 Exportar CSV</button>
+        </div>
+      </div>
+      <!-- Tabela -->
+      <div class="tbl-wrap" style="overflow-x:auto">
+        <table style="min-width:700px">
+          <thead><tr>
+            <th>Tenant</th><th>Cliente</th><th>WhatsApp</th>
+            <th>Agendamento</th><th style="text-align:center">Aceite</th>
+            <th>Data do aceite</th><th>Versão</th>
+          </tr></thead>
+          <tbody id="lgpd-master-tbody"></tbody>
+        </table>
+      </div>
     </div>
   </div>
 </div>
@@ -851,6 +890,7 @@ function showSec(name) {
   if (name === 'profile')   loadProfile();
   if (name === 'pipeline')  loadPipeline();
   if (name === 'comms')     loadComms();
+  if (name === 'lgpd')      initMasterLgpd();
 }
 
 // ── INIT ───────────────────────────────────────────────────────────────────
@@ -1748,6 +1788,73 @@ async function loadRevenueProjection() {
 }
 
 // ── RESET TENANT PASSWORD ──────────────────────────────────────────────────
+// ── Log LGPD Master ──────────────────────────────────────────────────────────
+let _masterLgpdData = [];
+
+async function initMasterLgpd() {
+  // Populate tenant filter
+  const tenantSel = document.getElementById('lgpd-tenant-filter');
+  if (tenantSel && _tenants && _tenants.length) {
+    const existing = [...tenantSel.options].map(o => o.value);
+    if (existing.length <= 1) {
+      _tenants.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t.id; opt.textContent = t.name || t.business_name;
+        tenantSel.appendChild(opt);
+      });
+    }
+  }
+
+  const tbody     = document.getElementById('lgpd-master-tbody');
+  const tenantId  = document.getElementById('lgpd-tenant-filter')?.value || '';
+  const from      = document.getElementById('lgpd-master-from')?.value   || '';
+  const to        = document.getElementById('lgpd-master-to')?.value     || '';
+  tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--muted)">Carregando...</td></tr>';
+  try {
+    let url = '/master/api/lgpd/consents';
+    const params = [];
+    if (tenantId) params.push('tenant_id=' + tenantId);
+    if (from)     params.push('from=' + from);
+    if (to)       params.push('to='   + to);
+    if (params.length) url += '?' + params.join('&');
+    _masterLgpdData = await API('GET', url);
+    if (!_masterLgpdData.length) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--muted)">Nenhum registro encontrado.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = _masterLgpdData.map(r => `
+      <tr>
+        <td style="font-weight:600">${r.tenant_name||'—'}</td>
+        <td>${r.name||'—'}</td>
+        <td>${r.phone||'—'}</td>
+        <td>${fmtDate(r.date)}</td>
+        <td style="text-align:center">${r.privacy_consent ? '<span style="color:var(--green)">✅ Sim</span>' : '<span style="color:var(--red)">Não</span>'}</td>
+        <td style="font-size:12px">${r.consent_at ? new Date(r.consent_at).toLocaleString('pt-BR') : '—'}</td>
+        <td style="font-size:12px;color:var(--muted)">${r.consent_version||'v1.0'}</td>
+      </tr>`).join('');
+  } catch(e) {
+    tbody.innerHTML = '<tr><td colspan="7" style="color:var(--red);padding:20px">' + e.message + '</td></tr>';
+  }
+}
+
+function exportMasterLgpdCsv() {
+  if (!_masterLgpdData.length) { toast('Nenhum dado para exportar','err'); return; }
+  const header = ['Tenant','Nome','WhatsApp','Data Agendamento','Aceite','Data Aceite','Versão'];
+  const rows = _masterLgpdData.map(r => [
+    r.tenant_name||'', r.name||'', r.phone||'', r.date||'',
+    r.privacy_consent ? 'SIM' : 'NÃO',
+    r.consent_at ? new Date(r.consent_at).toLocaleString('pt-BR') : '',
+    r.consent_version||'v1.0'
+  ].map(v => '"' + String(v).replace(/"/g,'""') + '"').join(','));
+  const csv  = [header.join(','), ...rows].join('\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a'); a.href = url;
+  a.download = 'lgpd-master-consentimentos.csv'; a.click();
+  URL.revokeObjectURL(url);
+  toast('CSV exportado!','ok');
+}
+
 async function resetTenantPass(id, name) {
   const newPass = prompt('Nova senha para o admin de "' + name + '" (mínimo 6 caracteres):');
   if (!newPass) return;

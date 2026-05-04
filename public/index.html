@@ -691,8 +691,24 @@ tr:hover td{background:#FAF3F6}
           </div>
         </div>
       </div>
+      <!-- Consentimento LGPD -->
+      <div id="lgpd-consent-wrap" style="margin:16px 0 4px;padding:14px 16px;background:var(--rose-light);border:1.5px solid var(--rose-mid);border-radius:var(--r-sm)">
+        <label style="display:flex;align-items:flex-start;gap:12px;cursor:pointer">
+          <input type="checkbox" id="privacy-checkbox" onchange="updateConsentBtn()"
+            style="width:20px;height:20px;flex-shrink:0;margin-top:1px;accent-color:var(--rose);cursor:pointer">
+          <span style="font-size:13px;color:var(--dark);line-height:1.6">
+            Li e concordo com a
+            <button type="button" onclick="event.preventDefault();openPrivacyModal()"
+              style="background:none;border:none;color:var(--rose);font-weight:700;font-size:13px;cursor:pointer;text-decoration:underline;padding:0">
+              Política de Privacidade e Termos de Uso
+            </button>
+            desta agenda.
+          </span>
+        </label>
+      </div>
       <div class="btn-actions">
-        <button class="btn btn-primary" id="confirm-btn" onclick="confirmBooking()">✓ Confirmar agendamento</button>
+        <button class="btn btn-primary" id="confirm-btn" onclick="confirmBooking()" disabled
+          style="opacity:.5;cursor:not-allowed">✓ Confirmar agendamento</button>
       </div>
     </div>
     <div id="s7" class="step-card hidden">
@@ -764,6 +780,7 @@ tr:hover td{background:#FAF3F6}
           <div class="nav-item" id="nav-schedules" onclick="showSec('schedules')"><span class="nav-icon">🕐</span> Horários</div>
           <div class="nav-item" id="nav-procs" onclick="showSec('procs')"><span class="nav-icon">✨</span> Procedimentos</div>
           <div class="nav-item" id="nav-profile" onclick="showSec('profile')"><span class="nav-icon">👤</span> Perfil / Senha</div>
+          <div class="nav-item desktop-only" id="nav-lgpd" onclick="showSec('lgpd')"><span class="nav-icon">🔒</span> Log LGPD</div>
           <div class="nav-item desktop-only" id="nav-backup" onclick="showSec('backup')"><span class="nav-icon">💾</span> Backup</div>
         </div>
         <div class="sb-foot">
@@ -1342,6 +1359,43 @@ tr:hover td{background:#FAF3F6}
           </div>
 
           <!-- SEC: BACKUP (desktop only) -->
+          <div id="sec-lgpd" class="hidden">
+            <div class="tbl-wrap" style="margin-bottom:14px">
+              <div style="padding:16px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+                <div>
+                  <div class="tbl-ttl" style="margin-bottom:4px">🔒 Log LGPD — Registro de Consentimentos</div>
+                  <p style="font-size:12px;color:var(--text-light);margin:0">Histórico de aceites da Política de Privacidade pelos clientes</p>
+                </div>
+                <button onclick="exportLgpdCsv()" class="btn btn-secondary" style="width:auto;padding:8px 18px;font-size:13px">📥 Exportar CSV</button>
+              </div>
+              <!-- Filtro por período -->
+              <div style="padding:0 20px 14px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+                <div class="fg" style="margin:0;min-width:130px">
+                  <label style="font-size:11px">De</label>
+                  <input type="date" id="lgpd-from" class="fi" style="padding:8px 10px">
+                </div>
+                <div class="fg" style="margin:0;min-width:130px">
+                  <label style="font-size:11px">Até</label>
+                  <input type="date" id="lgpd-to" class="fi" style="padding:8px 10px">
+                </div>
+                <button onclick="initLgpd()" class="btn btn-primary" style="width:auto;padding:8px 18px;font-size:13px">Filtrar</button>
+              </div>
+            </div>
+            <!-- Tabela -->
+            <div class="tbl-wrap">
+              <div class="rev-table-wrap">
+                <table class="rev-table">
+                  <thead><tr>
+                    <th>Cliente</th><th>WhatsApp</th><th>Agendamento</th>
+                    <th style="text-align:center">Aceite</th><th>Data do aceite</th><th>Versão</th>
+                  </tr></thead>
+                  <tbody id="lgpd-tbody"></tbody>
+                </table>
+              </div>
+              <div id="lgpd-pag" class="pag-wrap hidden"></div>
+            </div>
+          </div>
+
           <div id="sec-backup" class="hidden desktop-only">
             <div class="tbl-wrap" style="margin-bottom:16px">
               <div style="padding:20px">
@@ -1966,6 +2020,11 @@ function resetConfirmBtn() {
 }
 
 async function confirmBooking() {
+  // Verifica consentimento LGPD
+  if (!document.getElementById('privacy-checkbox')?.checked) {
+    showToast('Aceite a Política de Privacidade para continuar.','error');
+    return;
+  }
   const btn = document.getElementById('confirm-btn');
   if (!btn || btn.disabled) return; // evita duplo clique
   btn.textContent = 'Confirmando...'; btn.disabled = true;
@@ -2010,6 +2069,7 @@ async function confirmBooking() {
       phone: BK.phone,
       price: effectivePrice,
       pt:    p.pt || 'fixed',
+      privacy_consent: true,
     }));
 
     // Sucesso — salva dados para próximo agendamento na mesma sessão
@@ -2104,9 +2164,9 @@ const SEC_TITLES={
   agenda:'Agenda',manual:'Agenda Manual',retro:'Agenda Retroativa',blocked:'Bloquear Datas',released:'Liberar Datas',nps:'NPS — Satisfação',
   revenue:'Receita',cockpit:'Cockpit Financeiro',promos:'Promoções',commem:'Datas Comemorativas',webpush:'Web Push',
   cities:'Cidades',schedules:'Configuração de Horários',
-  procs:'Procedimentos',profile:'Perfil & Senha',backup:'Backup'
+  procs:'Procedimentos',profile:'Perfil & Senha',lgpd:'Log LGPD',backup:'Backup'
 };
-const ALL_SECS = ['agenda','manual','retro','blocked','released','nps','revenue','cockpit','promos','commem','webpush','cities','schedules','procs','profile','backup'];
+const ALL_SECS = ['agenda','manual','retro','blocked','released','nps','revenue','cockpit','promos','commem','webpush','cities','schedules','procs','profile','lgpd','backup'];
 
 function showSec(name){
   ALL_SECS.forEach(s=>{
@@ -2118,6 +2178,7 @@ function showSec(name){
   if(name==='manual') initManualBooking();
   if(name==='retro') initRetro();
   if(name==='cockpit') initCockpit();
+  if(name==='lgpd') initLgpd();
   if(name==='released'){renderReleased();renderReleasedSlots();renderReleaseCityCheckboxes()}
   if(name==='nps') renderNPSDashboard();
   if(name==='blocked'){renderBlocked();renderBlockedSlots();renderBlockCityCheckboxes()}
@@ -3027,7 +3088,63 @@ async function initCockpit() {
   }
 }
 
-// ── COCKPIT MONTH DETAIL ────────────────────────────
+// ── LOG LGPD ─────────────────────────────────────────────────────────────────
+let _lgpdData = [];
+
+async function initLgpd() {
+  const tbody = document.getElementById('lgpd-tbody');
+  const from  = document.getElementById('lgpd-from')?.value || '';
+  const to    = document.getElementById('lgpd-to')?.value   || '';
+  tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-light)">Carregando...</td></tr>';
+  try {
+    let url = '/api/lgpd/consents';
+    const params = [];
+    if (from) params.push('from=' + from);
+    if (to)   params.push('to='   + to);
+    if (params.length) url += '?' + params.join('&');
+    _lgpdData = await GET(url);
+    if (!_lgpdData.length) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-light)">Nenhum registro encontrado para o período.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = _lgpdData.map(r => {
+      const consentDate = r.consent_at ? new Date(r.consent_at).toLocaleString('pt-BR') : '—';
+      const apptDate    = r.date ? fmtDate(r.date) : '—';
+      return '<tr>' +
+        '<td style="font-weight:600">' + (r.name || '—') + '</td>' +
+        '<td>' + (r.phone || '—') + '</td>' +
+        '<td>' + apptDate + '</td>' +
+        '<td style="text-align:center">' + (r.privacy_consent ? '<span style="color:#27ae60;font-weight:700">✅ Sim</span>' : '<span style="color:#e74c3c">Não</span>') + '</td>' +
+        '<td style="font-size:12px">' + consentDate + '</td>' +
+        '<td style="font-size:12px;color:var(--text-light)">' + (r.consent_version || 'v1.0') + '</td>' +
+        '</tr>';
+    }).join('');
+  } catch(e) {
+    tbody.innerHTML = '<tr><td colspan="6" style="color:var(--error);padding:20px">' + e.message + '</td></tr>';
+  }
+}
+
+function exportLgpdCsv() {
+  if (!_lgpdData.length) { showToast('Nenhum dado para exportar','error'); return; }
+  const header = ['Nome','WhatsApp','Data Agendamento','Aceite','Data Aceite','Versão Termo'];
+  const rows   = _lgpdData.map(r => [
+    r.name || '',
+    r.phone || '',
+    r.date || '',
+    r.privacy_consent ? 'SIM' : 'NÃO',
+    r.consent_at ? new Date(r.consent_at).toLocaleString('pt-BR') : '',
+    r.consent_version || 'v1.0'
+  ].map(v => '"' + String(v).replace(/"/g,'""') + '"').join(','));
+  const csv  = [header.join(','), ...rows].join('\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = 'lgpd-consentimentos.csv'; a.click();
+  URL.revokeObjectURL(url);
+  showToast('CSV exportado com sucesso!','ok');
+}
+
+// ── COCKPIT MONTH DETAIL ─────────────────────────────────────────────────────
 async function openCockpitMonth(ym) {
   const overlay = document.getElementById('cm-overlay');
   const titleEl = document.getElementById('cm-title');
@@ -3112,7 +3229,36 @@ function closeCockpitMonth() {
   document.body.style.overflow = '';
 }
 
-// ── AGENDA RETROATIVA ─────────────────────────────
+// ── LGPD CONSENT ─────────────────────────────────────────────────────────────
+function openPrivacyModal() {
+  document.getElementById('privacy-modal').style.display = 'block';
+  document.body.style.overflow = 'hidden';
+}
+function closePrivacyModal() {
+  document.getElementById('privacy-modal').style.display = 'none';
+  document.body.style.overflow = '';
+}
+function acceptAndClose() {
+  document.getElementById('privacy-checkbox').checked = true;
+  updateConsentBtn();
+  closePrivacyModal();
+}
+function updateConsentBtn() {
+  const checked = document.getElementById('privacy-checkbox')?.checked;
+  const btn = document.getElementById('confirm-btn');
+  if (!btn) return;
+  btn.disabled = !checked;
+  btn.style.opacity = checked ? '1' : '0.5';
+  btn.style.cursor  = checked ? 'pointer' : 'not-allowed';
+}
+// Reset consent when going back from step 6
+function resetConsentOnBack() {
+  const cb = document.getElementById('privacy-checkbox');
+  if (cb) cb.checked = false;
+  updateConsentBtn();
+}
+
+// ── AGENDA RETROATIVA ─────────────────────────────────────────────────────────
 const RETRO = { cityId: null, procDur: 0 };
 
 async function initRetro() {
@@ -5214,6 +5360,36 @@ document.addEventListener('DOMContentLoaded', async () => {
   }, 3000);
 });
 </script>
+<!-- POPUP POLÍTICA DE PRIVACIDADE LGPD -->
+<div id="privacy-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9500;overflow-y:auto;-webkit-overflow-scrolling:touch">
+  <div style="background:white;border-radius:var(--r-lg);max-width:560px;width:calc(100% - 32px);margin:20px auto 40px;position:relative;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+    <div style="background:linear-gradient(135deg,#1f0d18 0%,#4a1528 100%);padding:16px 20px;border-radius:var(--r-lg) var(--r-lg) 0 0;display:flex;justify-content:space-between;align-items:center">
+      <span style="color:white;font-weight:700;font-size:14px">📋 Política de Privacidade &amp; Termos de Uso</span>
+      <button onclick="closePrivacyModal()" style="background:rgba(255,255,255,.2);border:none;color:white;border-radius:50%;width:30px;height:30px;font-size:16px;cursor:pointer;line-height:1">✕</button>
+    </div>
+    <div id="privacy-modal-content" style="padding:20px 22px;max-height:60vh;overflow-y:auto;font-size:13px;color:#4a3040;line-height:1.7">
+      <h3 style="color:#9b4d6a;font-size:15px;margin-bottom:8px;margin-top:4px">Política de Privacidade</h3>
+      <p>Esta agenda online coleta <strong>nome</strong> e <strong>WhatsApp</strong> para realizar o agendamento de serviços.</p>
+      <p>Os dados são usados para confirmar, lembrar e comunicar sobre o agendamento. Não são compartilhados com terceiros.</p>
+      <p>O responsável pelos dados é o <strong>profissional desta agenda</strong>. A Belle Planner atua como operadora tecnológica.</p>
+      <p>Você pode solicitar acesso, correção ou exclusão dos seus dados ao profissional responsável.</p>
+      <div style="height:1px;background:#f0d0dc;margin:14px 0"></div>
+      <h3 style="color:#9b4d6a;font-size:15px;margin-bottom:8px">Termos de Uso</h3>
+      <p>Esta agenda facilita o agendamento de serviços. Ao confirmar, você se compromete a fornecer informações verdadeiras.</p>
+      <p>O profissional é o único responsável pelos serviços prestados. A Belle Planner atua como intermediadora tecnológica.</p>
+      <p style="font-size:11px;color:#9a6070;margin-top:16px;text-align:center">Belle Planner · Política de Privacidade v1.0 · LGPD — Lei 13.709/2018</p>
+    </div>
+    <div style="padding:14px 22px;border-top:1px solid #f0d0dc;display:flex;gap:10px;flex-wrap:wrap">
+      <button onclick="acceptAndClose()" style="flex:1;background:#9b4d6a;color:white;border:none;border-radius:var(--r-sm);padding:12px;font-size:14px;font-weight:700;cursor:pointer">
+        ✅ Entendi e Concordo
+      </button>
+      <a href="/privacidade.html" target="_blank" style="flex:0 0 auto;border:1.5px solid #9b4d6a;color:#9b4d6a;border-radius:var(--r-sm);padding:11px 16px;font-size:13px;font-weight:700;cursor:pointer;text-decoration:none;display:flex;align-items:center">
+        Ver completo ↗
+      </a>
+    </div>
+  </div>
+</div>
+
 <!-- POPUP SAIBA MAIS PROCEDIMENTO -->
 <div id="pm-overlay" class="pm-overlay hidden" onclick="if(event.target===this)closeProcDetail()">
   <div class="pm-card" style="position:relative">
