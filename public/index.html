@@ -183,7 +183,11 @@ h1,h2,h3,h4{font-family:'Cormorant Garamond',serif}
 .val-mask{color:var(--text-light);letter-spacing:2px;font-weight:600}
 
 /* ── PAGINAÇÃO ── */
-.pag-wrap{display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-top:1px solid var(--border);flex-wrap:wrap;gap:8px}
+.pag-wrap{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-top:1px solid var(--border);flex-wrap:wrap;gap:6px}
+.rev-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.rev-table{width:100%;min-width:340px}
+.rev-table td,.rev-table th{font-size:12px;padding:8px 10px}
+@media(min-width:600px){.rev-table td,.rev-table th{font-size:13px;padding:10px 14px}}
 .pag-info{font-size:12px;color:var(--text-light);font-weight:600}
 .pag-btns{display:flex;gap:6px;align-items:center}
 .pag-btn{background:none;border:1.5px solid var(--border);border-radius:var(--r-sm);padding:5px 12px;font-size:12px;font-weight:700;font-family:'Nunito',sans-serif;color:var(--text-light);cursor:pointer;transition:var(--tr)}
@@ -341,8 +345,10 @@ tr:hover td{background:#FAF3F6}
 .act-btn{background:none;border:1px solid var(--border);border-radius:5px;padding:4px 9px;cursor:pointer;font-size:11px;font-family:'Nunito',sans-serif;color:var(--text-light);transition:var(--tr);font-weight:600;margin-right:3px;text-decoration:none;display:inline-block}
 .act-btn:hover{border-color:var(--rose);color:var(--rose)}
 .act-btn.danger:hover{border-color:var(--error);color:var(--error)}
-.rev-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:24px}
-.rc{background:white;border-radius:var(--r-md);padding:22px;box-shadow:var(--sh-sm);border:1px solid var(--border);text-align:center}
+.rev-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:18px}
+@media(min-width:600px){.rev-grid{grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px}}
+.rc{background:white;border-radius:var(--r-md);padding:14px 10px;box-shadow:var(--sh-sm);border:1px solid var(--border);text-align:center}
+@media(min-width:600px){.rc{padding:22px}}
 .rc-per{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--text-light);font-weight:800;margin-bottom:7px}
 .rc-val{font-family:'Cormorant Garamond',serif;font-size:32px;font-weight:600;color:var(--rose);line-height:1}
 .rc-cnt{font-size:11px;color:var(--text-light);margin-top:5px}
@@ -1040,7 +1046,7 @@ tr:hover td{background:#FAF3F6}
             <div class="rev-grid" id="rev-cards"></div>
             <div class="tbl-wrap">
               <div class="tbl-head"><div class="tbl-ttl">Por Período</div><div class="tbl-filters"><input type="month" class="fi" id="fl-month" onchange="renderRevTable()"></div></div>
-              <div style="overflow-x:auto"><table><thead><tr><th>Data</th><th>Cliente</th><th>Procedimento</th><th>Valor</th></tr></thead><tbody id="rev-body"></tbody></table></div>
+              <div class="rev-table-wrap"><table class="rev-table"><thead><tr><th>Data</th><th>Cliente</th><th>Procedimento</th><th>Valor</th></tr></thead><tbody id="rev-body"></tbody></table></div>
               <div class="pag-wrap hidden" id="rev-pag"></div>
             </div>
           </div>
@@ -2200,7 +2206,7 @@ function statusLabel(status) {
 // ══════════════════════════════════════════════════
 const PAGE_SIZE = 10;
 
-function renderPagination(containerId, currentPage, totalItems, onPageChange) {
+function renderPagination(containerId, currentPage, totalItems, onPageChange, compact) {
   const el = document.getElementById(containerId);
   if (!el) return;
   const totalPages = Math.ceil(totalItems / PAGE_SIZE);
@@ -2209,8 +2215,21 @@ function renderPagination(containerId, currentPage, totalItems, onPageChange) {
 
   const start = (currentPage - 1) * PAGE_SIZE + 1;
   const end   = Math.min(currentPage * PAGE_SIZE, totalItems);
+  const isMob = compact || window.innerWidth < 600;
 
-  // Calcula páginas visíveis (máx 5 ao redor da atual)
+  // Compact mobile: só anterior / página X de Y / próxima
+  if (isMob) {
+    el.innerHTML =
+      '<div class="pag-info" style="width:100%;text-align:center;margin-bottom:8px">' + start + '–' + end + ' de ' + totalItems + '</div>' +
+      '<div style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%">' +
+        '<button class="pag-btn" ' + (currentPage===1?'disabled':'') + ' onclick="(' + onPageChange + ')(' + (currentPage-1) + ')" style="padding:7px 16px">‹</button>' +
+        '<span style="font-size:13px;color:var(--text-light);padding:0 8px">' + currentPage + ' / ' + totalPages + '</span>' +
+        '<button class="pag-btn" ' + (currentPage===totalPages?'disabled':'') + ' onclick="(' + onPageChange + ')(' + (currentPage+1) + ')" style="padding:7px 16px">›</button>' +
+      '</div>';
+    return;
+  }
+
+  // Desktop: numerada com ellipsis
   let pages = [];
   if (totalPages <= 7) {
     pages = Array.from({length: totalPages}, (_, i) => i + 1);
@@ -2221,20 +2240,18 @@ function renderPagination(containerId, currentPage, totalItems, onPageChange) {
     if (currentPage < totalPages - 2) pages.push('...');
     pages.push(totalPages);
   }
-
-  el.innerHTML = `
-    <div class="pag-info">${start}–${end} de ${totalItems} registros</div>
-    <div class="pag-btns">
-      <button class="pag-btn" ${currentPage===1?'disabled':''} onclick="(${onPageChange})(${currentPage-1})">‹ Anterior</button>
-      <div class="pag-pages">
-        ${pages.map(p => p === '...'
-          ? `<span style="padding:5px 6px;color:var(--text-light);font-size:12px">…</span>`
-          : `<button class="pag-btn ${p===currentPage?'active':''}" onclick="(${onPageChange})(${p})">${p}</button>`
-        ).join('')}
-      </div>
-      <button class="pag-btn" ${currentPage===totalPages?'disabled':''} onclick="(${onPageChange})(${currentPage+1})">Próxima ›</button>
-    </div>
-  `;
+  el.innerHTML =
+    '<div class="pag-info">' + start + '–' + end + ' de ' + totalItems + ' registros</div>' +
+    '<div class="pag-btns">' +
+      '<button class="pag-btn" ' + (currentPage===1?'disabled':'') + ' onclick="(' + onPageChange + ')(' + (currentPage-1) + ')">‹ Anterior</button>' +
+      '<div class="pag-pages">' +
+        pages.map(p => p === '...'
+          ? '<span style="padding:5px 6px;color:var(--text-light);font-size:12px">…</span>'
+          : '<button class="pag-btn ' + (p===currentPage?'active':'') + '" onclick="(' + onPageChange + ')(' + p + ')">' + p + '</button>'
+        ).join('') +
+      '</div>' +
+      '<button class="pag-btn" ' + (currentPage===totalPages?'disabled':'') + ' onclick="(' + onPageChange + ')(' + (currentPage+1) + ')">Próxima ›</button>' +
+    '</div>';
 }
 
 // ── STATS ────────────────────────────────────────
@@ -2700,21 +2717,47 @@ let _revPage    = 1;
 
 function renderRevPage(page) {
   _revPage = page;
-  const tbody = document.getElementById('rev-body');
-  const paged = _revAllData.slice((page-1)*PAGE_SIZE, page*PAGE_SIZE);
+  const tbody  = document.getElementById('rev-body');
+  const pagEl  = document.getElementById('rev-pag');
+  const paged  = _revAllData.slice((page-1)*PAGE_SIZE, page*PAGE_SIZE);
   if (!paged.length) {
-    tbody.innerHTML='<tr><td colspan="4" style="text-align:center;padding:28px;color:var(--text-light)">Nenhum dado</td></tr>';
-    document.getElementById('rev-pag').classList.add('hidden');
-    return;
+    tbody.innerHTML='<tr><td colspan="4" style="text-align:center;padding:28px;color:var(--text-light)">Nenhum dado para o período</td></tr>';
+    pagEl.classList.add('hidden'); return;
   }
-  tbody.innerHTML = paged.map(a=>`
-    <tr>
-      <td><div style="font-weight:700">${fmtDate(a.date)}</div><div style="font-size:11px;color:var(--text-light)">${String(a.st).slice(0,5)}</div></td>
-      <td>${a.name}</td><td>${a.proc_name}</td>
-      <td style="color:var(--gold);font-weight:700">${a.price?maskedCurr(a.price):a.pt==='eval'?'Sob avaliação':'—'}</td>
-    </tr>
-  `).join('');
-  renderPagination('rev-pag', page, _revAllData.length, 'renderRevPage');
+  // Mobile: render cards instead of table rows
+  const isMobile = window.innerWidth < 600;
+  if (isMobile) {
+    // Hide table header, use card list
+    const thead = tbody.closest('table')?.querySelector('thead');
+    if (thead) thead.style.display = 'none';
+    tbody.innerHTML = paged.map(a => `
+      <tr><td colspan="4" style="padding:0;border:none">
+        <div style="background:var(--cream);border-radius:var(--r-sm);border:1px solid var(--border);padding:12px 14px;margin-bottom:8px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:4px">
+            <div>
+              <div style="font-weight:700;font-size:13px;color:var(--dark)">${a.name}</div>
+              <div style="font-size:11px;color:var(--text-light);margin-top:2px">${a.proc_name}</div>
+            </div>
+            <div style="text-align:right;flex-shrink:0">
+              <div style="font-weight:700;color:var(--gold);font-size:13px">${a.price?maskedCurr(a.price):a.pt==='eval'?'Sob avaliação':'—'}</div>
+              <div style="font-size:11px;color:var(--text-light);margin-top:2px">${fmtDate(a.date)} ${String(a.st).slice(0,5)}</div>
+            </div>
+          </div>
+        </div>
+      </td></tr>
+    `).join('');
+  } else {
+    const thead = tbody.closest('table')?.querySelector('thead');
+    if (thead) thead.style.display = '';
+    tbody.innerHTML = paged.map(a=>`
+      <tr>
+        <td><div style="font-weight:700">${fmtDate(a.date)}</div><div style="font-size:11px;color:var(--text-light)">${String(a.st).slice(0,5)}</div></td>
+        <td>${a.name}</td><td>${a.proc_name}</td>
+        <td style="color:var(--gold);font-weight:700">${a.price?maskedCurr(a.price):a.pt==='eval'?'Sob avaliação':'—'}</td>
+      </tr>
+    `).join('');
+  }
+  renderPagination('rev-pag', page, _revAllData.length, 'renderRevPage', isMobile);
 }
 
 async function renderRevTable() {
