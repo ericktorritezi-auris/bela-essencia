@@ -371,11 +371,11 @@ async function seedTenantData(schemaName, tenantData = {}) {
         ['Natal', 25, 12, '🎄 Feliz Natal! Que seu dia seja cheio de beleza e alegria.'],
         ['Ano Novo', 1, 1, '🥂 Feliz Ano Novo! Que a beleza te acompanhe o ano todo.'],
       ];
-      for (const [name, day, month, message] of dates) {
+      for (const [title, day, month, message] of dates) {
         await client.query(
-          `INSERT INTO commemorative_dates (name, day, month, message, is_active)
+          `INSERT INTO commemorative_dates (title, day, month, message, is_active)
            VALUES ($1, $2, $3, $4, TRUE)`,
-          [name, day, month, message]
+          [title, day, month, message]
         );
       }
       console.log(`[DB] commemorative_dates padrão inseridos em "${schemaName}"`);
