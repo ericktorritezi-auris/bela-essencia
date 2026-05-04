@@ -1243,6 +1243,39 @@ tr:hover td{background:#FAF3F6}
                     style="width:100%;background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:13px 15px;font-family:'Nunito',sans-serif;font-size:14px;color:var(--dark);outline:none;resize:vertical;transition:var(--tr)"
                     placeholder="Mensagem que aparecerá para o cliente nesta data especial..."></textarea>
                 </div>
+                <!-- Período de veiculação -->
+                <div style="background:var(--rose-light);border:1px solid var(--rose-mid);border-radius:var(--r-sm);padding:12px 14px;margin-bottom:12px">
+                  <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--rose);margin-bottom:8px">📅 Período de veiculação (opcional)</div>
+                  <p style="font-size:11px;color:var(--text-light);margin-bottom:10px;line-height:1.6">Se preenchido, a mensagem aparece durante todo este período. Se vazio, aparece apenas no dia cadastrado.</p>
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                    <div>
+                      <div style="font-size:11px;color:var(--text-light);margin-bottom:4px;font-weight:600">De:</div>
+                      <div style="display:grid;grid-template-columns:70px 1fr;gap:6px">
+                        <input type="number" class="fi" id="cd-from-day" min="1" max="31" placeholder="Dia" style="width:100%">
+                        <select class="fs" id="cd-from-month" style="width:100%;padding:10px 8px">
+                          <option value="">Mês</option>
+                          <option value="1">Jan</option><option value="2">Fev</option><option value="3">Mar</option>
+                          <option value="4">Abr</option><option value="5">Mai</option><option value="6">Jun</option>
+                          <option value="7">Jul</option><option value="8">Ago</option><option value="9">Set</option>
+                          <option value="10">Out</option><option value="11">Nov</option><option value="12">Dez</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div>
+                      <div style="font-size:11px;color:var(--text-light);margin-bottom:4px;font-weight:600">Até:</div>
+                      <div style="display:grid;grid-template-columns:70px 1fr;gap:6px">
+                        <input type="number" class="fi" id="cd-to-day" min="1" max="31" placeholder="Dia" style="width:100%">
+                        <select class="fs" id="cd-to-month" style="width:100%;padding:10px 8px">
+                          <option value="">Mês</option>
+                          <option value="1">Jan</option><option value="2">Fev</option><option value="3">Mar</option>
+                          <option value="4">Abr</option><option value="5">Mai</option><option value="6">Jun</option>
+                          <option value="7">Jul</option><option value="8">Ago</option><option value="9">Set</option>
+                          <option value="10">Out</option><option value="11">Nov</option><option value="12">Dez</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                </div>
                 <button class="btn btn-primary" onclick="createCommem()" style="width:auto;padding:10px 24px">🎉 Cadastrar Data</button>
               </div>
             </div>
@@ -3489,7 +3522,12 @@ async function renderCommem() {
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
           <div>
             <div style="font-family:'Cormorant Garamond',serif;font-size:19px;font-weight:600;color:var(--dark)">${d.title}</div>
-            <div style="font-size:12px;color:var(--text-light);margin-top:2px">📅 ${d.day} de ${MONTH_NAMES[d.month-1]}</div>
+            <div style="font-size:12px;color:var(--text-light);margin-top:2px">
+              📅 ${d.day} de ${MONTH_NAMES[d.month-1]}
+              ${d.from_day ? `<span style="margin-left:8px;background:var(--rose);color:white;border-radius:10px;padding:1px 8px;font-size:10px;font-weight:700">
+                veicular ${d.from_day}/${MONTH_NAMES[d.from_month-1]} até ${d.to_day}/${MONTH_NAMES[d.to_month-1]}
+              </span>` : ''}
+            </div>
             <div style="font-size:12px;color:var(--text);margin-top:6px;line-height:1.6">${d.message}</div>
             <span class="badge ${d.is_active?'badge-ok':'badge-cancel'}" style="margin-top:8px">${d.is_active?'Ativa':'Inativa'}</span>
           </div>
@@ -3504,20 +3542,41 @@ async function renderCommem() {
 }
 
 async function createCommem() {
-  const day  = parseInt(document.getElementById('cd-day').value);
-  const month= parseInt(document.getElementById('cd-month').value);
-  const title= document.getElementById('cd-title').value.trim();
-  const msg  = document.getElementById('cd-msg').value.trim();
-  if(!day||!month||!title||!msg){showToast('Preencha todos os campos','error');return}
+  const day   = parseInt(document.getElementById('cd-day').value);
+  const month = parseInt(document.getElementById('cd-month').value);
+  const title = document.getElementById('cd-title').value.trim();
+  const msg   = document.getElementById('cd-msg').value.trim();
+  if (!day||!month||!title||!msg) { showToast('Preencha dia, mês, título e mensagem','error'); return; }
+
+  // Período de veiculação (opcional)
+  const fromDay   = parseInt(document.getElementById('cd-from-day').value)   || null;
+  const fromMonth = parseInt(document.getElementById('cd-from-month').value) || null;
+  const toDay     = parseInt(document.getElementById('cd-to-day').value)     || null;
+  const toMonth   = parseInt(document.getElementById('cd-to-month').value)   || null;
+
+  // Valida: se um campo de período foi preenchido, todos devem ser
+  if ((fromDay||fromMonth||toDay||toMonth) && !(fromDay&&fromMonth&&toDay&&toMonth)) {
+    showToast('Preencha início e fim do período completos (dia e mês)','error'); return;
+  }
+
   try {
-    await POST('/api/commemorative',{day,month,title,message:msg});
-    document.getElementById('cd-day').value='';
-    document.getElementById('cd-title').value='';
-    document.getElementById('cd-msg').value='';
-    document.getElementById('cd-chars').textContent='(0/300)';
+    await POST('/api/commemorative', {
+      day, month, title, message: msg,
+      from_day: fromDay, from_month: fromMonth,
+      to_day: toDay, to_month: toMonth
+    });
+    // Reset form
+    document.getElementById('cd-day').value   = '';
+    document.getElementById('cd-title').value = '';
+    document.getElementById('cd-msg').value   = '';
+    document.getElementById('cd-chars').textContent = '(0/300)';
+    document.getElementById('cd-from-day').value   = '';
+    document.getElementById('cd-from-month').value = '';
+    document.getElementById('cd-to-day').value     = '';
+    document.getElementById('cd-to-month').value   = '';
     showToast('Data comemorativa cadastrada!','ok');
     renderCommem();
-  } catch(e){showToast(e.message,'error')}
+  } catch(e) { showToast(e.message,'error'); }
 }
 
 async function toggleCommem(id){
