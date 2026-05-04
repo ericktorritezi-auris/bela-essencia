@@ -560,6 +560,13 @@
       <div class="fg-row">
         <div class="fg"><label>WhatsApp</label><input class="fi" id="t-phone" placeholder="(43) 99999-9999"></div>
         <div class="fg"><label>Vencimento</label><input class="fi" id="t-expires" type="date"></div>
+          <div class="fg" style="display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--border);margin-top:4px">
+            <input type="checkbox" id="t-exempt" style="width:18px;height:18px;cursor:pointer;accent-color:var(--rose)">
+            <div>
+              <label for="t-exempt" style="font-weight:700;cursor:pointer;font-size:13px">⭐ Marcar como ISENTO</label>
+              <div style="font-size:11px;color:var(--muted);margin-top:2px">Isento: sem trial, sem vencimento obrigatório, nunca bloqueado automaticamente</div>
+            </div>
+          </div>
       </div>
       <div class="fg-row">
         <div class="fg"><label>Subdomínio Belle Planner *</label>
@@ -939,6 +946,10 @@ async function loadDashboard() {
 
 function tenantStatus(t) {
   if (!t.active) return `<span class="badge badge-blocked"><span class="dot dot-red"></span>Bloqueado</span>`;
+  // Isento
+  if (t.exempt) {
+    return `<span class="badge" style="background:rgba(39,174,96,.12);color:#1a8a4a"><span class="dot" style="background:#27ae60"></span>Isento</span>`;
+  }
   // Trial period
   if (t.trial_ends_at && !t.plan_expires_at) {
     const trialDays = Math.ceil((new Date(t.trial_ends_at) - new Date()) / 86400000);
@@ -989,6 +1000,7 @@ function renderTenantsTable(containerId, list, compact=false) {
           <button class="icon-btn" onclick="openOnboardingModal(${t.id},'${(t.business_name||t.name).replace(/'/g,'')}')" title="Checklist onboarding">✅</button>
           <button class="icon-btn" onclick="resetTenantPass(${t.id},'${(t.business_name||t.name).replace(/'/g,'')}')" title="Redefinir senha">🔑</button>
           <button class="icon-btn" onclick="resetTenantLogin(${t.id},'${(t.business_name||t.name).replace(/'/g,'')}')" title="Redefinir login">👤</button>
+          <button class="icon-btn" onclick="toggleTenantExempt(${t.id},'${(t.business_name||t.name).replace(/'/g,'')}',${!!t.exempt})" title="${t.exempt?'Remover isenção':'Marcar como isento'}" style="${t.exempt?'color:#27ae60':''}">⭐</button>
           <button class="icon-btn" onclick="resendWelcome(${t.id},'${(t.business_name||t.name).replace(/'/g,'')}','${t.owner_email||''}')" title="Reenviar e-mail de boas-vindas">📧</button>
           ${(t.domain_custom||t.subdomain)?`<a href="https://${t.domain_custom||(t.subdomain+'.belleplanner.com.br')}" target="_blank" class="icon-btn" style="text-decoration:none" title="Abrir agenda">↗</a>`:''}
           <button class="icon-btn" onclick="syncTenant('${t.schema_name}','${t.business_name||t.name}')" title="Sync dados">⚙️</button>
@@ -1080,7 +1092,8 @@ async function saveTenant() {
     owner_phone:    document.getElementById('t-phone').value.trim(),
     domain_custom:  document.getElementById('t-domain').value.trim(),
     subdomain:      document.getElementById('t-subdomain').value.trim(),
-    plan_expires_at:document.getElementById('t-expires').value,
+     plan_expires_at:document.getElementById('t-expires').value,
+     exempt:         document.getElementById('t-exempt')?.checked || false,
     business_name:  document.getElementById('t-bizname').value.trim(),
     tagline:        document.getElementById('t-tagline').value.trim(),
     primary_color:  document.getElementById('t-color1-hex').value,
@@ -1738,6 +1751,17 @@ async function resetTenantPass(id, name) {
   try {
     await API('PUT', '/master/api/tenants/' + id + '/reset-password', { new_pass: newPass.trim() });
     toast('✅ Senha redefinida para "' + name + '"', 'ok');
+  } catch(e) { toast('Erro: ' + e.message, 'err'); }
+}
+
+async function toggleTenantExempt(id, name, currentExempt) {
+  const action = currentExempt ? 'remover a isenção de' : 'marcar como ISENTO';
+  const extra = !currentExempt ? '\n\nTenants isentos nunca são bloqueados por trial ou vencimento.' : '';
+  if (!confirm('Deseja ' + action + ' "' + name + '"?' + extra)) return;
+  try {
+    const r = await API('PATCH', '/master/api/tenants/' + id + '/exempt', { exempt: !currentExempt });
+    toast(!currentExempt ? '✅ "' + name + '" marcado como ISENTO' : '✅ Isenção removida de "' + name + '"', 'ok');
+    loadTenants();
   } catch(e) { toast('Erro: ' + e.message, 'err'); }
 }
 
