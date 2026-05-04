@@ -583,6 +583,7 @@ async function initDB() {
         plan_id         INTEGER,
         plan_expires_at DATE,
         trial_ends_at   DATE,
+        exempt          BOOLEAN       NOT NULL DEFAULT FALSE,
         schema_name     VARCHAR(50)   UNIQUE NOT NULL,
         created_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW()
       );
@@ -935,6 +936,9 @@ async function initDB() {
       try { await client.query(`ALTER TABLE "${schema_name}".procedures ADD COLUMN IF NOT EXISTS description TEXT`); } catch {}
     }
     await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS trial_ends_at DATE`);
+    await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS exempt BOOLEAN NOT NULL DEFAULT FALSE`);
+    // Tenants existentes sem vencimento → marca como isentos automaticamente
+    await client.query(`UPDATE tenants SET exempt=TRUE WHERE plan_expires_at IS NULL AND trial_ends_at IS NULL`);
     await client.query(`
       DO $$ BEGIN
         IF EXISTS (
@@ -2821,13 +2825,17 @@ app.post('/master/api/tenants', requireMaster, async (req, res) => {
     const mFee = req.body.monthly_fee !== undefined ? Number(req.body.monthly_fee) : 100;
     const sFee = req.body.setup_fee    !== undefined ? Number(req.body.setup_fee)    : 200;
     const trialDate = plan_expires_at ? null : new Date(Date.now()+7*24*60*60*1000).toISOString().slice(0,10);
+    const isExempt = req.body.exempt === true || req.body.exempt === 'true';
+    // Isento: sem trial; não-isento sem vencimento → 7 dias trial
+    const finalTrialDate = (!isExempt && !plan_expires_at)
+      ? new Date(Date.now()+7*24*60*60*1000).toISOString().slice(0,10) : null;
     const { rows } = await client.query(
       `INSERT INTO tenants (slug,name,owner_name,owner_email,owner_phone,
-        domain_custom,subdomain,active,schema_name,plan_expires_at,trial_ends_at,monthly_fee,setup_fee)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,TRUE,$8,$9,$10,$11,$12) RETURNING *`,
+        domain_custom,subdomain,active,schema_name,plan_expires_at,trial_ends_at,exempt,monthly_fee,setup_fee)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,TRUE,$8,$9,$10,$11,$12,$13) RETURNING *`,
       [slug,name,owner_name,owner_email,owner_phone||null,
        domain_custom||null,subdomain||null,schemaName,
-       plan_expires_at||null, trialDate, mFee, sFee]
+       isExempt ? null : (plan_expires_at||null), trialDate, isExempt, mFee, sFee]
     );
     const tenant = rows[0];
     await client.query(
@@ -3352,6 +3360,29 @@ app.get('/master/api/report/csv', requireMaster, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ── Toggle isenção do tenant ─────────────────────────────────────────────────
+app.patch('/master/api/tenants/:id/exempt', requireMaster, async (req, res) => {
+  const { exempt } = req.body;
+  if (typeof exempt !== 'boolean') {
+    return res.status(400).json({ error: 'Campo exempt deve ser boolean' });
+  }
+  try {
+    const { rows } = await pool.query(
+      `UPDATE tenants SET exempt=$1,
+        -- Se está marcando como isento, limpa trial e vencimento
+        trial_ends_at = CASE WHEN $1=TRUE THEN NULL ELSE trial_ends_at END,
+        plan_expires_at = CASE WHEN $1=TRUE THEN NULL ELSE plan_expires_at END
+       WHERE id=$2 RETURNING slug, exempt, plan_expires_at, trial_ends_at`,
+      [exempt, req.params.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Tenant não encontrado' });
+    _tenantCache.clear();
+    await logAction(req.params.id, exempt ? 'tenant_exempted' : 'tenant_unexempted',
+      `Tenant ${rows[0].slug} marcado como ${exempt ? 'ISENTO' : 'NÃO ISENTO'}`);
+    res.json({ ok: true, exempt: rows[0].exempt });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ── Redefinir login do admin do tenant ───────────────────────────────────────
 app.put('/master/api/tenants/:id/reset-login', requireMaster, async (req, res) => {
   const { new_login } = req.body;
@@ -3611,10 +3642,11 @@ cron.schedule('0 11 * * *', async () => {
   try {
     const today = todayBrasilia();
 
-    // 0. Trial expirado → bloqueia (trial sem pagamento)
+    // 0. Trial expirado → bloqueia (trial sem pagamento, apenas não-isentos)
     const { rows: trialExp } = await pool.query(
       `UPDATE tenants SET active=FALSE
-       WHERE active=TRUE AND trial_ends_at IS NOT NULL AND trial_ends_at < $1::date
+       WHERE active=TRUE AND exempt=FALSE
+         AND trial_ends_at IS NOT NULL AND trial_ends_at < $1::date
          AND (plan_expires_at IS NULL OR plan_expires_at < $1::date)
        RETURNING id, slug, owner_email, owner_name`,
       [today]
@@ -3624,10 +3656,11 @@ cron.schedule('0 11 * * *', async () => {
       console.log(`[Cron] Trial expirado: ${t.slug}`);
     }
 
-    // 1. Bloqueia tenants vencidos há mais de 2 dias
+    // 1. Bloqueia tenants vencidos há mais de 2 dias (apenas não-isentos)
     const { rows: toBlock } = await pool.query(
       `UPDATE tenants SET active=FALSE
-       WHERE active=TRUE AND plan_expires_at < ($1::date - interval '2 days')
+       WHERE active=TRUE AND exempt=FALSE
+         AND plan_expires_at < ($1::date - interval '2 days')
          AND (trial_ends_at IS NULL OR trial_ends_at < $1::date)
        RETURNING id, slug, owner_email, owner_name`,
       [today]
