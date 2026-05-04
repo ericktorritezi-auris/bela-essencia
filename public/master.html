@@ -1988,8 +1988,11 @@ async function initContracts() {
 }
 
 function showContractDetail(tenantId) {
+  console.log('[Detail] called with id:', tenantId, typeof tenantId);
+  console.log('[Detail] _contractsData length:', _contractsData.length);
   const r = _contractsData.find(x => x.id === tenantId);
-  if (!r) return;
+  console.log('[Detail] record found:', r ? 'YES' : 'NO', r ? r.owner_name : '');
+  if (!r) { console.error('[Detail] Record NOT FOUND for id:', tenantId); return; }
   const baseUrl = 'https://adminpanel.belleplanner.com.br';
   const tokenLink = r.contract_token
     ? `<a href="${baseUrl}/contrato/aceite/${r.contract_token}" target="_blank" style="color:var(--rose);font-size:11px;word-break:break-all">${baseUrl}/contrato/aceite/${r.contract_token}</a>`
@@ -2014,7 +2017,11 @@ function showContractDetail(tenantId) {
       <div><strong>Link do documento:</strong><br>${tokenLink}</div>
     </div>`;
   document.getElementById('ct-modal-body').innerHTML = body;
-  document.getElementById('ct-modal-bg').classList.remove('hidden');
+  const modalEl = document.getElementById('ct-modal-bg');
+  console.log('[Detail] modal element:', modalEl ? 'found' : 'NOT FOUND');
+  console.log('[Detail] modal current classes:', modalEl?.className);
+  if (modalEl) { modalEl.classList.remove('hidden'); }
+  console.log('[Detail] modal classes after remove:', modalEl?.className);
 }
 
 async function resendContractEmail(tenantId, name) {
