@@ -1612,6 +1612,21 @@ app.post('/api/appointments', async (req, res) => {
   }
 });
 
+// ── Force push re-subscribe (admin) ─────────────────────────────────────────
+// Removes all existing subscriptions for this tenant's admins so next page load re-subscribes
+app.delete('/api/push/subscribe/admin', requireAdmin, async (req, res) => {
+  try {
+    const tenantId = (await pool.query(
+      `SELECT id FROM tenants WHERE schema_name=$1 LIMIT 1`, [req.schemaName]
+    )).rows[0]?.id;
+    if (!tenantId) return res.status(404).json({ error: 'Tenant não encontrado' });
+    await pool.query(
+      `DELETE FROM public.push_subscriptions WHERE tenant_id=$1 AND role='admin'`, [tenantId]
+    );
+    res.json({ ok: true, message: 'Subscriptions removidas. Recarregue a página para re-inscrever.' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ── Log LGPD — Registro de consentimentos (admin) ───────────────────────────
 app.get('/api/lgpd/consents', requireAdmin, async (req, res) => {
   const { from, to } = req.query;
@@ -3298,77 +3313,36 @@ app.get('/master/api/revenue/projection', requireMaster, async (req, res) => {
 app.post('/master/api/push/send', requireMaster, async (req, res) => {
   const { title, body, tenant_ids } = req.body;
   if (!title || !body) return res.status(400).json({ error: 'Título e mensagem obrigatórios' });
+  if (!PUSH_ENABLED()) return res.status(503).json({ error: 'Push não configurado no servidor.' });
 
-  const webpush = require('web-push');
   const results = [];
   let sentCount = 0;
-
   try {
-    // Busca tenants alvo
     let tenants;
-    if (!tenant_ids || tenant_ids.length === 0) {
-      // Envia para todos os tenants ativos
-      const { rows } = await pool.query(
-        `SELECT id, schema_name, name FROM tenants WHERE active=TRUE`
-      );
+    if (!tenant_ids || !tenant_ids.length) {
+      const { rows } = await pool.query(`SELECT id, name FROM tenants WHERE active=TRUE`);
       tenants = rows;
     } else {
-      const { rows } = await pool.query(
-        `SELECT id, schema_name, name FROM tenants WHERE id = ANY($1)`,
-        [tenant_ids]
-      );
+      const { rows } = await pool.query(`SELECT id, name FROM tenants WHERE id = ANY($1)`, [tenant_ids]);
       tenants = rows;
     }
-
-    const webpushModule = require('web-push');
-    const payload = JSON.stringify({ title, body, url: '/' });
-
-    // Para cada tenant, busca subscription admin na tabela GLOBAL public.push_subscriptions
     for (const t of tenants) {
       try {
-        // Sempre usa public schema — push_subscriptions é tabela global
-        let { rows: subs } = await pool.query(
-          `SELECT endpoint, p256dh, auth, role FROM public.push_subscriptions
-           WHERE tenant_id=$1 AND role='admin'
-           ORDER BY created_at DESC LIMIT 1`,
+        const { rows: subs } = await pool.query(
+          `SELECT endpoint, p256dh, auth FROM public.push_subscriptions WHERE tenant_id=$1 AND role='admin'`,
           [t.id]
         );
-        if (!subs.length) {
-          // Fallback: qualquer subscription do tenant (client também recebe)
-          const fb = await pool.query(
-            `SELECT endpoint, p256dh, auth, role FROM public.push_subscriptions
-             WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 1`,
-            [t.id]
-          );
-          subs = fb.rows;
-        }
-        if (!subs.length) {
-          console.log('[MasterPush] ' + t.name + ': sem subscription');
-          results.push({ tenant: t.name, status: 'no_subscription' });
-          continue;
-        }
-        const sub = { endpoint: subs[0].endpoint, keys: { p256dh: subs[0].p256dh, auth: subs[0].auth } };
-        await webpushModule.sendNotification(sub, payload);
-        sentCount++;
-        console.log('[MasterPush] ' + t.name + ': enviado (role=' + subs[0].role + ')');
-        results.push({ tenant: t.name, status: 'sent', role: subs[0].role });
+        if (!subs.length) { results.push({ tenant: t.name, status: 'no_subscription' }); continue; }
+        // sendPush já usa o webpush global com VAPID configurado e remove subscriptions inválidas (410)
+        await sendPush(subs, title, body, { url: '/', type: 'master_push' });
+        sentCount += subs.length;
+        results.push({ tenant: t.name, status: 'sent', count: subs.length });
       } catch (e) {
-        console.error('[MasterPush] ' + t.name + ': erro — ' + e.message);
+        console.error('[MasterPush]', t.name, ':', e.message);
         results.push({ tenant: t.name, status: 'error', error: e.message });
       }
     }
-
-    // Salva no log
-    const ids = tenants.map(t => t.id);
-    await pool.query(
-      `INSERT INTO master_push_log (title, body, tenant_ids, sent_count) VALUES ($1,$2,$3,$4)`,
-      [title, body, ids, sentCount]
-    );
-
-    await logAction(null, 'master_push_sent',
-      `Push enviado: "${title}" → ${sentCount}/${tenants.length} tenants`);
-
-    res.json({ ok: true, sent: sentCount, total: tenants.length, results });
+    res.json({ ok: true, sent: sentCount, results });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
