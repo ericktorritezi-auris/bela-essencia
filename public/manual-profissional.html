@@ -507,6 +507,10 @@
             <div class="feat-item"><span>💰</span><p><strong>Valor</strong> — Pode ser alterado livremente, sem afetar o cadastro do procedimento</p></div>
             <div class="feat-item"><span>👤</span><p><strong>Nome e WhatsApp</strong> — Dados da cliente</p></div>
           </div>
+          <div class="tip-box" style="background:#eafaf1;border-left:4px solid #27ae60;border-radius:8px;padding:12px 14px;display:flex;gap:10px;margin:14px 0">
+            <span>🔄</span>
+            <p><strong>Status automático ao reagendar:</strong> Se um agendamento está como <strong>Realizado</strong> e você alterar a data/hora para um momento futuro, o sistema muda o status automaticamente para <strong>Confirmado</strong>. Você não precisa fazer isso manualmente.</p>
+          </div>
           <div class="warn-box">
             <span>⚠️</span>
             <p>Ao salvar a edição, o sistema verifica se o procedimento está disponível para a cidade selecionada. Se não estiver, um alerta será exibido.</p>
@@ -526,8 +530,16 @@
             <p>Clique em <strong>"Cancelar"</strong> para marcar o agendamento como cancelado. O horário fica liberado para novas marcações. A cliente recebe uma notificação push automática. O registro é mantido no histórico.</p>
           </div>
           <div class="sub">
+            <h4>Restaurar agendamento cancelado</h4>
+            <p>Cancelou por engano? Clique em <strong>↩ Restaurar</strong> ao lado do agendamento cancelado. Um modal perguntará para qual status você quer restaurar:</p>
+            <div class="feat-list" style="margin-top:8px">
+              <div class="feat-item"><span>🔵</span><p><strong>Confirmado</strong> — Use quando o agendamento ainda vai acontecer (data futura)</p></div>
+              <div class="feat-item"><span>🟢</span><p><strong>Realizado</strong> — Use quando o atendimento já ocorreu e você quer registrar no histórico</p></div>
+            </div>
+          </div>
+          <div class="sub">
             <h4>Excluir agendamento</h4>
-            <p>Agendamentos já <strong>cancelados</strong> podem ser excluídos permanentemente com o botão <strong>🗑 Excluir</strong>. Use com cuidado — a exclusão não tem desfazer.</p>
+            <p>Agendamentos já <strong>cancelados</strong> podem ser excluídos permanentemente com o botão <strong>🗑</strong>. Use com cuidado — a exclusão não tem desfazer.</p>
           </div>
         </div>
       </section>
