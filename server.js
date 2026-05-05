@@ -1751,6 +1751,20 @@ app.get('/api/lgpd/consents', requireAdmin, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ── Gestão do Contrato do profissional (admin) ───────────────────────────────
+app.get('/api/meu-contrato', requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT contract_token FROM tenants WHERE schema_name=$1 LIMIT 1`,
+      [req.schemaName]
+    );
+    if (!rows.length || !rows[0].contract_token) {
+      return res.status(404).json({ error: 'Contrato não encontrado.' });
+    }
+    res.json({ token: rows[0].contract_token });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ── Agendamento Retroativo (admin) ───────────────────────────────────────────
 // Permite lançar atendimentos já realizados sem restrição de horário de trabalho.
 // Única regra: não pode conflitar (OVERLAPS) com agendamentos existentes.
