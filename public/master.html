@@ -602,6 +602,7 @@
             </div>
             <button onclick="initContracts()" class="btn btn-ghost" style="padding:7px 16px;font-size:13px">Filtrar</button>
           </div>
+          <button onclick="openAllContractDocs()" class="btn btn-ghost" style="padding:7px 16px;font-size:13px">📋 Políticas</button>
           <button onclick="exportContractsCsv()" class="btn btn-ghost" style="padding:7px 16px;font-size:13px">📥 Exportar CSV</button>
         </div>
       </div>
@@ -2115,6 +2116,20 @@ function renderContractsPage(page) {
       });
       tbl.parentNode.insertBefore(d, tbl.nextSibling);
     }
+  }
+}
+
+async function openAllContractDocs() {
+  // Opens platform documents (Política, Termos, Contrato) — read-only overview
+  // Uses the first tenant with an accepted contract to load via token
+  var r = _contractsData.find(function(x) { return x.contract_token && x.accept_status === 'accepted'; });
+  if (r) {
+    openContractDoc(r.contract_token);
+  } else {
+    // No accepted contract found — show policy doc via first available token
+    var any = _contractsData.find(function(x) { return x.contract_token; });
+    if (any) openContractDoc(any.contract_token);
+    else toast('Nenhum contrato disponível para visualização.', 'err');
   }
 }
 

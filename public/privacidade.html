@@ -96,7 +96,11 @@
 
   <p class="version">Belle Planner · Política de Privacidade v1.0 · LGPD — Lei 13.709/2018</p>
 
-  <button class="close-btn" onclick="if(window.opener||window.history.length>1){window.close()}else{history.back()}">Fechar e voltar</button>
+  <button class="close-btn" onclick="
+  if (window.opener) { window.close(); }
+  else if (window.history.length > 1) { window.history.back(); }
+  else { window.close(); }
+">✕ Fechar</button>
 
 </div>
 </body>

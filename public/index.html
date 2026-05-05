@@ -723,6 +723,8 @@ tr:hover td{background:#FAF3F6}
     </div>
   </div>
   <div class="footer-bar" style="display:flex;justify-content:center;align-items:center;gap:16px">
+    <a href="/privacidade.html" target="_blank" style="display:flex;align-items:center;gap:4px">🔒 Políticas</a>
+    <span style="opacity:.3">·</span>
     <a href="/manual-cliente.html" target="_blank" style="display:flex;align-items:center;gap:4px">📖 Como usar a agenda</a>
     <span style="opacity:.3">·</span>
     <a href="#" onclick="showAdmin(event)">Área administrativa</a>
@@ -773,6 +775,7 @@ tr:hover td{background:#FAF3F6}
           <div class="nav-item" id="nav-promos" onclick="showSec('promos')"><span class="nav-icon">🏷</span> Promoções</div>
           <div class="nav-item" id="nav-commem" onclick="showSec('commem')"><span class="nav-icon">🎉</span> Datas Comemorativas</div>
           <div class="nav-item" id="nav-webpush" onclick="showSec('webpush')"><span class="nav-icon">🔔</span> Web Push</div>
+          <div class="nav-item" id="nav-meucontrato" onclick="openMeuContrato()"><span class="nav-icon">📑</span> Gestão do Contrato</div>
         </div>
         <div style="margin-top:2px">
           <div class="nav-sec-ttl">Configurações</div>
@@ -3001,6 +3004,20 @@ async function deleteProc(id) {
     clearProcsCache(); clearCitiesCache();
     showToast('Procedimento removido','ok'); renderProcsAdmin();
   } catch(e){ showToast(e.message,'error'); }
+}
+
+// ── GESTÃO DO CONTRATO (profissional) ─────────────────────────────────────────
+async function openMeuContrato() {
+  try {
+    const d = await GET('/api/meu-contrato');
+    if (d.token) {
+      window.open('https://contratos.belleplanner.com.br/' + d.token, '_blank');
+    } else {
+      showToast('Contrato não encontrado. Contate o suporte.', 'error');
+    }
+  } catch(e) {
+    showToast('Erro ao abrir: ' + e.message, 'error');
+  }
 }
 
 // ── COCKPIT FINANCEIRO ────────────────────────────
