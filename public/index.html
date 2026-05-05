@@ -1845,9 +1845,9 @@ async function selProc(id) {
       const disc = calcDiscounted(Number(p.price), Number(promo.discount));
       priceDisplay = `
         <div style="text-align:right">
-          <div style="font-size:13px;text-decoration:line-through;opacity:.6;color:var(--gold-light)">R$ ${Number(p.price).toLocaleString('pt-BR')}</div>
+          <div style="font-size:13px;text-decoration:line-through;opacity:.75;color:#F9E79F">R$ ${Number(p.price).toLocaleString('pt-BR')}</div>
           <div class="pb-price">R$ ${disc.toLocaleString('pt-BR',{minimumFractionDigits:2})}</div>
-          <div style="font-size:10px;color:var(--gold-light);opacity:.9">${Number(promo.discount).toFixed(0)}% off</div>
+          <div style="font-size:10px;color:#F9E79F;opacity:1;font-weight:700">${Number(promo.discount).toFixed(0)}% off</div>
         </div>`;
     } else {
       priceDisplay = `<div class="pb-price">${fmtPrice(p)}</div>`;
