@@ -864,6 +864,38 @@ const POST = (u, b) => API('POST', u, b);
 const PUT  = (u, b) => API('PUT', u, b);
 const PATCH = (u,b) => API('PATCH', u, b);
 
+// ── PAGINATION HELPER ─────────────────────────────────────────────────────────
+function masterPaginate(allData, page, pageSize, renderRowFn) {
+  var total = allData.length;
+  var totalPages = Math.ceil(total / pageSize) || 1;
+  var safePage = Math.max(1, Math.min(page, totalPages));
+  var sliced = allData.slice((safePage-1)*pageSize, safePage*pageSize);
+  return { rows: renderRowFn(sliced), pag: buildMasterPag(safePage, totalPages, total, pageSize), page: safePage };
+}
+function buildMasterPag(page, totalPages, total, pageSize) {
+  if (totalPages <= 1) return '';
+  var start = (page-1)*pageSize+1, end = Math.min(page*pageSize, total);
+  var isMob = window.innerWidth < 640;
+  // Pagination buttons use data-p attribute for click handling
+  var btns = '';
+  if (isMob) {
+    btns = '<span style="font-size:12px;color:var(--muted)">'+page+' / '+totalPages+'</span>';
+  } else {
+    var pages = [];
+    if (totalPages<=7){for(var i=1;i<=totalPages;i++)pages.push(i);}
+    else{pages.push(1);if(page>3)pages.push('…');for(var i=Math.max(2,page-1);i<=Math.min(totalPages-1,page+1);i++)pages.push(i);if(page<totalPages-2)pages.push('…');pages.push(totalPages);}
+    btns = pages.map(function(p){return p==='…'?'<span style="padding:4px 6px;color:var(--muted);font-size:12px">…</span>':'<button data-p="'+p+'" style="background:'+(p===page?'var(--rose)':'var(--card)')+';color:'+(p===page?'white':'var(--text)')+';border:1px solid '+(p===page?'var(--rose)':'var(--border)')+';border-radius:6px;padding:4px 9px;cursor:pointer;font-size:12px">'+p+'</button>';}).join('');
+  }
+  return '<div class="mpag-wrap" style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-top:1px solid var(--border);flex-wrap:wrap;gap:6px">' +
+    '<span style="font-size:12px;color:var(--muted)">'+start+'–'+end+' de '+total+'</span>' +
+    '<div class="mpag-btns" style="display:flex;gap:4px;align-items:center">' +
+      '<button data-p="'+(page-1)+'" '+(page<=1?'disabled':'')+' style="background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 12px;cursor:pointer;font-size:12px'+(page<=1?';opacity:.4':'')+'">'+(isMob?'‹':'‹ Ant')+'</button>' +
+      btns +
+      '<button data-p="'+(page+1)+'" '+(page>=totalPages?'disabled':'')+' style="background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 12px;cursor:pointer;font-size:12px'+(page>=totalPages?';opacity:.4':'')+'">'+(isMob?'›':'Prox ›')+'</button>' +
+    '</div>' +
+  '</div>';
+}
+
 function toast(msg, type='ok', dur=3500) {
   const el = document.getElementById('toast');
   el.textContent = msg; el.className = `show ${type}`;
@@ -1116,11 +1148,33 @@ function renderTenantsTable(containerId, list, compact=false) {
 }
 
 // ── TENANTS ────────────────────────────────────────────────────────────────
+var _tenantsPage = 1;
 async function renderTenants() {
   try {
     _tenants = await GET('/master/api/tenants');
-    renderTenantsTable('tenants-table', _tenants);
+    _tenantsPage = 1;
+    renderTenantsPage(1);
   } catch(e) { toast('Erro: ' + e.message, 'err'); }
+}
+function renderTenantsPage(page) {
+  _tenantsPage = page;
+  var pageSize = 10;
+  var total = _tenants.length;
+  var totalPages = Math.ceil(total/pageSize)||1;
+  var safePage = Math.max(1,Math.min(page,totalPages));
+  var sliced = _tenants.slice((safePage-1)*pageSize, safePage*pageSize);
+  renderTenantsTable('tenants-table', sliced);
+  // Add pagination after table
+  var el = document.getElementById('tenants-table');
+  var pag = buildMasterPag(safePage, totalPages, total, pageSize);
+  if (pag) {
+    var pagDiv = document.createElement('div');
+    pagDiv.innerHTML = pag;
+    pagDiv.querySelectorAll('.mpag-btns button[data-p]').forEach(function(btn) {
+      btn.addEventListener('click', function() { renderTenantsPage(parseInt(this.dataset.p)); });
+    });
+    el.appendChild(pagDiv);
+  }
 }
 
 async function toggleTenant(id, slug, currentActive) {
@@ -1431,25 +1485,37 @@ async function loadFinancial() {
       </div>
     `;
 
-    if (!payments.length) {
-      document.getElementById('payments-table').innerHTML = '<div class="empty">Nenhum pagamento registrado</div>';
-      return;
-    }
-    document.getElementById('payments-table').innerHTML = `<div style="overflow-x:auto"><table>
-      <thead><tr><th>Tenant</th><th>Tipo</th><th>Valor</th><th>Status</th><th>Referência</th><th>Data</th><th>Obs.</th></tr></thead>
-      <tbody>
-      ${payments.map(p=>`<tr>
-        <td><div style="font-weight:700;font-size:13px">${p.business_name||p.tenant_name}</div></td>
-        <td><span class="badge badge-${p.type}">${p.type==='monthly'?'Mensalidade':'Setup'}</span></td>
-        <td style="color:var(--green);font-weight:800">${fmtCurr(p.amount)}</td>
-        <td><span class="badge badge-${p.status}">${p.status==='paid'?'✓ Pago':'⏳ Pendente'}</span></td>
-        <td style="font-size:12px;color:var(--muted)">${p.reference_month||'—'}</td>
-        <td style="font-size:12px">${p.paid_at ? fmtDate(p.paid_at) : '<span style="color:var(--muted)">—</span>'}</td>
-        <td style="font-size:11px;color:var(--muted)">${p.notes||'—'}</td>
-      </tr>`).join('')}
-      </tbody></table></div>`;
+    _allPayments = payments;
+    _paymentsPage = 1;
+    renderPaymentsPage(1);
   } catch(e) { toast(e.message, 'err'); }
 }
+var _allPayments = [], _paymentsPage = 1;
+function renderPaymentsPage(page) {
+  _paymentsPage = page;
+  var el = document.getElementById('payments-table');
+  if (!_allPayments.length) { el.innerHTML='<div class="empty">Nenhum pagamento registrado</div>'; return; }
+  var result = masterPaginate(_allPayments, page, 10, function(rows) {
+    return '<div style="overflow-x:auto"><table>' +
+      '<thead><tr><th>Tenant</th><th>Tipo</th><th>Valor</th><th>Status</th><th>Referência</th><th>Data</th><th>Obs.</th></tr></thead><tbody>' +
+      rows.map(function(p) { return '<tr>' +
+        '<td><div style="font-weight:700;font-size:13px">' + (p.business_name||p.tenant_name) + '</div></td>' +
+        '<td><span class="badge badge-' + p.type + '">' + (p.type==='monthly'?'Mensalidade':'Setup') + '</span></td>' +
+        '<td style="color:var(--green);font-weight:800">' + fmtCurr(p.amount) + '</td>' +
+        '<td><span class="badge badge-' + p.status + '">' + (p.status==='paid'?'✓ Pago':'⏳ Pendente') + '</span></td>' +
+        '<td style="font-size:12px;color:var(--muted)">' + (p.reference_month||'—') + '</td>' +
+        '<td style="font-size:12px">' + (p.paid_at ? fmtDate(p.paid_at) : '<span style="color:var(--muted)">—</span>') + '</td>' +
+        '<td style="font-size:11px;color:var(--muted)">' + (p.notes||'—') + '</td>' +
+      '</tr>'; }).join('') +
+      '</tbody></table></div>';
+  });
+  el.innerHTML = result.rows + result.pag;
+  el.querySelectorAll('.mpag-btns button[data-p]').forEach(function(btn) {
+    btn.addEventListener('click', function() { renderPaymentsPage(parseInt(this.dataset.p)); });
+  });
+}
+
+
 
 function openPaymentModal() {
   populatePaymentTenants();
@@ -1609,21 +1675,33 @@ async function loadHealth() {
 }
 
 // ── LOGS ───────────────────────────────────────────────────────────────────
+var _allLogs = [], _logsPage = 1;
 async function loadLogs() {
   try {
-    const logs = await GET('/master/api/logs');
-    if (!logs.length) { document.getElementById('logs-table').innerHTML='<div class="empty">Nenhum log registrado</div>'; return; }
-    document.getElementById('logs-table').innerHTML = `<div style="overflow-x:auto"><table>
-      <thead><tr><th>Data</th><th>Tenant</th><th>Ação</th><th>Detalhes</th></tr></thead>
-      <tbody>
-      ${logs.map(l=>`<tr>
-        <td style="font-size:11px;color:var(--muted);white-space:nowrap">${new Date(l.created_at).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'})}</td>
-        <td style="font-size:12px">${l.tenant_name||'Sistema'}</td>
-        <td><code style="font-size:11px;color:var(--rose-l);background:rgba(155,77,106,.1);padding:2px 6px;border-radius:4px">${l.action}</code></td>
-        <td style="font-size:12px;color:var(--muted)">${l.details||'—'}</td>
-      </tr>`).join('')}
-      </tbody></table></div>`;
+    _allLogs = await GET('/master/api/logs');
+    _logsPage = 1;
+    renderLogsPage(1);
   } catch(e) { toast(e.message, 'err'); }
+}
+function renderLogsPage(page) {
+  _logsPage = page;
+  var el = document.getElementById('logs-table');
+  if (!_allLogs.length) { el.innerHTML='<div class="empty">Nenhum log registrado</div>'; return; }
+  var result = masterPaginate(_allLogs, page, 25, function(rows) {
+    return '<div style="overflow-x:auto"><table>' +
+      '<thead><tr><th>Data</th><th>Tenant</th><th>Ação</th><th>Detalhes</th></tr></thead><tbody>' +
+      rows.map(function(l) { return '<tr>' +
+        '<td style="font-size:11px;color:var(--muted);white-space:nowrap">' + new Date(l.created_at).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}) + '</td>' +
+        '<td style="font-size:12px">' + (l.tenant_name||'Sistema') + '</td>' +
+        '<td><code style="font-size:11px;color:var(--rose-l);background:rgba(155,77,106,.1);padding:2px 6px;border-radius:4px">' + l.action + '</code></td>' +
+        '<td style="font-size:12px;color:var(--muted)">' + (l.details||'—') + '</td>' +
+      '</tr>'; }).join('') +
+      '</tbody></table></div>';
+  });
+  el.innerHTML = result.rows + result.pag;
+  el.querySelectorAll('.mpag-btns button[data-p]').forEach(function(btn) {
+    btn.addEventListener('click', function() { renderLogsPage(parseInt(this.dataset.p)); });
+  });
 }
 
 // ── PROFILE ────────────────────────────────────────────────────────────────
@@ -1881,20 +1959,51 @@ async function initMasterLgpd() {
       tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--muted)">Nenhum registro encontrado.</td></tr>';
       return;
     }
-    tbody.innerHTML = _masterLgpdData.map(r => `
-      <tr>
-        <td style="font-weight:600">${r.tenant_name||'—'}</td>
-        <td>${r.name||'—'}</td>
-        <td>${r.phone||'—'}</td>
-        <td>${fmtDate(r.date)}</td>
-        <td style="text-align:center">${r.privacy_consent ? '<span style="color:var(--green)">✅ Sim</span>' : '<span style="color:var(--red)">Não</span>'}</td>
-        <td style="font-size:12px">${r.consent_at ? new Date(r.consent_at).toLocaleString('pt-BR') : '—'}</td>
-        <td style="font-size:12px;color:var(--muted)">${r.consent_version||'v1.0'}</td>
-      </tr>`).join('');
+    _lgpdMasterPage = 1;
+    renderLgpdMasterPage(1);
   } catch(e) {
     tbody.innerHTML = '<tr><td colspan="7" style="color:var(--red);padding:20px">' + e.message + '</td></tr>';
   }
 }
+var _lgpdMasterPage = 1;
+function renderLgpdMasterPage(page) {
+  _lgpdMasterPage = page;
+  var tbody = document.getElementById('lgpd-master-tbody');
+  if (!tbody) return;
+  if (!_masterLgpdData.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--muted)">Nenhum registro encontrado.</td></tr>';
+    return;
+  }
+  var result = masterPaginate(_masterLgpdData, page, 10, function(rows) {
+    return rows.map(function(r) { return '<tr>' +
+      '<td style="font-weight:600">' + (r.tenant_name||'—') + '</td>' +
+      '<td>' + (r.name||'—') + '</td>' +
+      '<td>' + (r.phone||'—') + '</td>' +
+      '<td>' + fmtDate(r.date) + '</td>' +
+      '<td style="text-align:center">' + (r.privacy_consent ? '<span style="color:var(--green)">✅ Sim</span>' : '<span style="color:var(--red)">Não</span>') + '</td>' +
+      '<td style="font-size:12px">' + (r.consent_at ? new Date(r.consent_at).toLocaleString('pt-BR') : '—') + '</td>' +
+      '<td style="font-size:12px;color:var(--muted)">' + (r.consent_version||'v1.0') + '</td>' +
+    '</tr>'; }).join('');
+  });
+  tbody.innerHTML = result.rows;
+  // Inject pag after the table
+  var tbl = tbody.closest('table');
+  if (tbl) {
+    var existing = tbl.nextElementSibling;
+    if (existing && existing.classList.contains('mpag-injected')) existing.remove();
+    if (result.pag) {
+      var d = document.createElement('div');
+      d.className = 'mpag-injected';
+      d.innerHTML = result.pag;
+      d.querySelectorAll('.mpag-btns button[data-p]').forEach(function(btn) {
+        btn.addEventListener('click', function() { renderLgpdMasterPage(parseInt(this.dataset.p)); });
+      });
+      tbl.parentNode.insertBefore(d, tbl.nextSibling);
+    }
+  }
+}
+
+
 
 function exportMasterLgpdCsv() {
   if (!_masterLgpdData.length) { toast('Nenhum dado para exportar','err'); return; }
@@ -1946,7 +2055,24 @@ async function initContracts() {
       return;
     }
 
-        tbody.innerHTML = _contractsData.map(function(r) {
+        _contractsPage = 1;
+    renderContractsPage(1);
+  } catch(e) {
+    console.error('[Contracts] Error:', e);
+    if (tbody) tbody.innerHTML = '<tr><td colspan="9" style="color:var(--red);padding:20px">Erro: ' + e.message + '</td></tr>';
+  }
+}
+var _contractsPage = 1;
+function renderContractsPage(page) {
+  _contractsPage = page;
+  var tbody = document.getElementById('ct-tbody');
+  if (!tbody) return;
+  if (!_contractsData.length) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--muted)">Nenhum contrato encontrado.</td></tr>';
+    return;
+  }
+  var result = masterPaginate(_contractsData, page, 10, function(rows) {
+    return rows.map(function(r) {
       var tenantBadge = r.active
         ? '<span style="background:#e8f5e9;color:#1b5e20;padding:2px 10px;border-radius:12px;font-size:11px;font-weight:700">Ativo</span>'
         : (r.contract_status === 'pending'
@@ -1974,8 +2100,21 @@ async function initContracts() {
         '</td>' +
         '</tr>';
     }).join('');
-  } catch(e) {
-    if (tbody) tbody.innerHTML = `<tr><td colspan="9" style="color:var(--red);padding:20px">Erro: ${e.message}</td></tr>`;
+  });
+  tbody.innerHTML = result.rows;
+  var tbl = tbody.closest('table');
+  if (tbl) {
+    var ex = tbl.nextElementSibling;
+    if (ex && ex.classList.contains('mpag-injected')) ex.remove();
+    if (result.pag) {
+      var d = document.createElement('div');
+      d.className = 'mpag-injected';
+      d.innerHTML = result.pag;
+      d.querySelectorAll('.mpag-btns button[data-p]').forEach(function(btn) {
+        btn.addEventListener('click', function() { renderContractsPage(parseInt(this.dataset.p)); });
+      });
+      tbl.parentNode.insertBefore(d, tbl.nextSibling);
+    }
   }
 }
 
