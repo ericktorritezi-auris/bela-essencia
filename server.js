@@ -4167,6 +4167,14 @@ cron.schedule('0 11 * * *', async () => {
   } catch (err) { console.error('[Master Cron] Erro:', err.message); }
 }, { timezone: 'UTC' });
 
+// Serve landing page Belle Planner Pro (pro.belleplanner.com.br)
+app.get('*', (req, res, next) => {
+  if (req.hostname === 'pro.belleplanner.com.br') {
+    return res.sendFile(require('path').join(__dirname, 'public', 'pro.html'));
+  }
+  next();
+});
+
 // Serve o painel master
 app.get('/master', (req, res) => {
   res.sendFile(require('path').join(__dirname, 'public', 'master.html'));
