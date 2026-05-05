@@ -410,6 +410,11 @@ async function tenantMiddleware(req, res, next) {
     return next(); // todas as rotas deste subdomínio são públicas
   }
 
+  // Landing page Belle Planner Pro — não passa pelo tenant
+  if (host === 'pro.belleplanner.com.br') {
+    return res.sendFile(require('path').join(__dirname, 'public', 'pro.html'));
+  }
+
   // Rotas públicas de contrato — acessíveis em qualquer domínio
   if (req.path.startsWith('/contrato/') || req.path.startsWith('/api/contrato/')) {
     return next(); // serve sem autenticação
