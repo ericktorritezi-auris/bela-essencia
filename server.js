@@ -1938,6 +1938,13 @@ app.put('/api/appointments/:id', requireAdmin, async (req, res) => {
            proc_id=COALESCE($9::integer, proc_id),
            proc_name=COALESCE($10, proc_name),
            price=${priceVal !== undefined ? '$11::numeric' : 'price'},
+           status = CASE
+             WHEN status = 'realizado'
+               AND ($3::date + $4::time) AT TIME ZONE 'America/Sao_Paulo'
+                   > NOW() AT TIME ZONE 'America/Sao_Paulo'
+             THEN 'confirmed'
+             ELSE status
+           END,
            updated_at=NOW()
        WHERE id=$6 RETURNING *`,
       priceVal !== undefined
@@ -1952,6 +1959,24 @@ app.put('/api/appointments/:id', requireAdmin, async (req, res) => {
     edited._schemaName = req.schemaName;
     notifyAdminEdit(edited).catch(e => console.error('[Push] notifyAdminEdit:', e.message));
     res.json(edited);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin: restaurar agendamento cancelado → confirmed ou realizado
+app.patch('/api/appointments/:id/restore', requireAdmin, async (req, res) => {
+  const { status } = req.body; // 'confirmed' | 'realizado'
+  if (!['confirmed', 'realizado'].includes(status)) {
+    return res.status(400).json({ error: 'Status inválido. Use confirmed ou realizado.' });
+  }
+  try {
+    const { rows } = await req.db(
+      `UPDATE appointments SET status=$1, updated_at=NOW() WHERE id=$2 AND status='cancelled' RETURNING *`,
+      [status, req.params.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Agendamento não encontrado ou não está cancelado.' });
+    res.json(rows[0]);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
