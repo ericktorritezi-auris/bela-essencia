@@ -2549,24 +2549,52 @@ async function cancelAppt(id) {
 function openRestoreModal(id) {
   const existing = document.getElementById('restore-modal-bg');
   if (existing) existing.remove();
+
   const bg = document.createElement('div');
   bg.id = 'restore-modal-bg';
   bg.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
-  bg.innerHTML = `
-    <div style="background:#fff;border-radius:16px;padding:24px 20px;max-width:340px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.18);text-align:center">
-      <div style="font-size:22px;margin-bottom:8px">↩</div>
-      <h3 style="font-size:15px;font-weight:700;color:var(--dark);margin-bottom:6px">Restaurar agendamento</h3>
-      <p style="font-size:13px;color:var(--text-light);margin-bottom:20px">Escolha o status para restaurar:</p>
-      <div style="display:flex;gap:10px;justify-content:center;margin-bottom:16px">
-        <button onclick="restoreAppt(${id},'confirmed')" style="flex:1;padding:11px 8px;border-radius:10px;border:2px solid #3498db;background:#eaf4fb;color:#2980b9;font-weight:700;font-size:13px;cursor:pointer">
-          🔵 Confirmado
-        </button>
-        <button onclick="restoreAppt(${id},'realizado')" style="flex:1;padding:11px 8px;border-radius:10px;border:2px solid #27ae60;background:#eafaf1;color:#219a52;font-weight:700;font-size:13px;cursor:pointer">
-          🟢 Realizado
-        </button>
-      </div>
-      <button onclick="document.getElementById('restore-modal-bg').remove()" style="width:100%;padding:9px;border-radius:10px;border:1.5px solid var(--border);background:#fff;color:var(--text-light);font-size:13px;cursor:pointer">Cancelar</button>
-    </div>`;
+
+  const box = document.createElement('div');
+  box.style.cssText = 'background:#fff;border-radius:16px;padding:24px 20px;max-width:340px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.18);text-align:center';
+
+  const icon = document.createElement('div');
+  icon.style.cssText = 'font-size:22px;margin-bottom:8px';
+  icon.textContent = '↩';
+
+  const title = document.createElement('h3');
+  title.style.cssText = 'font-size:15px;font-weight:700;color:var(--dark);margin-bottom:6px';
+  title.textContent = 'Restaurar agendamento';
+
+  const sub = document.createElement('p');
+  sub.style.cssText = 'font-size:13px;color:var(--text-light);margin-bottom:20px';
+  sub.textContent = 'Escolha o status para restaurar:';
+
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;gap:10px;justify-content:center;margin-bottom:16px';
+
+  const btnConf = document.createElement('button');
+  btnConf.style.cssText = 'flex:1;padding:11px 8px;border-radius:10px;border:2px solid #3498db;background:#eaf4fb;color:#2980b9;font-weight:700;font-size:13px;cursor:pointer';
+  btnConf.textContent = '🔵 Confirmado';
+  btnConf.addEventListener('click', () => restoreAppt(id, 'confirmed'));
+
+  const btnReal = document.createElement('button');
+  btnReal.style.cssText = 'flex:1;padding:11px 8px;border-radius:10px;border:2px solid #27ae60;background:#eafaf1;color:#219a52;font-weight:700;font-size:13px;cursor:pointer';
+  btnReal.textContent = '🟢 Realizado';
+  btnReal.addEventListener('click', () => restoreAppt(id, 'realizado'));
+
+  const btnCancel = document.createElement('button');
+  btnCancel.style.cssText = 'width:100%;padding:9px;border-radius:10px;border:1.5px solid var(--border);background:#fff;color:var(--text-light);font-size:13px;cursor:pointer;margin-top:0';
+  btnCancel.textContent = 'Cancelar';
+  btnCancel.addEventListener('click', () => bg.remove());
+
+  row.appendChild(btnConf);
+  row.appendChild(btnReal);
+  box.appendChild(icon);
+  box.appendChild(title);
+  box.appendChild(sub);
+  box.appendChild(row);
+  box.appendChild(btnCancel);
+  bg.appendChild(box);
   document.body.appendChild(bg);
   bg.addEventListener('click', e => { if (e.target === bg) bg.remove(); });
 }
