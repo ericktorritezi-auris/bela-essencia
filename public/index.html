@@ -1509,7 +1509,7 @@ tr:hover td{background:#FAF3F6}
 // ══════════════════════════════════════════════════
 // VERSÃO — altere APENAS aqui; atualiza todos os rodapés
 // ══════════════════════════════════════════════════
-const APP_VERSION  = '2.8.5';
+const APP_VERSION  = '2.8.6';
 const APP_COPY     = `Versão: ${APP_VERSION} | ${(window._tenantConfig?.business_name || 'Belle Planner')} © ${new Date().getFullYear()}`;
 
 function renderFooters() {
@@ -3111,11 +3111,87 @@ async function initCockpit() {
 // ── LOG LGPD ─────────────────────────────────────────────────────────────────
 let _lgpdData = [];
 
+async // ── LGPD: paginação (20 registros/página) ──────────────────────────
+const LGPD_PAGE_SIZE = 20;
+let _lgpdPage = 1;
+
+function _buildLgpdRow(r) {
+  const consentDate = r.consent_at ? new Date(r.consent_at).toLocaleString('pt-BR') : '—';
+  const apptDate    = r.date ? fmtDate(r.date) : '—';
+  return '<tr>' +
+    '<td style="font-weight:600">' + (r.name  || '—') + '</td>' +
+    '<td>' + (r.phone || '—') + '</td>' +
+    '<td>' + apptDate + '</td>' +
+    '<td style="text-align:center">' + (r.privacy_consent
+      ? '<span style="color:#27ae60;font-weight:700">✅ Sim</span>'
+      : '<span style="color:#e74c3c">Não</span>') + '</td>' +
+    '<td style="font-size:12px">' + consentDate + '</td>' +
+    '<td style="font-size:12px;color:var(--text-light)">' + (r.consent_version || 'v1.0') + '</td>' +
+    '</tr>';
+}
+
+function _renderLgpdTable(page) {
+  const tbody = document.getElementById('lgpd-tbody');
+  const pag   = document.getElementById('lgpd-pag');
+  if (!tbody) return;
+  _lgpdPage = page;
+  const total = _lgpdData.length;
+  const start = (page - 1) * LGPD_PAGE_SIZE;
+  const slice = _lgpdData.slice(start, start + LGPD_PAGE_SIZE);
+  tbody.innerHTML = slice.map(_buildLgpdRow).join('');
+  // paginação só aparece quando atingir o mínimo (>= LGPD_PAGE_SIZE)
+  if (pag) {
+    if (total < LGPD_PAGE_SIZE) {
+      pag.classList.add('hidden');
+    } else {
+      const totalPages = Math.ceil(total / LGPD_PAGE_SIZE);
+      const s = start + 1, e = Math.min(start + LGPD_PAGE_SIZE, total);
+      const isMob = window.innerWidth < 600;
+      if (isMob) {
+        pag.classList.remove('hidden');
+        pag.innerHTML =
+          '<div class="pag-info" style="width:100%;text-align:center;margin-bottom:8px">' + s + '–' + e + ' de ' + total + '</div>' +
+          '<div style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%">' +
+            '<button class="pag-btn" ' + (page===1?'disabled':'') + ' onclick="_renderLgpdTable(' + (page-1) + ')" style="padding:7px 16px">‹</button>' +
+            '<span style="font-size:13px;color:var(--text-light);padding:0 8px">' + page + ' / ' + totalPages + '</span>' +
+            '<button class="pag-btn" ' + (page===totalPages?'disabled':'') + ' onclick="_renderLgpdTable(' + (page+1) + ')" style="padding:7px 16px">›</button>' +
+          '</div>';
+      } else {
+        var pages = [];
+        if (totalPages <= 7) {
+          pages = Array.from({length:totalPages},function(_,i){return i+1;});
+        } else {
+          pages = [1];
+          if (page > 3) pages.push('...');
+          for (var i=Math.max(2,page-1);i<=Math.min(totalPages-1,page+1);i++) pages.push(i);
+          if (page < totalPages-2) pages.push('...');
+          pages.push(totalPages);
+        }
+        pag.classList.remove('hidden');
+        pag.innerHTML =
+          '<div class="pag-info">' + s + '–' + e + ' de ' + total + ' registros</div>' +
+          '<div class="pag-btns">' +
+            '<button class="pag-btn" ' + (page===1?'disabled':'') + ' onclick="_renderLgpdTable(' + (page-1) + ')">‹ Anterior</button>' +
+            '<div class="pag-pages">' +
+              pages.map(function(p){return p==='...'
+                ? '<span style="padding:5px 6px;color:var(--text-light);font-size:12px">…</span>'
+                : '<button class="pag-btn ' + (p===page?'active':'') + '" onclick="_renderLgpdTable(' + p + ')">' + p + '</button>';
+              }).join('') +
+            '</div>' +
+            '<button class="pag-btn" ' + (page===totalPages?'disabled':'') + ' onclick="_renderLgpdTable(' + (page+1) + ')">Próxima ›</button>' +
+          '</div>';
+      }
+    }
+  }
+}
+
 async function initLgpd() {
   const tbody = document.getElementById('lgpd-tbody');
+  const pag   = document.getElementById('lgpd-pag');
   const from  = document.getElementById('lgpd-from')?.value || '';
   const to    = document.getElementById('lgpd-to')?.value   || '';
   tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-light)">Carregando...</td></tr>';
+  if (pag) pag.classList.add('hidden');
   try {
     let url = '/api/lgpd/consents';
     const params = [];
@@ -3127,18 +3203,7 @@ async function initLgpd() {
       tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-light)">Nenhum registro encontrado para o período.</td></tr>';
       return;
     }
-    tbody.innerHTML = _lgpdData.map(r => {
-      const consentDate = r.consent_at ? new Date(r.consent_at).toLocaleString('pt-BR') : '—';
-      const apptDate    = r.date ? fmtDate(r.date) : '—';
-      return '<tr>' +
-        '<td style="font-weight:600">' + (r.name || '—') + '</td>' +
-        '<td>' + (r.phone || '—') + '</td>' +
-        '<td>' + apptDate + '</td>' +
-        '<td style="text-align:center">' + (r.privacy_consent ? '<span style="color:#27ae60;font-weight:700">✅ Sim</span>' : '<span style="color:#e74c3c">Não</span>') + '</td>' +
-        '<td style="font-size:12px">' + consentDate + '</td>' +
-        '<td style="font-size:12px;color:var(--text-light)">' + (r.consent_version || 'v1.0') + '</td>' +
-        '</tr>';
-    }).join('');
+    _renderLgpdTable(1);
   } catch(e) {
     tbody.innerHTML = '<tr><td colspan="6" style="color:var(--error);padding:20px">' + e.message + '</td></tr>';
   }
