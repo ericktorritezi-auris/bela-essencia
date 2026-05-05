@@ -1053,6 +1053,7 @@ async function initDB() {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_released_slots_date ON released_slots(date)`);
     // Migração v1.7.0: push_auth nos agendamentos (liga subscription ao agendamento)
     await client.query(`ALTER TABLE appointments ADD COLUMN IF NOT EXISTS push_auth TEXT`);
+      await client.query(`ALTER TABLE appointments ADD COLUMN IF NOT EXISTS reminder_sent BOOLEAN NOT NULL DEFAULT FALSE`);
 
     // Migração: cidades — adiciona uf e neighborhood em public e em todos os schemas de tenant
     await client.query(`ALTER TABLE cities ADD COLUMN IF NOT EXISTS uf VARCHAR(2)`);
@@ -1068,6 +1069,8 @@ async function initDB() {
     await client.query(`ALTER TABLE appointments ADD COLUMN IF NOT EXISTS privacy_consent BOOLEAN NOT NULL DEFAULT FALSE`);
     await client.query(`ALTER TABLE appointments ADD COLUMN IF NOT EXISTS consent_at TIMESTAMPTZ`);
     await client.query(`ALTER TABLE appointments ADD COLUMN IF NOT EXISTS consent_version VARCHAR(10) NOT NULL DEFAULT 'v1.0'`);
+    // Migração: lembrete push 30min antes
+    await client.query(`ALTER TABLE appointments ADD COLUMN IF NOT EXISTS reminder_sent BOOLEAN NOT NULL DEFAULT FALSE`);
     // Rename commemorative_dates.name → title if still old column
     await client.query(`DO $$ BEGIN
       IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='commemorative_dates' AND column_name='name') THEN
@@ -4970,6 +4973,63 @@ cron.schedule('0 3 * * *', async () => {
 });
 
 // ── Cron: e-mail diário às 06h30 BRT (09h30 UTC) — usa snapshot da meia-noite
+// ── Lembrete push 30min antes do procedimento (a cada 5min) ─────────────────
+cron.schedule('*/5 * * * *', async () => {
+  try {
+    // Busca todos os tenants ativos
+    const { rows: tenants } = await pool.query(
+      `SELECT id, schema_name FROM tenants WHERE active=TRUE`
+    );
+
+    for (const tenant of tenants) {
+      const schema = tenant.schema_name;
+      try {
+        // Agendamentos confirmados que começam entre 28 e 32 minutos a partir de agora (BRT)
+        // e ainda não receberam o lembrete
+        const { rows: appts } = await pool.query(`
+          SELECT a.*, t.schema_name
+          FROM ${schema}.appointments a
+          CROSS JOIN tenants t
+          WHERE t.id = $1
+            AND a.status = 'confirmed'
+            AND a.reminder_sent = FALSE
+            AND a.push_auth IS NOT NULL
+            AND (a.date::text || ' ' || a.st::text)::timestamp AT TIME ZONE 'America/Sao_Paulo'
+                BETWEEN NOW() AT TIME ZONE 'America/Sao_Paulo' + INTERVAL '28 minutes'
+                    AND NOW() AT TIME ZONE 'America/Sao_Paulo' + INTERVAL '32 minutes'
+        `, [tenant.id]);
+
+        for (const appt of appts) {
+          try {
+            const subs = await getSubsByAuth(appt.push_auth);
+            if (subs.length > 0) {
+              await sendPush(
+                subs,
+                '⏰ Lembrete de agendamento',
+                `Seu procedimento de ${appt.proc_name} começa em 30 minutos! Às ${appt.st.slice(0,5)}.`,
+                { type: 'reminder_30min' }
+              );
+              console.log(`[Push Reminder] Enviado para ${appt.name} — ${schema} — ${appt.date} ${appt.st}`);
+            }
+            // Marca como enviado independente de ter subscription ativa
+            // (evita reenvio a cada 5min)
+            await pool.query(
+              `UPDATE ${schema}.appointments SET reminder_sent=TRUE WHERE id=$1`,
+              [appt.id]
+            );
+          } catch (e) {
+            console.error(`[Push Reminder] Erro para appt ${appt.id}:`, e.message);
+          }
+        }
+      } catch (e) {
+        console.error(`[Push Reminder] Erro no tenant ${schema}:`, e.message);
+      }
+    }
+  } catch (e) {
+    console.error('[Push Reminder] Erro geral:', e.message);
+  }
+}, { timezone: 'America/Sao_Paulo' });
+
 cron.schedule('30 9 * * *', async () => {
   console.log('[Cron] 06h30 BRT — disparando e-mails da agenda diária...');
   try {
