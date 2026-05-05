@@ -718,6 +718,9 @@ tr:hover td{background:#FAF3F6}
         <p id="succ-txt"></p>
         <div id="succ-location"></div>
         <a id="wa-link" href="#" target="_blank" class="btn btn-wa" style="margin:0 auto 14px"><span id="wa-link-label">💬 Falar com a profissional</span></a>
+        <button id="wa-self-btn" class="btn btn-wa" onclick="sendWaSelf()" style="background:var(--rose);border-color:var(--rose);margin:0 auto 14px;display:none">
+          📋 Salvar agendamento no WhatsApp
+        </button>
         <button class="btn btn-secondary" onclick="resetBooking()">Fazer outro agendamento</button>
       </div>
     </div>
@@ -2111,6 +2114,12 @@ async function confirmBooking() {
       : '#';
     document.getElementById('wa-link').href = _waHref;
     if (!_profPhone) document.getElementById('wa-link').style.display = 'none';
+
+    // Botão salvar no próprio WhatsApp — só exibe se tiver o phone do cliente
+    if (BK.phone) {
+      const selfBtn = document.getElementById('wa-self-btn');
+      if (selfBtn) selfBtn.style.display = 'flex';
+    }
     goStep(7);
 
   } catch(e) {
@@ -2120,6 +2129,35 @@ async function confirmBooking() {
     // SEMPRE reabilita o botão — independente de sucesso, erro ou timeout
     resetConfirmBtn();
   }
+}
+
+// ── WA SELF SEND ────────────────────────────────────────────────
+function sendWaSelf() {
+  const p = BK.procData;
+  const c = CITIES.find(x => Number(x.id) === Number(BK.cityId));
+  const procName  = p?.name  || 'Procedimento';
+  const localName = c?.local || c?.name || 'Local a confirmar';
+  const addr      = c?.address ? c.address + (c.cep ? ', ' + c.cep : '') : '';
+  const priceVal  = p?.price ? 'R$ ' + Number(p.price).toFixed(2).replace('.', ',') : '';
+
+  const lines = [
+    '📋 *Meu Agendamento Confirmado*',
+    '',
+    `👤 *Nome:* ${BK.name}`,
+    `💆 *Procedimento:* ${procName}`,
+    `📅 *Data:* ${fmtDateLong(BK.date)}`,
+    `🕐 *Horário:* ${BK.time}`,
+    localName ? `📍 *Local:* ${localName}` : '',
+    addr      ? `🏠 *Endereço:* ${addr}`   : '',
+    priceVal  ? `💰 *Valor:* ${priceVal}`   : '',
+    '',
+    '✅ _Agendamento confirmado!_',
+  ].filter(Boolean).join('\n');
+
+  const phone   = BK.phone.replace(/\D/g, '');
+  const intlPhone = phone.startsWith('55') ? phone : '55' + phone;
+  const url     = `https://wa.me/${intlPhone}?text=${encodeURIComponent(lines)}`;
+  window.open(url, '_blank');
 }
 
 // ══════════════════════════════════════════════════
@@ -2428,7 +2466,7 @@ function renderAgendaPage(page) {
           <button class="act-btn" onclick="openEditModal('${a.id}')">Editar</button>
           ${a.status==='confirmed'||a.status==='realizado'
             ? `<button class="act-btn danger" onclick="cancelAppt('${a.id}')">Cancelar</button>`
-            : `<button class="act-btn danger" onclick="deleteAppt('${a.id}')" style="color:var(--error);border-color:var(--error)">🗑 Excluir</button>`
+            : `<button class="act-btn" onclick="openRestoreModal('${a.id}')" style="color:var(--gold);border-color:var(--gold)">↩ Restaurar</button><button class="act-btn danger" onclick="deleteAppt('${a.id}')" style="color:var(--error);border-color:var(--error);font-size:10px">🗑</button>`
           }
           <a href="${phoneToWA(a.phone)}" target="_blank" class="act-btn">WA</a>
         </td>
@@ -2458,7 +2496,7 @@ function renderAgendaPage(page) {
           <button class="act-btn" onclick="openEditModal('${a.id}')">Editar</button>
           ${a.status==='confirmed'||a.status==='realizado'
             ? `<button class="act-btn danger" onclick="cancelAppt('${a.id}')" style="color:var(--warn);border-color:var(--warn)">Cancelar</button>`
-            : `<button class="act-btn danger" onclick="deleteAppt('${a.id}')" style="color:var(--error);border-color:var(--error)">🗑 Excluir da base</button>`
+            : `<button class="act-btn" onclick="openRestoreModal('${a.id}')" style="color:var(--gold);border-color:var(--gold)">↩ Restaurar</button><button class="act-btn danger" onclick="deleteAppt('${a.id}')" style="color:var(--error);border-color:var(--error)">🗑</button>`
           }
           <a href="${phoneToWA(a.phone)}" target="_blank" class="act-btn" style="text-align:center">WA</a>
         </div>
@@ -2506,6 +2544,42 @@ async function cancelAppt(id) {
   if(!confirm('Confirma cancelamento?')) return;
   try { await PATCH(`/api/appointments/${id}/cancel`); showToast('Cancelado','ok'); renderAgenda(); renderStats(); }
   catch(e) { showToast(e.message,'error'); }
+}
+
+function openRestoreModal(id) {
+  const existing = document.getElementById('restore-modal-bg');
+  if (existing) existing.remove();
+  const bg = document.createElement('div');
+  bg.id = 'restore-modal-bg';
+  bg.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  bg.innerHTML = `
+    <div style="background:#fff;border-radius:16px;padding:24px 20px;max-width:340px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.18);text-align:center">
+      <div style="font-size:22px;margin-bottom:8px">↩</div>
+      <h3 style="font-size:15px;font-weight:700;color:var(--dark);margin-bottom:6px">Restaurar agendamento</h3>
+      <p style="font-size:13px;color:var(--text-light);margin-bottom:20px">Escolha o status para restaurar:</p>
+      <div style="display:flex;gap:10px;justify-content:center;margin-bottom:16px">
+        <button onclick="restoreAppt(${id},'confirmed')" style="flex:1;padding:11px 8px;border-radius:10px;border:2px solid #3498db;background:#eaf4fb;color:#2980b9;font-weight:700;font-size:13px;cursor:pointer">
+          🔵 Confirmado
+        </button>
+        <button onclick="restoreAppt(${id},'realizado')" style="flex:1;padding:11px 8px;border-radius:10px;border:2px solid #27ae60;background:#eafaf1;color:#219a52;font-weight:700;font-size:13px;cursor:pointer">
+          🟢 Realizado
+        </button>
+      </div>
+      <button onclick="document.getElementById('restore-modal-bg').remove()" style="width:100%;padding:9px;border-radius:10px;border:1.5px solid var(--border);background:#fff;color:var(--text-light);font-size:13px;cursor:pointer">Cancelar</button>
+    </div>`;
+  document.body.appendChild(bg);
+  bg.addEventListener('click', e => { if (e.target === bg) bg.remove(); });
+}
+
+async function restoreAppt(id, status) {
+  const bg = document.getElementById('restore-modal-bg');
+  if (bg) bg.remove();
+  try {
+    await PATCH(`/api/appointments/${id}/restore`, { status });
+    const label = status === 'confirmed' ? 'Confirmado' : 'Realizado';
+    showToast(`↩ Agendamento restaurado como ${label}`, 'ok');
+    renderAgenda(); renderStats();
+  } catch(e) { showToast(e.message, 'error'); }
 }
 
 async function deleteAppt(id) {
