@@ -4862,13 +4862,20 @@ async function sendPaymentEmail(p) {
     </div>
     </body></html>`;
 
-  await resend.emails.send({
-    from:     MASTER_FROM_EMAIL,
-    to:       [p.owner_email],
-    bcc:      ['erick.torritezi@gmail.com'],
-    reply_to: 'erick.torritezi@gmail.com',
-    subject:  `💳 Belle Planner — ${typeLabel === 'Implantação' ? 'Pagamento da Implantação' : 'Mensalidade'} · ${amountFmt}`,
-    html,
+  await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from:     `Belle Planner <${MASTER_FROM_EMAIL}>`,
+      to:       [p.owner_email],
+      bcc:      ['erick.torritezi@gmail.com'],
+      reply_to: 'erick.torritezi@gmail.com',
+      subject:  `💳 Belle Planner — ${typeLabel === 'Implantação' ? 'Pagamento da Implantação' : 'Mensalidade'} · ${amountFmt}`,
+      html,
+    }),
   });
 }
 
