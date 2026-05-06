@@ -3513,13 +3513,16 @@ app.patch('/master/api/payments/:id/status', requireMaster, async (req, res) => 
         await logAction(payment.tenant_id, 'payment_confirmed',
           `Mensalidade confirmada via painel. Novo vencimento: ${expiryStr}`);
       } else if (payment.type === 'setup') {
-        // Implantação paga: ativa o tenant (sem alterar plan_expires_at)
+        // Implantação paga: ativa tenant + inicia ciclo de 30 dias para 1ª mensalidade
+        const setupExpiry = new Date(paid_at || todayBrasilia());
+        setupExpiry.setDate(setupExpiry.getDate() + 30);
+        const setupExpiryStr = setupExpiry.toISOString().slice(0,10);
         await pool.query(
-          `UPDATE tenants SET active=TRUE WHERE id=$1`,
-          [payment.tenant_id]
+          `UPDATE tenants SET active=TRUE, plan_expires_at=$1 WHERE id=$2`,
+          [setupExpiryStr, payment.tenant_id]
         );
         await logAction(payment.tenant_id, 'setup_payment_confirmed',
-          'Implantação confirmada via painel. Tenant ativado.');
+          `Implantação confirmada. Tenant ativado. 1ª mensalidade vence em: ${setupExpiryStr}`);
       }
       _tenantCache.clear();
     }
@@ -3944,10 +3947,11 @@ app.patch('/master/api/tenants/:id/exempt', requireMaster, async (req, res) => {
   try {
     const { rows } = await pool.query(
       `UPDATE tenants SET exempt=$1,
-        -- Se está marcando como isento, limpa trial e vencimento
+        -- Se isento: ativa imediatamente e limpa trial/vencimento
+        active = CASE WHEN $1=TRUE THEN TRUE ELSE active END,
         trial_ends_at = CASE WHEN $1=TRUE THEN NULL ELSE trial_ends_at END,
         plan_expires_at = CASE WHEN $1=TRUE THEN NULL ELSE plan_expires_at END
-       WHERE id=$2 RETURNING slug, exempt, plan_expires_at, trial_ends_at`,
+       WHERE id=$2 RETURNING slug, exempt, active, plan_expires_at, trial_ends_at`,
       [exempt, req.params.id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Tenant não encontrado' });
