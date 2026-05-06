@@ -2161,7 +2161,10 @@ function sendWaSelf() {
 }
 
 // ── Enviar agendamento via WA (pelo admin) ──────────────────────
-function sendAgendaWA(a) {
+function sendAgendaWA(apptId) {
+  // Busca no cache local — mesmo padrão dos outros botões da agenda
+  const a = _agendaAllData.find(x => String(x.id) === String(apptId));
+  if (!a) { showToast('Agendamento não encontrado','error'); return; }
   const city     = CITIES.find(c => c.id === a.city_id);
   const localName = city?.local || city?.name || a.city_name || '';
   const addr     = city?.address ? city.address + (city.cep ? ', ' + city.cep : '') : '';
@@ -2495,7 +2498,7 @@ function renderAgendaPage(page) {
             ? `<button class="act-btn danger" onclick="cancelAppt('${a.id}')">Cancelar</button>`
             : `<button class="act-btn" onclick="openRestoreModal('${a.id}')" style="color:var(--gold);border-color:var(--gold)">↩ Restaurar</button><button class="act-btn danger" onclick="deleteAppt('${a.id}')" style="color:var(--error);border-color:var(--error);font-size:10px">🗑</button>`
           }
-          <button class="act-btn" onclick="sendAgendaWA(a)" title="Enviar agendamento por WhatsApp">📅</button>
+          <button class="act-btn" onclick="sendAgendaWA('${a.id}')" title="Enviar agendamento por WhatsApp">📅</button>
         </td>
       </tr>
     `).join('');
@@ -2525,7 +2528,7 @@ function renderAgendaPage(page) {
             ? `<button class="act-btn danger" onclick="cancelAppt('${a.id}')" style="color:var(--warn);border-color:var(--warn)">Cancelar</button>`
             : `<button class="act-btn" onclick="openRestoreModal('${a.id}')" style="color:var(--gold);border-color:var(--gold)">↩ Restaurar</button><button class="act-btn danger" onclick="deleteAppt('${a.id}')" style="color:var(--error);border-color:var(--error)">🗑</button>`
           }
-          <button class="act-btn" onclick="sendAgendaWA(a)" title="Enviar agendamento por WhatsApp">📅</button>
+          <button class="act-btn" onclick="sendAgendaWA('${a.id}')" title="Enviar agendamento por WhatsApp">📅</button>
         </div>
       </div>
     `;
