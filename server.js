@@ -3956,8 +3956,51 @@ app.patch('/master/api/tenants/:id/exempt', requireMaster, async (req, res) => {
     );
     if (!rows.length) return res.status(404).json({ error: 'Tenant não encontrado' });
     _tenantCache.clear();
-    await logAction(req.params.id, exempt ? 'tenant_exempted' : 'tenant_unexempted',
-      `Tenant ${rows[0].slug} marcado como ${exempt ? 'ISENTO' : 'NÃO ISENTO'}`);
+
+    // Removendo isenção → inicia ciclo de cobrança imediatamente
+    if (!exempt) {
+      // Seta plan_expires_at = hoje + 30 dias (primeira mensalidade)
+      const firstExpiry = new Date(todayBrasilia());
+      firstExpiry.setDate(firstExpiry.getDate() + 30);
+      const firstExpiryStr = firstExpiry.toISOString().slice(0,10);
+      await pool.query(
+        `UPDATE tenants SET plan_expires_at=$1 WHERE id=$2`,
+        [firstExpiryStr, req.params.id]
+      );
+
+      // Cria cobrança de mensalidade pendente imediatamente
+      const refMonth = firstExpiryStr.slice(0,7);
+      const { rows: existPay } = await pool.query(
+        `SELECT id FROM payments WHERE tenant_id=$1 AND type='monthly' AND reference_month=$2 LIMIT 1`,
+        [req.params.id, refMonth]
+      );
+      if (!existPay.length) {
+        const { rows: payRows } = await pool.query(
+          `INSERT INTO payments (tenant_id,type,amount,status,reference_month,notes)
+           VALUES ($1,'monthly',149.00,'pending',$2,'Gerado ao remover isenção — 1ª mensalidade')
+           RETURNING *`,
+          [req.params.id, refMonth]
+        );
+        // Busca dados do tenant para enviar email
+        const { rows: tData } = await pool.query(
+          `SELECT t.owner_email, t.owner_name, t.name as tenant_name, tc.business_name
+           FROM tenants t LEFT JOIN tenant_configs tc ON tc.tenant_id=t.id
+           WHERE t.id=$1`, [req.params.id]
+        );
+        if (tData.length) {
+          const payData = { ...payRows[0], ...tData[0] };
+          sendPaymentEmail(payData).catch(e =>
+            console.error('[Exempt→Paid] Erro email mensalidade:', e.message)
+          );
+        }
+      }
+      await logAction(req.params.id, 'tenant_unexempted',
+        `Isenção removida. 1ª mensalidade vence em ${firstExpiryStr}. Email de cobrança enviado.`);
+    } else {
+      await logAction(req.params.id, 'tenant_exempted',
+        `Tenant ${rows[0].slug} marcado como ISENTO`);
+    }
+
     res.json({ ok: true, exempt: rows[0].exempt });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
