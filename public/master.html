@@ -1153,7 +1153,7 @@ function renderTenantsTable(containerId, list, compact=false) {
           <button class="icon-btn" onclick="resetTenantPass(${t.id},'${(t.business_name||t.name).replace(/'/g,'')}')" title="Redefinir senha">🔑</button>
           <button class="icon-btn" onclick="resetTenantLogin(${t.id},'${(t.business_name||t.name).replace(/'/g,'')}')" title="Redefinir login">👤</button>
           <button class="icon-btn" onclick="masterResetTenantPush(${t.id},'${(t.business_name||t.name).replace(/'/g,'')}')" title="Reconectar push deste tenant">🔔</button>
-          <button class="icon-btn" onclick="toggleTenantExempt(${t.id},'${(t.business_name||t.name).replace(/'/g,'')}',${!!t.exempt})" title="${t.exempt?'Remover isenção':'Marcar como isento'}" style="${t.exempt?'color:#27ae60':''}">⭐</button>
+          <button class="icon-btn" onclick="toggleTenantExempt(${t.id},'${(t.business_name||t.name).replace(/'/g,'')}',${!!t.exempt})" title="${t.exempt?'Remover isenção':'Marcar como isento'}" style="background:${t.exempt?'#27ae60':'none'};border-color:${t.exempt?'#27ae60':'var(--border)'};border-radius:6px;padding:3px 7px;">${t.exempt?'★':'☆'}</button>
           <button class="icon-btn" onclick="resendWelcome(${t.id},'${(t.business_name||t.name).replace(/'/g,'')}','${t.owner_email||''}')" title="Reenviar e-mail de boas-vindas">📧</button>
           ${(t.domain_custom||t.subdomain)?`<a href="https://${t.domain_custom||(t.subdomain+'.belleplanner.com.br')}" target="_blank" class="icon-btn" style="text-decoration:none" title="Abrir agenda">↗</a>`:''}
           <button class="icon-btn" onclick="syncTenant('${t.schema_name}','${t.business_name||t.name}')" title="Sync dados">⚙️</button>
