@@ -415,6 +415,11 @@ async function tenantMiddleware(req, res, next) {
     return res.sendFile(require('path').join(__dirname, 'public', 'pro.html'));
   }
 
+  // Arquivos estáticos públicos (imagens dos QR Codes, etc) — bypass do tenant
+  if (req.path.match(/\.(png|jpg|jpeg|gif|ico|svg|webp)$/i)) {
+    return next();
+  }
+
   // Rotas públicas de contrato — acessíveis em qualquer domínio
   if (req.path.startsWith('/contrato/') || req.path.startsWith('/api/contrato/')) {
     return next(); // serve sem autenticação
