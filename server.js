@@ -3432,24 +3432,56 @@ app.patch('/master/api/tenants/:id/toggle', requireMaster, async (req, res) => {
     await logAction(req.params.id, rows[0].active ? 'tenant_enabled' : 'tenant_disabled',
       `Tenant ${rows[0].slug} ${rows[0].active ? 'ativado' : 'suspenso'}`);
     _tenantCache.clear();
-    // Envia e-mail de notificação ao owner quando suspenso
-    if (!rows[0].active) {
-      const { rows: ownerRows } = await pool.query(
-        `SELECT owner_email, owner_name, t.name FROM tenants t WHERE t.id=$1`, [req.params.id]
-      ).catch(() => ({ rows: [] }));
-      if (ownerRows[0]?.owner_email) {
-        sendEmail({
-          to: ownerRows[0].owner_email,
-          subject: 'Belle Planner — Acesso suspenso',
-          html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px">
+    // Envia e-mail de notificação ao owner — suspensão ou reativação
+    const { rows: ownerRows } = await pool.query(
+      `SELECT owner_email, owner_name, t.name,
+              tc.business_name, tc.primary_color
+       FROM tenants t
+       LEFT JOIN tenant_configs tc ON tc.tenant_id=t.id
+       WHERE t.id=$1`, [req.params.id]
+    ).catch(() => ({ rows: [] }));
+
+    if (ownerRows[0]?.owner_email) {
+      const o           = ownerRows[0];
+      const displayName = o.business_name || o.name;
+      const ownerName   = o.owner_name || displayName;
+      const color       = o.primary_color || '#9B4D6A';
+      const isSuspended = !rows[0].active;
+
+      const subject = isSuspended
+        ? 'Belle Planner — Acesso suspenso'
+        : 'Belle Planner — Acesso reestabelecido ✅';
+
+      const html = isSuspended
+        ? `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px">
             <h2 style="color:#E8557A">Acesso suspenso</h2>
-            <p>Olá, <strong>${ownerRows[0].owner_name||ownerRows[0].name}</strong>.</p>
-            <p>Sua agenda <strong>${ownerRows[0].name}</strong> foi temporariamente suspensa.</p>
+            <p>Olá, <strong>${ownerName}</strong>.</p>
+            <p>Sua agenda <strong>${displayName}</strong> foi temporariamente suspensa.</p>
             <p>Para reativar, entre em contato com o suporte Belle Planner.</p>
             <p style="margin-top:20px;font-size:12px;color:#888">Belle Planner · Sua Agenda Online</p>
           </div>`
-        }).catch(() => {});
-      }
+        : `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:0">
+            <div style="background:linear-gradient(135deg,${color},#6B2B46);padding:28px 32px;border-radius:12px 12px 0 0;text-align:center">
+              <div style="font-size:40px;margin-bottom:8px">✅</div>
+              <h2 style="color:#fff;margin:0;font-size:20px">Acesso reestabelecido!</h2>
+            </div>
+            <div style="background:#fff;padding:28px 32px;border-radius:0 0 12px 12px;border:1px solid #eee;border-top:none">
+              <p style="font-size:15px;color:#3D2B35">Olá, <strong>${ownerName}</strong>! 🎉</p>
+              <p style="font-size:14px;color:#6B5060;line-height:1.7">
+                Sua agenda <strong>${displayName}</strong> foi reativada com sucesso.
+                Seus clientes já podem realizar agendamentos normalmente.
+              </p>
+              <div style="background:#f0faf4;border-left:4px solid #27ae60;border-radius:8px;padding:14px 16px;margin:20px 0;font-size:13px;color:#1e8449">
+                🟢 Agenda online e funcionando!
+              </div>
+              <p style="font-size:13px;color:#8A6B76;line-height:1.6">
+                Qualquer dúvida, entre em contato com o suporte Belle Planner pelo WhatsApp.
+              </p>
+              <p style="margin-top:20px;font-size:11px;color:#aaa;text-align:center">Belle Planner · Sua Agenda Online</p>
+            </div>
+          </div>`;
+
+      sendEmail({ to: o.owner_email, subject, html }).catch(() => {});
     }
     res.json({ active: rows[0].active });
   } catch (err) { res.status(500).json({ error: err.message }); }
