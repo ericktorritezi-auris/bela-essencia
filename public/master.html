@@ -1509,22 +1509,45 @@ async function loadFinancial() {
   } catch(e) { toast(e.message, 'err'); }
 }
 var _allPayments = [], _paymentsPage = 1;
+
+async function markPaymentPaid(id) {
+  if (!confirm('Confirmar recebimento deste pagamento?')) return;
+  try {
+    await masterPATCH('/master/api/payments/' + id + '/status', { status: 'paid' });
+    toast('✅ Pagamento confirmado', 'ok');
+    await loadPayments();
+  } catch(e) { toast(e.message, 'err'); }
+}
+
+async function resendPaymentEmail(id) {
+  try {
+    await masterPOST('/master/api/payments/' + id + '/send-email', {});
+    toast('📧 Email reenviado com sucesso', 'ok');
+  } catch(e) { toast(e.message, 'err'); }
+}
+
 function renderPaymentsPage(page) {
   _paymentsPage = page;
   var el = document.getElementById('payments-table');
   if (!_allPayments.length) { el.innerHTML='<div class="empty">Nenhum pagamento registrado</div>'; return; }
   var result = masterPaginate(_allPayments, page, 10, function(rows) {
     return '<div style="overflow-x:auto"><table>' +
-      '<thead><tr><th>Tenant</th><th>Tipo</th><th>Valor</th><th>Status</th><th>Referência</th><th>Data</th><th>Obs.</th></tr></thead><tbody>' +
-      rows.map(function(p) { return '<tr>' +
+      '<thead><tr><th>Tenant</th><th>Tipo</th><th>Valor</th><th>Status</th><th>Referência</th><th>Data</th><th>Ações</th></tr></thead><tbody>' +
+      rows.map(function(p) {
+        var actions = p.status === 'pending'
+          ? '<button class="btn-xs btn-ok" onclick="markPaymentPaid(' + p.id + ')">✅ Pago</button>' +
+            '<button class="btn-xs btn-ghost" onclick="resendPaymentEmail(' + p.id + ')" style="margin-left:4px">📧 Email</button>'
+          : '<button class="btn-xs btn-ghost" onclick="resendPaymentEmail(' + p.id + ')">📧 Reenviar</button>';
+        return '<tr>' +
         '<td><div style="font-weight:700;font-size:13px">' + (p.business_name||p.tenant_name) + '</div></td>' +
-        '<td><span class="badge badge-' + p.type + '">' + (p.type==='monthly'?'Mensalidade':'Setup') + '</span></td>' +
+        '<td><span class="badge badge-' + p.type + '">' + (p.type==='monthly'?'Mensalidade':'Implantação') + '</span></td>' +
         '<td style="color:var(--green);font-weight:800">' + fmtCurr(p.amount) + '</td>' +
         '<td><span class="badge badge-' + p.status + '">' + (p.status==='paid'?'✓ Pago':'⏳ Pendente') + '</span></td>' +
         '<td style="font-size:12px;color:var(--muted)">' + (p.reference_month||'—') + '</td>' +
         '<td style="font-size:12px">' + (p.paid_at ? fmtDate(p.paid_at) : '<span style="color:var(--muted)">—</span>') + '</td>' +
-        '<td style="font-size:11px;color:var(--muted)">' + (p.notes||'—') + '</td>' +
-      '</tr>'; }).join('') +
+        '<td style="white-space:nowrap">' + actions + '</td>' +
+        '</tr>';
+      }).join('') +
       '</tbody></table></div>';
   });
   el.innerHTML = result.rows + result.pag;
