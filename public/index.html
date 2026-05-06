@@ -1512,7 +1512,7 @@ tr:hover td{background:#FAF3F6}
 // ══════════════════════════════════════════════════
 // VERSÃO — altere APENAS aqui; atualiza todos os rodapés
 // ══════════════════════════════════════════════════
-const APP_VERSION  = '2.8.6';
+const APP_VERSION  = '2.9.0';
 const APP_COPY     = `Versão: ${APP_VERSION} | ${(window._tenantConfig?.business_name || 'Belle Planner')} © ${new Date().getFullYear()}`;
 
 function renderFooters() {
@@ -2160,6 +2160,33 @@ function sendWaSelf() {
   window.open(url, '_blank');
 }
 
+// ── Enviar agendamento via WA (pelo admin) ──────────────────────
+function sendAgendaWA(a) {
+  const city     = CITIES.find(c => c.id === a.city_id);
+  const localName = city?.local || city?.name || a.city_name || '';
+  const addr     = city?.address ? city.address + (city.cep ? ', ' + city.cep : '') : '';
+  const priceVal = a.price ? 'R$ ' + Number(a.price).toFixed(2).replace('.', ',') : '';
+  const horario  = a.st ? a.st.slice(0,5) : '';
+
+  const lines = [
+    '📋 *Agendamento Confirmado*',
+    '',
+    `👤 *Nome:* ${a.name}`,
+    `💆 *Procedimento:* ${a.proc_name}`,
+    `📅 *Data:* ${fmtDateLong(a.date)}`,
+    horario   ? `🕐 *Horário:* ${horario}`      : '',
+    localName ? `📍 *Local:* ${localName}`       : '',
+    addr      ? `🏠 *Endereço:* ${addr}`         : '',
+    priceVal  ? `💰 *Valor:* ${priceVal}`        : '',
+    '',
+    '✅ _Agendamento confirmado!_',
+  ].filter(Boolean).join('\n');
+
+  const phone    = (a.phone || '').replace(/\D/g, '');
+  const intl     = phone.startsWith('55') ? phone : '55' + phone;
+  window.open('https://wa.me/' + intl + '?text=' + encodeURIComponent(lines), '_blank');
+}
+
 // ══════════════════════════════════════════════════
 // ADMIN ROUTING
 // ══════════════════════════════════════════════════
@@ -2468,7 +2495,7 @@ function renderAgendaPage(page) {
             ? `<button class="act-btn danger" onclick="cancelAppt('${a.id}')">Cancelar</button>`
             : `<button class="act-btn" onclick="openRestoreModal('${a.id}')" style="color:var(--gold);border-color:var(--gold)">↩ Restaurar</button><button class="act-btn danger" onclick="deleteAppt('${a.id}')" style="color:var(--error);border-color:var(--error);font-size:10px">🗑</button>`
           }
-          <a href="${phoneToWA(a.phone)}" target="_blank" class="act-btn">WA</a>
+          <button class="act-btn" onclick="sendAgendaWA(a)" title="Enviar agendamento por WhatsApp">📅</button>
         </td>
       </tr>
     `).join('');
@@ -2498,7 +2525,7 @@ function renderAgendaPage(page) {
             ? `<button class="act-btn danger" onclick="cancelAppt('${a.id}')" style="color:var(--warn);border-color:var(--warn)">Cancelar</button>`
             : `<button class="act-btn" onclick="openRestoreModal('${a.id}')" style="color:var(--gold);border-color:var(--gold)">↩ Restaurar</button><button class="act-btn danger" onclick="deleteAppt('${a.id}')" style="color:var(--error);border-color:var(--error)">🗑</button>`
           }
-          <a href="${phoneToWA(a.phone)}" target="_blank" class="act-btn" style="text-align:center">WA</a>
+          <button class="act-btn" onclick="sendAgendaWA(a)" title="Enviar agendamento por WhatsApp">📅</button>
         </div>
       </div>
     `;
