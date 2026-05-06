@@ -1513,7 +1513,7 @@ var _allPayments = [], _paymentsPage = 1;
 async function markPaymentPaid(id) {
   if (!confirm('Confirmar recebimento deste pagamento?')) return;
   try {
-    await masterPATCH('/master/api/payments/' + id + '/status', { status: 'paid' });
+    await PATCH('/master/api/payments/' + id + '/status', { status: 'paid' });
     toast('✅ Pagamento confirmado', 'ok');
     await loadPayments();
   } catch(e) { toast(e.message, 'err'); }
@@ -1521,7 +1521,7 @@ async function markPaymentPaid(id) {
 
 async function resendPaymentEmail(id) {
   try {
-    await masterPOST('/master/api/payments/' + id + '/send-email', {});
+    await POST('/master/api/payments/' + id + '/send-email', {});
     toast('📧 Email reenviado com sucesso', 'ok');
   } catch(e) { toast(e.message, 'err'); }
 }
