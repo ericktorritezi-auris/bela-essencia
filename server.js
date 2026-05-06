@@ -1496,6 +1496,10 @@ app.set('trust proxy', 1);
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 
+// Rotas estáticas dos QR Codes Pix — antes do tenantMiddleware
+app.get('/pix-qr/setup',   (req, res) => res.sendFile(require('path').join(__dirname, 'public', 'pix-setup.png')));
+app.get('/pix-qr/monthly', (req, res) => res.sendFile(require('path').join(__dirname, 'public', 'pix-monthly.png')));
+
 // Tenant middleware — detecta tenant por hostname (Fase 1 White Label)
 app.use(tenantMiddleware);
 
@@ -4811,11 +4815,13 @@ async function sendPaymentEmail(p) {
   const businessName = p.business_name || p.tenant_name;
   const ownerName    = p.owner_name || 'Profissional';
 
-  const baseUrl   = (process.env.MASTER_BASE_URL || 'https://bela-essencia.up.railway.app').replace(/\/$/, '');
-  const qrFile    = p.type === 'setup' ? 'pix-setup.png' : 'pix-monthly.png';
-  const qrBlock   = `<div style="text-align:center;margin:24px 0">
-       <img src="${baseUrl}/${qrFile}" alt="QR Code Pix" width="220" height="220" style="width:220px;height:220px;border-radius:12px;border:1px solid #E8D5DE;display:block;margin:0 auto">
-     </div>`;
+  const baseUrl   = (process.env.MASTER_BASE_URL || '').replace(/\/$/, '');
+  const qrPath    = p.type === 'setup' ? '/pix-qr/setup' : '/pix-qr/monthly';
+  const qrBlock   = baseUrl
+    ? `<div style="text-align:center;margin:24px 0">
+         <img src="${baseUrl}${qrPath}" alt="QR Code Pix" width="220" height="220" style="width:220px;height:220px;border-radius:12px;border:1px solid #E8D5DE;display:block;margin:0 auto">
+       </div>`
+    : '';
 
   const html = `
     <!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">
@@ -5292,8 +5298,8 @@ cron.schedule('*/5 * * * *', async () => {
             AND a.reminder_sent = FALSE
             AND a.push_auth IS NOT NULL
             AND (a.date::text || ' ' || a.st::text)::timestamp AT TIME ZONE 'America/Sao_Paulo'
-                BETWEEN NOW() AT TIME ZONE 'America/Sao_Paulo' + INTERVAL '28 minutes'
-                    AND NOW() AT TIME ZONE 'America/Sao_Paulo' + INTERVAL '32 minutes'
+                BETWEEN (NOW() AT TIME ZONE 'America/Sao_Paulo') + INTERVAL '28 minutes'
+                    AND (NOW() AT TIME ZONE 'America/Sao_Paulo') + INTERVAL '32 minutes'
         `, [tenant.id]);
 
         for (const appt of appts) {
