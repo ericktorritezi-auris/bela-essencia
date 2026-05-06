@@ -3460,6 +3460,39 @@ app.get('/master/api/payments', requireMaster, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// Enviar email de cobrança de um pagamento
+app.post('/master/api/payments/:id/send-email', requireMaster, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT p.*, t.owner_email, t.owner_name, t.name as tenant_name,
+              tc.business_name
+       FROM payments p
+       JOIN tenants t ON t.id=p.tenant_id
+       LEFT JOIN tenant_configs tc ON tc.tenant_id=t.id
+       WHERE p.id=$1`, [req.params.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Pagamento não encontrado' });
+    const p = rows[0];
+    await sendPaymentEmail(p);
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Atualizar status de pagamento (pending → paid)
+app.patch('/master/api/payments/:id/status', requireMaster, async (req, res) => {
+  const { status } = req.body;
+  if (!['paid','pending'].includes(status)) return res.status(400).json({ error: 'Status inválido' });
+  try {
+    const paid_at = status === 'paid' ? todayBrasilia() : null;
+    const { rows } = await pool.query(
+      `UPDATE payments SET status=$1, paid_at=$2 WHERE id=$3 RETURNING *`,
+      [status, paid_at, req.params.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Pagamento não encontrado' });
+    res.json(rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.post('/master/api/payments', requireMaster, async (req, res) => {
   const { tenant_id, type, amount, status, reference_month, paid_at, notes } = req.body;
   if (!tenant_id || !type || !amount) {
@@ -3586,6 +3619,55 @@ app.put('/master/api/tenants/:id/onboarding', requireMaster, async (req, res) =>
       [req.params.id, !!acesso_criado, !!dns_configurado, !!procedimentos,
        !!cidades, !!horarios, !!teste_agendamento, !!entregue]
     );
+
+    // Se todos os 7 itens estiverem verdes, gera cobrança de implantação
+    const allDone = [acesso_criado, dns_configurado, procedimentos,
+                     cidades, horarios, teste_agendamento, entregue].every(Boolean);
+    if (allDone) {
+      // Isento: não gera cobrança nem trial
+      const { rows: exemptCheck } = await pool.query(
+        `SELECT exempt FROM tenants WHERE id=$1`, [req.params.id]
+      );
+      if (exemptCheck[0]?.exempt) {
+        return res.json({ ok: true, exempt: true });
+      }
+      // Só cria se ainda não existe pagamento de setup para este tenant
+      const { rows: existing } = await pool.query(
+        `SELECT id FROM payments WHERE tenant_id=$1 AND type='setup' LIMIT 1`,
+        [req.params.id]
+      );
+      if (!existing.length) {
+        const { rows: payRows } = await pool.query(
+          `INSERT INTO payments (tenant_id,type,amount,status,notes)
+           VALUES ($1,'setup',247.00,'pending','Gerado automaticamente ao concluir onboarding')
+           RETURNING *`,
+          [req.params.id]
+        );
+        // Busca dados do tenant para enviar email
+        const { rows: tenantRows } = await pool.query(
+          `SELECT t.owner_email, t.owner_name, t.name as tenant_name, tc.business_name
+           FROM tenants t
+           LEFT JOIN tenant_configs tc ON tc.tenant_id=t.id
+           WHERE t.id=$1`, [req.params.id]
+        );
+        if (tenantRows.length) {
+          const payData = { ...payRows[0], ...tenantRows[0] };
+          sendPaymentEmail(payData).catch(e =>
+            console.error('[Onboarding] Erro ao enviar email implantação:', e.message)
+          );
+        }
+        // Seta trial de 7 dias para pagar a implantação
+        const trialEnd = new Date();
+        trialEnd.setDate(trialEnd.getDate() + 7);
+        await pool.query(
+          `UPDATE tenants SET trial_ends_at=$1 WHERE id=$2`,
+          [trialEnd.toISOString().slice(0,10), req.params.id]
+        );
+        await logAction(req.params.id, 'setup_payment_created',
+          'Cobrança de implantação gerada automaticamente (checklist 100%) — trial 7 dias iniciado');
+      }
+    }
+
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -4100,39 +4182,114 @@ cron.schedule('0 11 * * *', async () => {
   try {
     const today = todayBrasilia();
 
-    // 0. Trial expirado → bloqueia (trial sem pagamento, apenas não-isentos)
+    // 0. Trial de implantação expirado (7 dias sem pagar setup) → suspende
     const { rows: trialExp } = await pool.query(
       `UPDATE tenants SET active=FALSE
        WHERE active=TRUE AND exempt=FALSE
          AND trial_ends_at IS NOT NULL AND trial_ends_at < $1::date
-         AND (plan_expires_at IS NULL OR plan_expires_at < $1::date)
+         AND NOT EXISTS (
+           SELECT 1 FROM payments
+           WHERE tenant_id = tenants.id
+             AND type = 'setup'
+             AND status = 'paid'
+         )
        RETURNING id, slug, owner_email, owner_name`,
       [today]
     );
     for (const t of trialExp) {
-      await logAction(t.id, 'trial_expired', `Trial de ${t.slug} expirou`);
-      console.log(`[Cron] Trial expirado: ${t.slug}`);
+      await logAction(t.id, 'trial_expired',
+        `Trial de implantação de ${t.slug} expirou — acesso suspenso por falta de pagamento`);
+      console.log(`[Cron] Trial implantação expirado: ${t.slug}`);
     }
 
-    // 1. Bloqueia tenants vencidos há mais de 2 dias (apenas não-isentos)
+    // 1. Bloqueia tenants vencidos há mais de 7 dias (apenas não-isentos)
     const { rows: toBlock } = await pool.query(
       `UPDATE tenants SET active=FALSE
        WHERE active=TRUE AND exempt=FALSE
-         AND plan_expires_at < ($1::date - interval '2 days')
+         AND plan_expires_at < ($1::date - interval '7 days')
          AND (trial_ends_at IS NULL OR trial_ends_at < $1::date)
        RETURNING id, slug, owner_email, owner_name`,
       [today]
     );
     for (const t of toBlock) {
-      await logAction(t.id, 'tenant_auto_blocked', `Bloqueado por falta de pagamento (vencido > 2 dias)`);
+      await logAction(t.id, 'tenant_auto_blocked',
+        `Bloqueado por falta de pagamento (vencido > 7 dias)`);
       console.log(`[Master Cron] Tenant ${t.slug} bloqueado automaticamente.`);
+    }
+
+    // 1b. Email de cobrança urgente — 7 dias após vencimento (acesso suspenso)
+    const { rows: overdueWeek } = await pool.query(
+      `SELECT t.id, t.owner_email, t.owner_name, t.slug, tc.business_name
+       FROM tenants t
+       LEFT JOIN tenant_configs tc ON tc.tenant_id=t.id
+       WHERE t.active=FALSE AND t.exempt=FALSE
+         AND t.plan_expires_at IS NOT NULL
+         AND t.plan_expires_at::date = ($1::date - interval '7 days')`,
+      [today]
+    );
+    for (const t of overdueWeek) {
+      if (!t.owner_email || !process.env.RESEND_API_KEY) continue;
+      const businessName = t.business_name || t.slug;
+      const htmlOverdue = `
+        <!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">
+        <style>
+          body{font-family:'Nunito',Arial,sans-serif;background:#f5eff2;margin:0;padding:24px}
+          .card{background:#fff;border-radius:16px;max-width:520px;margin:0 auto;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.08)}
+          .header{background:linear-gradient(135deg,#C0392B,#922B21);padding:28px 32px;text-align:center;color:#fff}
+          .header h1{font-size:22px;margin:0 0 6px;font-weight:700}
+          .header p{font-size:13px;margin:0;opacity:.85}
+          .body{padding:28px 32px}
+          .alert-box{background:#fdf0ee;border-left:4px solid #C0392B;border-radius:8px;padding:16px;margin:16px 0;font-size:14px;color:#922B21;font-weight:600}
+          .footer{background:#f9f5f7;padding:16px 32px;text-align:center;font-size:11px;color:#B89AAA}
+          .btn{display:inline-block;background:linear-gradient(135deg,#9B4D6A,#6B2B46);color:#fff;text-decoration:none;border-radius:50px;padding:12px 28px;font-weight:700;font-size:14px}
+        </style></head>
+        <body><div class="card">
+          <div class="header">
+            <h1>⚠️ Acesso Suspenso</h1>
+            <p>Belle Planner Pro</p>
+          </div>
+          <div class="body">
+            <p style="font-size:15px;color:#3D2B35">Olá, <strong>${t.owner_name || 'Profissional'}</strong>!</p>
+            <div class="alert-box">
+              Sua agenda <strong>${businessName}</strong> está suspensa há 7 dias por falta de pagamento da mensalidade.
+            </div>
+            <p style="font-size:14px;color:#6B5060;line-height:1.7">
+              Para reativar seu acesso e não perder seus dados e agendamentos, realize o pagamento o quanto antes e nos envie o comprovante.
+            </p>
+            <div style="text-align:center;margin:24px 0">
+              <a href="https://wa.me/${process.env.SUPPORT_WHATSAPP || '5511949851250'}?text=Olá! Preciso reativar minha agenda ${businessName}" class="btn">
+                📲 Falar no WhatsApp agora
+              </a>
+            </div>
+            <p style="font-size:12px;color:#8A6B76;text-align:center">
+              Após o comprovante, seu acesso é reativado imediatamente. ✅
+            </p>
+          </div>
+          <div class="footer">Belle Planner Pro · pro.belleplanner.com.br</div>
+        </div></body></html>`;
+
+      await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from:     `Belle Planner <${MASTER_FROM_EMAIL}>`,
+          to:       [t.owner_email],
+          bcc:      ['erick.torritezi@gmail.com'],
+          reply_to: 'erick.torritezi@gmail.com',
+          subject:  `🚨 ${businessName} — acesso suspenso. Regularize agora`,
+          html: htmlOverdue,
+        }),
+      });
+      await logAction(t.id, 'overdue_week_email_sent',
+        `Email de cobrança urgente enviado (7 dias vencido)`);
+      console.log(`[Master Cron] Email urgente enviado para ${t.owner_email}`);
     }
 
     // 2. Envia lembrete para tenants vencendo em exatamente 5 dias
     const { rows: expiring } = await pool.query(
       `SELECT t.*, tc.business_name FROM tenants t
        LEFT JOIN tenant_configs tc ON tc.tenant_id=t.id
-       WHERE t.active=TRUE AND t.plan_expires_at = ($1::date + interval '5 days')`,
+       WHERE t.active=TRUE AND t.exempt=FALSE AND t.plan_expires_at = ($1::date + interval '5 days')`,
       [today]
     );
     for (const t of expiring) {
@@ -4168,6 +4325,45 @@ cron.schedule('0 11 * * *', async () => {
       await logAction(t.id, 'expiry_reminder_sent', `Lembrete de vencimento enviado para ${t.owner_email}`);
       console.log(`[Master Cron] Lembrete enviado para ${t.owner_email}`);
     }
+    // 4. Mensalidade: 3 dias antes do vencimento → cria cobrança pending + envia email Pix
+    const in3days = new Date();
+    in3days.setDate(in3days.getDate() + 3);
+    const in3str = in3days.toISOString().slice(0,10);
+
+    const { rows: billTenants } = await pool.query(
+      `SELECT t.id, t.owner_email, t.owner_name, t.name as tenant_name,
+              tc.business_name
+       FROM tenants t
+       LEFT JOIN tenant_configs tc ON tc.tenant_id=t.id
+       WHERE t.active=TRUE AND t.exempt=FALSE
+         AND t.plan_expires_at::date = $1::date`,
+      [in3str]
+    );
+
+    for (const t of billTenants) {
+      // Só cria se ainda não existe cobrança monthly para este mês
+      const refMonth = in3str.slice(0,7); // YYYY-MM
+      const { rows: existPay } = await pool.query(
+        `SELECT id FROM payments WHERE tenant_id=$1 AND type='monthly' AND reference_month=$2 LIMIT 1`,
+        [t.id, refMonth]
+      );
+      if (!existPay.length) {
+        const { rows: payRows } = await pool.query(
+          `INSERT INTO payments (tenant_id,type,amount,status,reference_month,notes)
+           VALUES ($1,'monthly',149.00,'pending',$2,'Gerado automaticamente 3 dias antes do vencimento')
+           RETURNING *`,
+          [t.id, refMonth]
+        );
+        const payData = { ...payRows[0], ...t };
+        sendPaymentEmail(payData).catch(e =>
+          console.error('[Master Cron] Erro ao enviar email mensalidade:', e.message)
+        );
+        await logAction(t.id, 'monthly_payment_created',
+          `Cobrança de mensalidade ${refMonth} gerada (3 dias antes do vencimento)`);
+        console.log(`[Master Cron] Cobrança mensalidade criada para ${t.owner_email}`);
+      }
+    }
+
     _tenantCache.clear();
   } catch (err) { console.error('[Master Cron] Erro:', err.message); }
 }, { timezone: 'UTC' });
@@ -4597,6 +4793,88 @@ async function notifyClientCompleted(appt) {
     `Seu procedimento de ${appt.proc_name} foi realizado com sucesso. Até a próxima!`,
     { type: 'completed' }
   );
+}
+
+// ── Email de cobrança de pagamento (Pix) ─────────────────────────────────────
+async function sendPaymentEmail(p) {
+  // PIX_SETUP_COPYPASTE e PIX_MONTHLY_COPYPASTE serão configurados como
+  // variáveis de ambiente quando Erick fornecer os dados do Pix
+  const pixCopyPaste = p.type === 'setup'
+    ? (process.env.PIX_SETUP_COPYPASTE   || '[CHAVE PIX IMPLANTAÇÃO — A CONFIGURAR]')
+    : (process.env.PIX_MONTHLY_COPYPASTE || '[CHAVE PIX MENSALIDADE — A CONFIGURAR]');
+
+  const pixQrUrl = p.type === 'setup'
+    ? (process.env.PIX_SETUP_QR_URL   || '')
+    : (process.env.PIX_MONTHLY_QR_URL || '');
+
+  const typeLabel  = p.type === 'setup' ? 'Implantação' : 'Mensalidade';
+  const amountFmt  = `R$ ${Number(p.amount).toFixed(2).replace('.', ',')}`;
+  const businessName = p.business_name || p.tenant_name;
+  const ownerName    = p.owner_name || 'Profissional';
+
+  const qrBlock = pixQrUrl
+    ? `<div style="text-align:center;margin:24px 0">
+         <img src="${pixQrUrl}" alt="QR Code Pix" style="width:200px;height:200px;border-radius:12px">
+       </div>`
+    : '';
+
+  const html = `
+    <!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">
+    <style>
+      body{font-family:'Nunito',Arial,sans-serif;background:#f5eff2;margin:0;padding:24px}
+      .card{background:#fff;border-radius:16px;max-width:520px;margin:0 auto;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.08)}
+      .header{background:linear-gradient(135deg,#9B4D6A,#6B2B46);padding:28px 32px;text-align:center}
+      .header h1{color:#fff;font-size:22px;margin:0;font-weight:700}
+      .header p{color:rgba(255,255,255,.8);font-size:13px;margin:6px 0 0}
+      .body{padding:28px 32px}
+      .amount{text-align:center;margin:20px 0}
+      .amount .label{font-size:12px;color:#8A6B76;text-transform:uppercase;letter-spacing:.08em;font-weight:700}
+      .amount .value{font-size:42px;font-weight:700;color:#6B2B46;line-height:1.1}
+      .pix-box{background:#f9f5f7;border:2px solid #9B4D6A;border-radius:12px;padding:16px;margin:20px 0}
+      .pix-label{font-size:11px;font-weight:800;text-transform:uppercase;color:#9B4D6A;margin-bottom:8px}
+      .pix-code{font-family:monospace;font-size:11px;color:#3D2B35;word-break:break-all;background:#fff;padding:10px 12px;border-radius:8px;border:1px solid #E8D5DE}
+      .footer{background:#f9f5f7;padding:16px 32px;text-align:center;font-size:11px;color:#B89AAA}
+      .btn{display:inline-block;background:linear-gradient(135deg,#9B4D6A,#6B2B46);color:#fff;text-decoration:none;border-radius:50px;padding:12px 28px;font-weight:700;font-size:14px;margin-top:8px}
+    </style></head>
+    <body>
+    <div class="card">
+      <div class="header">
+        <h1>Belle Planner Pro</h1>
+        <p>Cobrança — ${typeLabel}</p>
+      </div>
+      <div class="body">
+        <p style="font-size:15px;color:#3D2B35">Olá, <strong>${ownerName}</strong>! 👋</p>
+        <p style="font-size:14px;color:#6B5060;line-height:1.6">
+          ${p.type === 'setup'
+            ? `Sua agenda <strong>${businessName}</strong> está pronta! Para ativarmos seu acesso completo, realize o pagamento da implantação via Pix.`
+            : `A mensalidade da sua agenda <strong>${businessName}</strong> está disponível para pagamento.`
+          }
+        </p>
+        <div class="amount">
+          <div class="label">${typeLabel}</div>
+          <div class="value">${amountFmt}</div>
+        </div>
+        ${qrBlock}
+        <div class="pix-box">
+          <div class="pix-label">📋 Pix Copia e Cola</div>
+          <div class="pix-code">${pixCopyPaste}</div>
+        </div>
+        <p style="font-size:12px;color:#8A6B76;text-align:center;margin-top:16px">
+          Após o pagamento, envie o comprovante pelo WhatsApp para confirmarmos. ✅
+        </p>
+      </div>
+      <div class="footer">Belle Planner Pro · pro.belleplanner.com.br</div>
+    </div>
+    </body></html>`;
+
+  await resend.emails.send({
+    from:     MASTER_FROM_EMAIL,
+    to:       [p.owner_email],
+    bcc:      ['erick.torritezi@gmail.com'],
+    reply_to: 'erick.torritezi@gmail.com',
+    subject:  `💳 Belle Planner — ${typeLabel === 'Implantação' ? 'Pagamento da Implantação' : 'Mensalidade'} · ${amountFmt}`,
+    html,
+  });
 }
 
 // ── Push Routes ───────────────────────────────────────────────────────────────
