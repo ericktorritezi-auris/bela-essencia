@@ -2308,7 +2308,7 @@ async function toggleTenantExempt(id, name, currentExempt) {
   try {
     const r = await API('PATCH', '/master/api/tenants/' + id + '/exempt', { exempt: !currentExempt });
     toast(!currentExempt ? '✅ "' + name + '" marcado como ISENTO' : '✅ Isenção removida de "' + name + '"', 'ok');
-    loadTenants();
+    renderTenants();
   } catch(e) { toast('Erro: ' + e.message, 'err'); }
 }
 
