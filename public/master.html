@@ -1127,7 +1127,7 @@ function renderTenantsTable(containerId, list, compact=false) {
       <th>Mensalidade</th>
       <th>Vencimento</th>
       <th>Status</th>
-      <th>Ações</th>
+      ${!compact?'<th>Ações</th>':''}
     </tr></thead>
     <tbody>
     ${list.map(t => `<tr>
@@ -1145,7 +1145,7 @@ function renderTenantsTable(containerId, list, compact=false) {
       <td style="color:var(--green);font-weight:700;font-size:13px">${Number(t.monthly_fee||0)===0?'<span style="color:var(--muted)">Isento</span>':fmtCurr(t.monthly_fee)}</td>
       <td style="font-size:12px">${fmtDate(t.plan_expires_at)}</td>
       <td>${tenantStatus(t)}</td>
-      <td>
+      ${!compact?`<td>
         <div style="display:flex;gap:3px;align-items:center;flex-wrap:nowrap">
           <button class="icon-btn" onclick="openEditModal(${t.id})" title="Editar tenant">✏️</button>
           <button class="icon-btn" onclick="openNotesModal(${t.id},'${(t.business_name||t.name).replace(/'/g,'')}')" title="Notas internas">📝</button>
@@ -1160,7 +1160,7 @@ function renderTenantsTable(containerId, list, compact=false) {
           <div style="width:1px;height:20px;background:var(--border);margin:0 2px"></div>
           <button class="btn btn-sm ${t.active?'btn-red':'btn-green'}" style="padding:4px 10px;font-size:11px;white-space:nowrap" onclick="toggleTenant(${t.id},'${t.slug}',${t.active})">${t.active?'Suspender':'Ativar'}</button>
         </div>
-      </td>
+      </td>`:''}
     </tr>`).join('')}
     </tbody></table></div>`;
 }
