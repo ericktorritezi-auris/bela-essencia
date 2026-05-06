@@ -3498,7 +3498,33 @@ app.patch('/master/api/payments/:id/status', requireMaster, async (req, res) => 
       [status, paid_at, req.params.id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Pagamento não encontrado' });
-    res.json(rows[0]);
+    const payment = rows[0];
+
+    // Ao marcar como pago: ativa tenant e atualiza vencimento
+    if (status === 'paid') {
+      if (payment.type === 'monthly') {
+        const nextExpiry = new Date(paid_at || todayBrasilia());
+        nextExpiry.setMonth(nextExpiry.getMonth() + 1);
+        const expiryStr = nextExpiry.toISOString().slice(0,10);
+        await pool.query(
+          `UPDATE tenants SET active=TRUE, plan_expires_at=$1 WHERE id=$2`,
+          [expiryStr, payment.tenant_id]
+        );
+        await logAction(payment.tenant_id, 'payment_confirmed',
+          `Mensalidade confirmada via painel. Novo vencimento: ${expiryStr}`);
+      } else if (payment.type === 'setup') {
+        // Implantação paga: ativa o tenant (sem alterar plan_expires_at)
+        await pool.query(
+          `UPDATE tenants SET active=TRUE WHERE id=$1`,
+          [payment.tenant_id]
+        );
+        await logAction(payment.tenant_id, 'setup_payment_confirmed',
+          'Implantação confirmada via painel. Tenant ativado.');
+      }
+      _tenantCache.clear();
+    }
+
+    res.json(payment);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
