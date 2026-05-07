@@ -1064,6 +1064,9 @@ async function initDB() {
     // Migração v1.7.0: push_auth nos agendamentos (liga subscription ao agendamento)
     await client.query(`ALTER TABLE appointments ADD COLUMN IF NOT EXISTS push_auth TEXT`);
       await client.query(`ALTER TABLE appointments ADD COLUMN IF NOT EXISTS reminder_sent BOOLEAN NOT NULL DEFAULT FALSE`);
+    // Migração: ordem dos procedimentos
+    await client.query(`ALTER TABLE procedures ADD COLUMN IF NOT EXISTS sort_order INTEGER`);
+    await client.query(`UPDATE procedures SET sort_order = id WHERE sort_order IS NULL`);
 
     // Migração: cidades — adiciona uf e neighborhood em public e em todos os schemas de tenant
     await client.query(`ALTER TABLE cities ADD COLUMN IF NOT EXISTS uf VARCHAR(2)`);
@@ -1081,6 +1084,9 @@ async function initDB() {
     await client.query(`ALTER TABLE appointments ADD COLUMN IF NOT EXISTS consent_version VARCHAR(10) NOT NULL DEFAULT 'v1.0'`);
     // Migração: lembrete push 30min antes
     await client.query(`ALTER TABLE appointments ADD COLUMN IF NOT EXISTS reminder_sent BOOLEAN NOT NULL DEFAULT FALSE`);
+    // Migração: ordem dos procedimentos
+    await client.query(`ALTER TABLE procedures ADD COLUMN IF NOT EXISTS sort_order INTEGER`);
+    await client.query(`UPDATE procedures SET sort_order = id WHERE sort_order IS NULL`);
     // Rename commemorative_dates.name → title if still old column
     await client.query(`DO $$ BEGIN
       IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='commemorative_dates' AND column_name='name') THEN
@@ -1641,10 +1647,25 @@ app.get('/api/auth/me', (req, res) => {
 });
 
 // ── Procedimentos (público: GET; admin: POST/PUT/DELETE) ──────────────────────
+
+// Reordenar procedimentos
+app.patch('/api/procedures/reorder', requireAdmin, async (req, res) => {
+  const { order } = req.body;
+  if (!Array.isArray(order) || !order.length) {
+    return res.status(400).json({ error: 'order deve ser um array de ids' });
+  }
+  try {
+    for (let i = 0; i < order.length; i++) {
+      await req.db('UPDATE procedures SET sort_order=$1 WHERE id=$2', [i + 1, order[i]]);
+    }
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.get('/api/procedures', async (req, res) => {
   try {
     const { rows } = await req.db(
-      'SELECT * FROM procedures WHERE active = TRUE ORDER BY id'
+      'SELECT * FROM procedures WHERE active = TRUE ORDER BY COALESCE(sort_order, id), id'
     );
     res.json(rows);
   } catch (err) {
