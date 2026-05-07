@@ -4509,16 +4509,17 @@ async function manSave() {
 
   try {
     await POST('/api/appointments', {
-      cityId:   Number(MAN.cityId),
-      cityName: c.name,
-      procId:   Number(MAN.procId),
-      procName: p.name,
-      date:     MAN.date,
-      st:       MAN.time,
+      cityId:          Number(MAN.cityId),
+      cityName:        c.name,
+      procId:          Number(MAN.procId),
+      procName:        p.name,
+      date:            MAN.date,
+      st:              MAN.time,
       et,
       name, phone,
-      price: effectivePrice,
-      pt:    p.pt || 'fixed',
+      price:           effectivePrice,
+      pt:              p.pt || 'fixed',
+      privacy_consent: true,  // Agenda manual = consentimento implícito do profissional
     });
     // Reseta ANTES do redirect para estado ficar limpo
     manReset();
