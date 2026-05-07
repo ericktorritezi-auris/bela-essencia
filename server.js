@@ -2148,8 +2148,9 @@ app.get('/api/availability', async (req, res) => {
     if (blk.rowCount > 0) return res.json([]);
 
     // 2. Exclusividade: outra cidade tem LIBERAÇÃO específica neste dia?
-    //    Só released_dates cria exclusividade (profissional comprometida com aquela cidade).
-    //    blocked_dates NÃO cria exclusividade — bloquear Assaí não compromete a profissional lá.
+    //    released_dates (dia inteiro) cria exclusividade total.
+    //    released_slots (horário específico) NÃO bloqueia o dia inteiro —
+    //    apenas os horários específicos ficam indisponíveis (via excSlots no busy).
     const exclusiveClaim = await req.db(
       `SELECT 1 FROM released_dates
        WHERE date=$1 AND cardinality(city_ids)>0 AND NOT ($2 = ANY(city_ids))
@@ -2158,6 +2159,14 @@ app.get('/api/availability', async (req, res) => {
     );
     if (exclusiveClaim.rowCount > 0) return res.json([]);
 
+    // 2b. Verificar se esta cidade tem released_slot neste dia
+    //     mesmo que o dia esteja desabilitado na config — bypassa a config
+    const ownRelSlots = await req.db(
+      `SELECT st, et FROM released_slots
+       WHERE date=$1 AND (cardinality(city_ids)=0 OR $2=ANY(city_ids))`,
+      [date, Number(cityId)]
+    );
+
     // Resolve config de horário para esta cidade+dia
     const [y,m,d] = date.split('-').map(Number);
     const dayOfWeek = new Date(y, m-1, d).getDay();
@@ -2165,6 +2174,36 @@ app.get('/api/availability', async (req, res) => {
 
     // Dia desabilitado na config — verifica se há liberação para esta data/cidade
     if (!cfg.is_active || !cfg.work_start || !cfg.work_end) {
+      // Verifica se já temos released_slots para esta cidade (já carregado acima)
+      if (ownRelSlots.rowCount > 0) {
+        const pResX = await req.db(
+          `SELECT p.dur FROM procedures p
+           LEFT JOIN city_procedures cp ON cp.proc_id=p.id AND cp.city_id=$2
+           WHERE p.id=$1 AND p.active=TRUE AND (cp.enabled IS NULL OR cp.enabled=TRUE)`,
+          [procId, cityId]
+        );
+        if (pResX.rowCount) {
+          const durX = pResX.rows[0].dur;
+          const [aResX, bkSlotsX, excSlotsX] = await Promise.all([
+            excludeId
+              ? req.db(`SELECT st, et FROM appointments WHERE date=$1 AND status!='cancelled' AND id!=$2`, [date, excludeId])
+              : req.db(`SELECT st, et FROM appointments WHERE date=$1 AND status!='cancelled'`, [date]),
+            req.db(`SELECT st, et FROM blocked_slots WHERE date=$1 AND (cardinality(city_ids)=0 OR $2=ANY(city_ids))`, [date, Number(cityId)]),
+            req.db(`SELECT st, et FROM released_slots WHERE date=$1 AND cardinality(city_ids)>0 AND NOT ($2 = ANY(city_ids))`, [date, Number(cityId)]),
+          ]);
+          const busyX = [...aResX.rows, ...bkSlotsX.rows, ...excSlotsX.rows].map(r => ({ s: timeToMin(r.st), e: timeToMin(r.et) }));
+          const freeSlotsX = [];
+          for (const row of ownRelSlots.rows) {
+            const slotS = timeToMin(row.st);
+            const slotE = timeToMin(row.et);
+            for (let s = slotS; s + durX <= slotE; s += SLOT) {
+              const e = s + durX;
+              if (s > nowMinBRT && !busyX.some(b => s < b.e && e > b.s)) freeSlotsX.push(minToTime(s));
+            }
+          }
+          if (freeSlotsX.length > 0) return res.json(freeSlotsX);
+        }
+      }
       // Tenta released_dates (dia inteiro liberado)
       const relDay = await req.db(
         `SELECT * FROM released_dates
