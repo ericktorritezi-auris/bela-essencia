@@ -398,6 +398,12 @@ tr:hover td{background:#FAF3F6}
 .appt-card-actions .act-btn{flex:1;text-align:center;padding:9px 6px;font-size:12px;margin:0}
 
 /* ── PROC CARDS (mobile) ── */
+.drag-handle{cursor:grab;color:var(--text-light);font-size:16px;padding:0 8px;user-select:none;-webkit-user-select:none;touch-action:none;line-height:1}
+.drag-handle:active{cursor:grabbing}
+tr.dragging{opacity:.4;background:var(--rose-light)!important}
+tr.drag-over{border-top:2.5px solid var(--rose)!important}
+.proc-card.dragging{opacity:.4;transform:scale(.98)}
+.proc-card.drag-over{border-top:2.5px solid var(--rose)!important}
 .proc-card{background:white;border:1px solid var(--border);border-radius:var(--r-md);padding:14px 15px;margin-bottom:10px;box-shadow:var(--sh-sm)}
 .proc-card-name{font-weight:700;font-size:14px;color:var(--dark);margin-bottom:6px}
 .proc-card-meta{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
@@ -1112,7 +1118,7 @@ tr:hover td{background:#FAF3F6}
           <div id="sec-procs" class="hidden">
             <div class="tbl-wrap">
               <div class="tbl-head"><div class="tbl-ttl">Procedimentos</div><button class="btn btn-primary" onclick="openProcModal(null)" style="width:auto;padding:8px 16px">+ Novo</button></div>
-              <div style="overflow-x:auto" id="procs-table-wrap"><table><thead><tr><th>Procedimento</th><th>Duração</th><th>Valor</th><th>Ações</th></tr></thead><tbody id="procs-body"></tbody></table></div>
+              <div style="overflow-x:auto" id="procs-table-wrap"><table><thead><tr><th style="width:32px"></th><th>Procedimento</th><th>Duração</th><th>Valor</th><th>Ações</th></tr></thead><tbody id="procs-body"></tbody></table></div>
               <div id="proc-cards-mobile" style="padding:4px 0"></div>
             </div>
           </div>
@@ -3030,7 +3036,8 @@ async function renderProcsAdmin() {
     // Tabela desktop
     if (tbody) {
       tbody.innerHTML = list.map(p => `
-        <tr>
+        <tr data-id="${p.id}" draggable="true">
+          <td><span class="drag-handle" title="Arrastar para reordenar">⠿</span></td>
           <td style="font-weight:700">${p.name}</td>
           <td>${fmtDur(p.dur)}</td>
           <td style="color:var(--gold);font-weight:700">${_valuesVisible ? fmtPrice(p) : '<span class="val-mask">••••••</span>'}</td>
@@ -3040,23 +3047,30 @@ async function renderProcsAdmin() {
           </td>
         </tr>
       `).join('');
+      initProcDragDesktop(tbody);
     }
 
     // Cards mobile
     if (cardsWrap) {
       cardsWrap.innerHTML = list.map(p => `
-        <div class="proc-card">
-          <div class="proc-card-name">${p.name}</div>
-          <div class="proc-card-meta">
-            <span class="badge-dur">⏱ ${fmtDur(p.dur)}</span>
-            ${p.pt !== 'none' ? `<span class="badge-price">${_valuesVisible ? fmtPrice(p) : '••••••'}</span>` : ''}
+        <div class="proc-card" data-id="${p.id}">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span class="drag-handle" title="Arrastar para reordenar">⠿</span>
+            <div style="flex:1">
+              <div class="proc-card-name">${p.name}</div>
+              <div class="proc-card-meta">
+                <span class="badge-dur">⏱ ${fmtDur(p.dur)}</span>
+                ${p.pt !== 'none' ? `<span class="badge-price">${_valuesVisible ? fmtPrice(p) : '••••••'}</span>` : ''}
+              </div>
+            </div>
           </div>
-          <div class="proc-card-actions">
+          <div class="proc-card-actions" style="margin-top:10px">
             <button class="act-btn" onclick="openProcModal(${p.id})">Editar</button>
             <button class="act-btn danger" onclick="deleteProc(${p.id})" style="color:var(--error);border-color:var(--error)">Remover</button>
           </div>
         </div>
       `).join('');
+      initProcDragMobile(cardsWrap);
     }
   } catch(e) {
     const msg = `Erro ao carregar: ${e.message}`;
@@ -3064,6 +3078,95 @@ async function renderProcsAdmin() {
     if (cardsWrap) cardsWrap.innerHTML = `<div style="padding:16px;color:var(--error);font-size:13px">${msg}</div>`;
   }
 }
+// ── Drag & Drop Procedimentos ─────────────────────────────────────
+async function saveProcOrder(container, selector) {
+  const ids = [...container.querySelectorAll(selector)]
+    .map(el => Number(el.dataset.id))
+    .filter(Boolean);
+  if (!ids.length) return;
+  try {
+    await PATCH('/api/procedures/reorder', { order: ids });
+    clearProcsCache();
+  } catch(e) { showToast('Erro ao salvar ordem: ' + e.message, 'error'); }
+}
+
+function initProcDragDesktop(tbody) {
+  let dragged = null;
+  tbody.querySelectorAll('tr[data-id]').forEach(row => {
+    row.addEventListener('dragstart', e => {
+      dragged = row;
+      setTimeout(() => row.classList.add('dragging'), 0);
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    row.addEventListener('dragend', () => {
+      row.classList.remove('dragging');
+      tbody.querySelectorAll('tr').forEach(r => r.classList.remove('drag-over'));
+      saveProcOrder(tbody, 'tr[data-id]');
+    });
+    row.addEventListener('dragover', e => {
+      e.preventDefault();
+      tbody.querySelectorAll('tr').forEach(r => r.classList.remove('drag-over'));
+      if (row !== dragged) row.classList.add('drag-over');
+    });
+    row.addEventListener('drop', e => {
+      e.preventDefault();
+      if (dragged && row !== dragged) {
+        const rows = [...tbody.querySelectorAll('tr[data-id]')];
+        const di = rows.indexOf(dragged), ti = rows.indexOf(row);
+        if (di < ti) tbody.insertBefore(dragged, row.nextSibling);
+        else tbody.insertBefore(dragged, row);
+      }
+    });
+  });
+}
+
+function initProcDragMobile(wrap) {
+  let dragged = null, startY = 0, origIndex = 0;
+  wrap.querySelectorAll('.proc-card[data-id]').forEach(card => {
+    const handle = card.querySelector('.drag-handle');
+    if (!handle) return;
+    handle.addEventListener('touchstart', e => {
+      dragged = card;
+      startY = e.touches[0].clientY;
+      origIndex = [...wrap.children].indexOf(card);
+      card.classList.add('dragging');
+      e.preventDefault();
+    }, { passive: false });
+    handle.addEventListener('touchmove', e => {
+      if (!dragged) return;
+      e.preventDefault();
+      const y = e.touches[0].clientY;
+      const cards = [...wrap.querySelectorAll('.proc-card[data-id]')];
+      wrap.querySelectorAll('.proc-card').forEach(c => c.classList.remove('drag-over'));
+      const target = cards.find(c => {
+        if (c === dragged) return false;
+        const r = c.getBoundingClientRect();
+        return y >= r.top && y <= r.bottom;
+      });
+      if (target) target.classList.add('drag-over');
+    }, { passive: false });
+    handle.addEventListener('touchend', e => {
+      if (!dragged) return;
+      wrap.querySelectorAll('.proc-card').forEach(c => c.classList.remove('drag-over', 'dragging'));
+      const y = e.changedTouches[0].clientY;
+      const cards = [...wrap.querySelectorAll('.proc-card[data-id]')];
+      const target = cards.find(c => {
+        if (c === dragged) return false;
+        const r = c.getBoundingClientRect();
+        return y >= r.top && y <= r.bottom;
+      });
+      if (target) {
+        const ti = cards.indexOf(target);
+        const di = cards.indexOf(dragged);
+        if (di < ti) wrap.insertBefore(dragged, target.nextSibling);
+        else wrap.insertBefore(dragged, target);
+      }
+      dragged = null;
+      saveProcOrder(wrap, '.proc-card[data-id]');
+    });
+  });
+}
+
 function openProcModal(id) {
   document.getElementById('modal-card').innerHTML=`
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
