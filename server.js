@@ -2848,7 +2848,18 @@ app.get('/api/cities', async (req, res) => {
          ORDER BY date`,
         [today, city.id]
       );
-      city.specificDates = rd.rows.map(r => r.date.slice(0,10));
+      // Datas com horários específicos liberados (released_slots) — também habilitam o dia no calendário
+      const rs = await req.db(
+        `SELECT DISTINCT date::text
+         FROM released_slots
+         WHERE date >= $1 AND (cardinality(city_ids)=0 OR $2=ANY(city_ids))
+         ORDER BY date`,
+        [today, city.id]
+      );
+      const rdDates  = rd.rows.map(r => r.date.slice(0,10));
+      const rsDates  = rs.rows.map(r => r.date.slice(0,10));
+      // União das duas fontes — sem duplicatas
+      city.specificDates = [...new Set([...rdDates, ...rsDates])];
       city.specificDateConfigs = rd.rows; // inclui horários para uso no motor
     }
 
