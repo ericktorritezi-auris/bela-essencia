@@ -195,7 +195,7 @@ async function createTenantSchema(schemaName) {
       `CREATE TABLE IF NOT EXISTS procedures (
         id SERIAL PRIMARY KEY, name VARCHAR(200) NOT NULL, dur INTEGER NOT NULL,
         price NUMERIC(10,2), pt VARCHAR(10) NOT NULL DEFAULT 'fixed',
-        description TEXT,
+        description TEXT, sort_order INTEGER,
         active BOOLEAN NOT NULL DEFAULT TRUE, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )`,
       `CREATE TABLE IF NOT EXISTS cities (
@@ -1064,10 +1064,6 @@ async function initDB() {
     // Migração v1.7.0: push_auth nos agendamentos (liga subscription ao agendamento)
     await client.query(`ALTER TABLE appointments ADD COLUMN IF NOT EXISTS push_auth TEXT`);
       await client.query(`ALTER TABLE appointments ADD COLUMN IF NOT EXISTS reminder_sent BOOLEAN NOT NULL DEFAULT FALSE`);
-    // Migração: ordem dos procedimentos
-    await client.query(`ALTER TABLE procedures ADD COLUMN IF NOT EXISTS sort_order INTEGER`);
-    await client.query(`UPDATE procedures SET sort_order = id WHERE sort_order IS NULL`);
-
     // Migração: cidades — adiciona uf e neighborhood em public e em todos os schemas de tenant
     await client.query(`ALTER TABLE cities ADD COLUMN IF NOT EXISTS uf VARCHAR(2)`);
     await client.query(`ALTER TABLE cities ADD COLUMN IF NOT EXISTS neighborhood VARCHAR(100)`);
@@ -1084,9 +1080,6 @@ async function initDB() {
     await client.query(`ALTER TABLE appointments ADD COLUMN IF NOT EXISTS consent_version VARCHAR(10) NOT NULL DEFAULT 'v1.0'`);
     // Migração: lembrete push 30min antes
     await client.query(`ALTER TABLE appointments ADD COLUMN IF NOT EXISTS reminder_sent BOOLEAN NOT NULL DEFAULT FALSE`);
-    // Migração: ordem dos procedimentos
-    await client.query(`ALTER TABLE procedures ADD COLUMN IF NOT EXISTS sort_order INTEGER`);
-    await client.query(`UPDATE procedures SET sort_order = id WHERE sort_order IS NULL`);
     // Rename commemorative_dates.name → title if still old column
     await client.query(`DO $$ BEGIN
       IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='commemorative_dates' AND column_name='name') THEN
@@ -1096,6 +1089,8 @@ async function initDB() {
     // Migration em todos os schemas de tenant existentes
     for (const { schema_name } of (await client.query(`SELECT schema_name FROM tenants WHERE schema_name IS NOT NULL`)).rows) {
       try { await client.query(`ALTER TABLE "${schema_name}".procedures ADD COLUMN IF NOT EXISTS description TEXT`); } catch {}
+      try { await client.query(`ALTER TABLE "${schema_name}".procedures ADD COLUMN IF NOT EXISTS sort_order INTEGER`); } catch {}
+      try { await client.query(`UPDATE "${schema_name}".procedures SET sort_order = id WHERE sort_order IS NULL`); } catch {}
       try { await client.query(`ALTER TABLE "${schema_name}".appointments ADD COLUMN IF NOT EXISTS privacy_consent BOOLEAN NOT NULL DEFAULT FALSE`); } catch {}
       try { await client.query(`ALTER TABLE "${schema_name}".appointments ADD COLUMN IF NOT EXISTS consent_at TIMESTAMPTZ`); } catch {}
       try { await client.query(`ALTER TABLE "${schema_name}".appointments ADD COLUMN IF NOT EXISTS consent_version VARCHAR(10) NOT NULL DEFAULT 'v1.0'`); } catch {}
@@ -1148,6 +1143,8 @@ async function initDB() {
     );
     for (const { schema_name } of schemas) {
       try {
+        await client.query(`ALTER TABLE "${schema_name}".procedures ADD COLUMN IF NOT EXISTS sort_order INTEGER`);
+        await client.query(`UPDATE "${schema_name}".procedures SET sort_order = id WHERE sort_order IS NULL`);
         await client.query(`ALTER TABLE "${schema_name}".cities ADD COLUMN IF NOT EXISTS uf VARCHAR(2)`);
         await client.query(`ALTER TABLE "${schema_name}".cities ADD COLUMN IF NOT EXISTS neighborhood VARCHAR(100)`);
         await client.query(`ALTER TABLE "${schema_name}".admin_profile ADD COLUMN IF NOT EXISTS phone VARCHAR(30)`);
