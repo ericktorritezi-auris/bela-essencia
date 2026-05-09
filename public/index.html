@@ -60,7 +60,25 @@ h1,h2,h3,h4{font-family:'Cormorant Garamond',serif}
 .toast.ok{background:var(--success)}
 
 /* ── HEADER ── */
-.site-header{background:var(--white);border-bottom:1px solid var(--border);padding:14px 20px;text-align:center;position:sticky;top:0;z-index:100;box-shadow:var(--sh-sm)}
+.site-header{background:var(--white);border-bottom:1px solid var(--border);padding:14px 20px;text-align:center;position:sticky;top:0;z-index:100;box-shadow:var(--sh-sm);position:relative}
+.btn-sobre{position:absolute;right:16px;top:50%;transform:translateY(-50%);display:flex;align-items:center;gap:5px;background:var(--rose-light);border:1px solid var(--border);border-radius:50px;padding:6px 12px;font-size:12px;font-weight:700;color:var(--rose);cursor:pointer;font-family:'Nunito',sans-serif;white-space:nowrap;-webkit-tap-highlight-color:transparent}
+.btn-sobre:active{opacity:.8}
+.sobre-overlay{position:fixed;inset:0;z-index:999;background:rgba(30,10,18,.5);backdrop-filter:blur(4px);opacity:0;pointer-events:none;transition:opacity .3s}
+.sobre-overlay.open{opacity:1;pointer-events:all}
+.sobre-sheet{position:fixed;bottom:0;left:0;right:0;z-index:1000;background:var(--cream);border-radius:24px 24px 0 0;max-height:92svh;overflow-y:auto;transform:translateY(100%);transition:transform .35s cubic-bezier(.32,.72,0,1);box-shadow:0 -8px 40px rgba(0,0,0,.2)}
+.sobre-sheet.open{transform:translateY(0)}
+.sobre-handle{width:40px;height:4px;border-radius:4px;background:var(--border);margin:12px auto 0}
+.prof-card-sobre{margin:16px 20px 0;background:linear-gradient(135deg,var(--rose),var(--rose-deep,#7b3050));border-radius:16px;padding:22px 18px;display:flex;align-items:center;gap:14px;position:relative;overflow:hidden}
+.prof-card-sobre::before{content:'';position:absolute;top:-30px;right:-30px;width:110px;height:110px;background:rgba(255,255,255,.06);border-radius:50%}
+.prof-photo-sobre{width:68px;height:68px;border-radius:50%;border:3px solid rgba(255,255,255,.4);background:rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0;overflow:hidden}
+.prof-photo-sobre img{width:100%;height:100%;object-fit:cover}
+.sobre-body{padding:20px 20px 32px}
+.sobre-sec-title{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:var(--rose);margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.sobre-sec-title::after{content:'';flex:1;height:1px;background:var(--border)}
+.sobre-bio{font-size:14px;color:var(--text);line-height:1.8}
+.sobre-tags{display:flex;flex-wrap:wrap;gap:7px;margin-top:4px}
+.sobre-tag{background:var(--rose-light);border:1px solid var(--border);border-radius:50px;padding:5px 12px;font-size:12px;font-weight:700;color:var(--rose)}
+@media(min-width:600px){.sobre-sheet{max-width:520px;left:50%;transform:translateX(-50%) translateY(100%)}.sobre-sheet.open{transform:translateX(-50%) translateY(0)}}
 .brand-name{font-family:'Cormorant Garamond',serif;font-size:30px;font-weight:600;color:var(--rose);letter-spacing:.04em;line-height:1.1}
 .brand-name em{font-style:italic;color:var(--gold)}
 .brand-tag{font-size:10px;color:var(--text-light);letter-spacing:.16em;text-transform:uppercase;margin-top:1px}
@@ -624,7 +642,36 @@ tr.drag-over{border-top:2.5px solid var(--rose)!important}
   <header class="site-header">
     <div class="brand-name" data-brand-logo>Belle <em>Planner</em></div>
     <div class="brand-tag" id="prof-tag" data-brand-tagline>Agendamento Online</div>
+    <button class="btn-sobre hidden" id="btn-sobre" onclick="abrirSobre()">👤 Sobre</button>
   </header>
+  <!-- OVERLAY SOBRE -->
+  <div class="sobre-overlay" id="sobre-overlay" onclick="fecharSobre()"></div>
+  <!-- MODAL SOBRE O PROFISSIONAL -->
+  <div class="sobre-sheet" id="sobre-sheet">
+    <div class="sobre-handle"></div>
+    <div style="padding:14px 20px 0;display:flex;justify-content:flex-end">
+      <button onclick="fecharSobre()" style="width:34px;height:34px;border-radius:50%;background:var(--rose-light);border:none;font-size:16px;cursor:pointer;color:var(--rose);display:flex;align-items:center;justify-content:center">✕</button>
+    </div>
+    <div class="prof-card-sobre" id="prof-card-sobre">
+      <div class="prof-photo-sobre" id="prof-photo-sobre"></div>
+      <div style="flex:1;position:relative;z-index:1">
+        <div style="font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:700;color:#fff;line-height:1.1;margin-bottom:4px" id="prof-name-sobre"></div>
+        <div style="font-size:12px;color:rgba(255,255,255,.85);line-height:1.5" id="prof-sub-sobre"></div>
+      </div>
+    </div>
+    <div class="sobre-body">
+      <div class="sobre-sec-title">Sobre</div>
+      <div class="sobre-bio" id="sobre-bio-text"></div>
+      <div style="margin-top:22px">
+        <div class="sobre-sec-title">Formações &amp; Especialidades</div>
+        <div class="sobre-tags" id="sobre-tags"></div>
+      </div>
+      <button onclick="fecharSobre()" style="width:100%;padding:14px;background:linear-gradient(135deg,var(--rose),var(--rose-deep,#7b3050));color:#fff;border:none;border-radius:12px;font-family:'Nunito',sans-serif;font-size:15px;font-weight:800;cursor:pointer;margin-top:24px">
+        📅 Agendar agora
+      </button>
+    </div>
+    <div style="text-align:center;padding:0 20px 28px;font-size:11px;color:var(--text-light)" id="sobre-footer"></div>
+  </div>
   <div class="booking-wrap" id="bk-main">
     <div class="step-dots" id="step-dots">
       <div class="dot active"></div><div class="dot"></div><div class="dot"></div>
@@ -2137,7 +2184,58 @@ async function confirmBooking() {
   }
 }
 
-// ── WA SELF SEND ────────────────────────────────────────────────
+// ── SOBRE O PROFISSIONAL ─────────────────────────────────────────
+function initSobre(cfg) {
+  // Só exibe se TODOS os campos estiverem preenchidos
+  const hasAll = cfg.prof_photo_url && cfg.prof_profession &&
+                 cfg.prof_city && cfg.prof_bio && cfg.prof_specialties;
+  const btn = document.getElementById('btn-sobre');
+  if (!btn) return;
+  if (!hasAll) { btn.classList.add('hidden'); return; }
+  btn.classList.remove('hidden');
+
+  // Popular modal
+  const photoEl = document.getElementById('prof-photo-sobre');
+  if (photoEl) {
+    const img = document.createElement('img');
+    img.src = cfg.prof_photo_url;
+    img.alt = cfg.owner_name || cfg.business_name || '';
+    img.onerror = () => { photoEl.textContent = '👩'; };
+    photoEl.innerHTML = '';
+    photoEl.appendChild(img);
+  }
+  const nameEl = document.getElementById('prof-name-sobre');
+  if (nameEl) nameEl.textContent = cfg.owner_name || cfg.business_name || '';
+
+  const subEl = document.getElementById('prof-sub-sobre');
+  if (subEl) subEl.innerHTML = (cfg.prof_profession || '') + (cfg.prof_city ? '<br>' + cfg.prof_city : '');
+
+  const bioEl = document.getElementById('sobre-bio-text');
+  if (bioEl) bioEl.innerHTML = (cfg.prof_bio || '').replace(/\n/g,'<br>');
+
+  const tagsEl = document.getElementById('sobre-tags');
+  if (tagsEl) {
+    const tags = (cfg.prof_specialties || '').split(',').map(s => s.trim()).filter(Boolean);
+    tagsEl.innerHTML = tags.map(t => `<span class="sobre-tag">${t}</span>`).join('');
+  }
+
+  const footer = document.getElementById('sobre-footer');
+  if (footer) footer.textContent = (cfg.business_name || 'Belle Planner') + ' · Agendamento Online';
+}
+
+function abrirSobre() {
+  document.getElementById('sobre-overlay').classList.add('open');
+  document.getElementById('sobre-sheet').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function fecharSobre() {
+  document.getElementById('sobre-overlay').classList.remove('open');
+  document.getElementById('sobre-sheet').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+// ── WA SELF SEND ─────────────────────────────────────────────────
 function sendWaSelf() {
   const p = BK.procData;
   const c = CITIES.find(x => Number(x.id) === Number(BK.cityId));
@@ -5629,6 +5727,8 @@ async function applyBranding() {
 
   document.querySelectorAll('[data-brand-logo]').forEach(el => renderBrandEl(el, 36, false));
   document.querySelectorAll('[data-admin-brand]').forEach(el => renderBrandEl(el, 32, true));
+  // Inicializar botão Sobre o Profissional
+  initSobre(cfg);
 
   // Favicon
   if (cfg.favicon_url) {

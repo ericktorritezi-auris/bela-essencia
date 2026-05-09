@@ -1383,6 +1383,16 @@ async function openEditModal(id) {
       <div class="fg"><label>Mensalidade (R$)</label><input class="fi" id="e-monthly" type="number" value="${t.monthly_fee||100}" min="0" step="0.01"></div>
       <div class="fg"><label>Setup (R$)</label><input class="fi" id="e-setup" type="number" value="${t.setup_fee||200}" min="0" step="0.01"></div>
     </div>
+    <div style="margin:16px 0 10px;padding-top:14px;border-top:1px solid var(--border)">
+      <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:12px">👤 Sobre o Profissional <span style="font-weight:400;color:var(--muted);font-size:10px">(todos os campos para exibir o botão)</span></div>
+      <div class="fg"><label>Foto URL</label><input class="fi" id="e-prof-photo" value="${t.prof_photo_url||''}" placeholder="https://..."></div>
+      <div class="fg-row">
+        <div class="fg"><label>Profissão</label><input class="fi" id="e-prof-profession" value="${t.prof_profession||''}" placeholder="Ex: Esteticista · Micropigmentadora"></div>
+        <div class="fg"><label>Cidade</label><input class="fi" id="e-prof-city" value="${t.prof_city||''}" placeholder="Ex: São Sebastião da Amoreira – PR"></div>
+      </div>
+      <div class="fg"><label>Bio</label><textarea class="fi" id="e-prof-bio" rows="3" style="resize:vertical;font-family:inherit;font-size:13px" placeholder="Texto livre sobre o profissional...">${t.prof_bio||''}</textarea></div>
+      <div class="fg"><label>Formações &amp; Especialidades</label><textarea class="fi" id="e-prof-specialties" rows="2" style="resize:vertical;font-family:inherit;font-size:13px" placeholder="Ex: Micropigmentação de Sobrancelhas, Microblading, Design...">${t.prof_specialties||''}</textarea></div>
+    </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('edit')">Cancelar</button>
       <button class="btn btn-primary" onclick="saveEdit()">Salvar alterações</button>
@@ -1403,8 +1413,13 @@ async function saveEdit() {
     tagline:        document.getElementById('e-tagline').value,
     primary_color:  document.getElementById('e-c1h').value,
     secondary_color:document.getElementById('e-c2h').value,
-    logo_url:       document.getElementById('e-logo').value,
+    logo_url:         document.getElementById('e-logo').value,
     resend_from_email: document.getElementById('e-fromemail').value,
+    prof_photo_url:   document.getElementById('e-prof-photo').value.trim(),
+    prof_profession:  document.getElementById('e-prof-profession').value.trim(),
+    prof_city:        document.getElementById('e-prof-city').value.trim(),
+    prof_bio:         document.getElementById('e-prof-bio').value.trim(),
+    prof_specialties: document.getElementById('e-prof-specialties').value.trim(),
     monthly_fee:    document.getElementById('e-monthly').value,
     setup_fee:      document.getElementById('e-setup').value,
     active: true,
