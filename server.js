@@ -3485,7 +3485,7 @@ app.put('/master/api/tenants/:id', requireMaster, async (req, res) => {
       [business_name,tagline||'',primary_color,secondary_color,
        logo_url||null,whatsapp_number||'',resend_from_email||'',id]
     );
-    invalidateTenantCache(domain_custom || subdomain);
+    _tenantCache.clear(); // Limpa cache completo — garante que qualquer alias do domínio seja atualizado
     await logAction(id, 'tenant_updated', `Tenant ${id} atualizado`);
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
