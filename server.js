@@ -41,7 +41,9 @@ async function getTenantByHost(host) {
       `SELECT t.*, tc.primary_color, tc.secondary_color, tc.accent_color,
               tc.logo_url, tc.favicon_url, tc.business_name, tc.tagline,
               tc.whatsapp_number, tc.resend_from_email, tc.admin_user,
-              tc.admin_pass_hash, tc.timezone
+              tc.admin_pass_hash, tc.timezone,
+              tc.prof_photo_url, tc.prof_profession, tc.prof_city,
+              tc.prof_bio, tc.prof_specialties
        FROM tenants t
        LEFT JOIN tenant_configs tc ON tc.tenant_id = t.id
        WHERE (
@@ -1091,6 +1093,12 @@ async function initDB() {
       try { await client.query(`ALTER TABLE "${schema_name}".procedures ADD COLUMN IF NOT EXISTS description TEXT`); } catch {}
       try { await client.query(`ALTER TABLE "${schema_name}".procedures ADD COLUMN IF NOT EXISTS sort_order INTEGER`); } catch {}
       try { await client.query(`UPDATE "${schema_name}".procedures SET sort_order = id WHERE sort_order IS NULL`); } catch {}
+      // Migração: campos "Sobre o Profissional"
+      try { await client.query(`ALTER TABLE tenant_configs ADD COLUMN IF NOT EXISTS prof_photo_url TEXT`); } catch {}
+      try { await client.query(`ALTER TABLE tenant_configs ADD COLUMN IF NOT EXISTS prof_profession VARCHAR(200)`); } catch {}
+      try { await client.query(`ALTER TABLE tenant_configs ADD COLUMN IF NOT EXISTS prof_city VARCHAR(100)`); } catch {}
+      try { await client.query(`ALTER TABLE tenant_configs ADD COLUMN IF NOT EXISTS prof_bio TEXT`); } catch {}
+      try { await client.query(`ALTER TABLE tenant_configs ADD COLUMN IF NOT EXISTS prof_specialties TEXT`); } catch {}
       try { await client.query(`ALTER TABLE "${schema_name}".appointments ADD COLUMN IF NOT EXISTS privacy_consent BOOLEAN NOT NULL DEFAULT FALSE`); } catch {}
       try { await client.query(`ALTER TABLE "${schema_name}".appointments ADD COLUMN IF NOT EXISTS consent_at TIMESTAMPTZ`); } catch {}
       try { await client.query(`ALTER TABLE "${schema_name}".appointments ADD COLUMN IF NOT EXISTS consent_version VARCHAR(10) NOT NULL DEFAULT 'v1.0'`); } catch {}
@@ -3326,7 +3334,8 @@ app.get('/master/api/tenants', requireMaster, async (req, res) => {
              t.monthly_fee, t.setup_fee, t.created_at, t.exempt, t.trial_ends_at,
              tc.primary_color, tc.secondary_color, tc.business_name,
              tc.tagline, tc.whatsapp_number, tc.resend_from_email, tc.admin_user,
-             tc.logo_url,
+             tc.logo_url, tc.prof_photo_url, tc.prof_profession,
+             tc.prof_city, tc.prof_bio, tc.prof_specialties,
              (SELECT COUNT(*) FROM payments p WHERE p.tenant_id=t.id AND p.status='paid') as payment_count,
              (SELECT COALESCE(SUM(amount),0) FROM payments p WHERE p.tenant_id=t.id AND p.status='paid') as total_paid
       FROM tenants t LEFT JOIN tenant_configs tc ON tc.tenant_id=t.id
@@ -3465,7 +3474,8 @@ app.put('/master/api/tenants/:id', requireMaster, async (req, res) => {
   const { id } = req.params;
   const { name, owner_name, owner_email, owner_phone, domain_custom, subdomain,
           plan_expires_at, active, business_name, tagline, primary_color,
-          secondary_color, logo_url, whatsapp_number, resend_from_email } = req.body;
+          secondary_color, logo_url, whatsapp_number, resend_from_email,
+          prof_photo_url, prof_profession, prof_city, prof_bio, prof_specialties } = req.body;
   try {
     const updMFee = req.body.monthly_fee !== undefined ? Number(req.body.monthly_fee) : null;
     const updSFee = req.body.setup_fee    !== undefined ? Number(req.body.setup_fee)    : null;
@@ -3481,9 +3491,13 @@ app.put('/master/api/tenants/:id', requireMaster, async (req, res) => {
     await pool.query(
       `UPDATE tenant_configs SET business_name=$1,tagline=$2,primary_color=$3,
          secondary_color=$4,logo_url=$5,whatsapp_number=$6,resend_from_email=$7,
+         prof_photo_url=$9,prof_profession=$10,prof_city=$11,
+         prof_bio=$12,prof_specialties=$13,
          updated_at=NOW() WHERE tenant_id=$8`,
       [business_name,tagline||'',primary_color,secondary_color,
-       logo_url||null,whatsapp_number||'',resend_from_email||'',id]
+       logo_url||null,whatsapp_number||'',resend_from_email||'',id,
+       prof_photo_url||null,prof_profession||null,prof_city||null,
+       prof_bio||null,prof_specialties||null]
     );
     _tenantCache.clear(); // Limpa cache completo — garante que qualquer alias do domínio seja atualizado
     await logAction(id, 'tenant_updated', `Tenant ${id} atualizado`);
@@ -4685,6 +4699,12 @@ app.get('/api/config', async (req, res) => {
         favicon_url:     req.tenant.favicon_url      || null,
         whatsapp_number: req.tenant.whatsapp_number  || '',
         timezone:        req.tenant.timezone         || 'America/Sao_Paulo',
+        owner_name:      req.tenant.owner_name       || null,
+        prof_photo_url:  req.tenant.prof_photo_url   || null,
+        prof_profession: req.tenant.prof_profession  || null,
+        prof_city:       req.tenant.prof_city        || null,
+        prof_bio:        req.tenant.prof_bio         || null,
+        prof_specialties:req.tenant.prof_specialties || null,
       });
     }
     res.json({
