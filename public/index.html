@@ -3563,6 +3563,19 @@ function exportLgpdCsv() {
 }
 
 // ── COCKPIT MONTH DETAIL ─────────────────────────────────────────────────────
+async // Helper: card de insight para o cockpit
+function _cockpitCard(icon, title, value, label) {
+  return '<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;' +
+    'background:var(--cream);border-radius:var(--r-sm);margin-bottom:8px;border:1px solid var(--border)">' +
+    '<span style="font-size:22px;flex-shrink:0">' + icon + '</span>' +
+    '<div style="flex:1;min-width:0">' +
+      '<div style="font-weight:700;font-size:13px;color:var(--dark);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + title + '</div>' +
+      '<div style="font-size:11px;color:var(--text-light);margin-top:2px">' + label + '</div>' +
+    '</div>' +
+    '<div style="font-size:12px;font-weight:700;color:var(--rose);text-align:right;flex-shrink:0;max-width:120px">' + value + '</div>' +
+  '</div>';
+}
+
 async function openCockpitMonth(ym) {
   const overlay = document.getElementById('cm-overlay');
   const titleEl = document.getElementById('cm-title');
@@ -3636,7 +3649,83 @@ async function openCockpitMonth(ym) {
       html_body = '<div style="text-align:center;padding:24px;color:var(--text-light)">Nenhum dado disponível.</div>';
     }
 
-    bodyEl.innerHTML = html_body;
+    // ── ANÁLISES ADICIONAIS ──────────────────────────────────────
+    const sep = '<div style="height:1px;background:var(--border);margin:20px 0"></div>';
+
+    // 1. CIDADES
+    if (d.by_city && d.by_city.length > 0) {
+      html_body += sep;
+      html_body += '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-light);margin-bottom:10px">📍 Desempenho por Cidade</div>';
+      const topCidadeCnt   = d.by_city.reduce((a,b) => b.cnt   > a.cnt   ? b : a);
+      const topCidadeTotal = d.by_city.reduce((a,b) => b.total > a.total ? b : a);
+      const sameCidade = topCidadeCnt.name === topCidadeTotal.name;
+      if (sameCidade) {
+        html_body += _cockpitCard('🏆', topCidadeCnt.name, topCidadeCnt.cnt + ' ag. · ' + v(topCidadeCnt.total), 'Mais agendamentos e maior resultado');
+      } else {
+        html_body += _cockpitCard('📅', topCidadeCnt.name, topCidadeCnt.cnt + ' ag.', 'Cidade com mais agendamentos');
+        html_body += _cockpitCard('💰', topCidadeTotal.name, v(topCidadeTotal.total), 'Cidade com maior resultado financeiro');
+      }
+      if (d.by_city.length > 1) {
+        html_body += '<div style="margin-top:10px;overflow-x:auto"><table style="width:100%;font-size:12px;border-collapse:collapse">';
+        d.by_city.forEach(c => {
+          html_body += '<tr style="border-bottom:1px solid var(--border)">' +
+            '<td style="padding:7px 4px;color:var(--dark);font-weight:600">' + c.name + '</td>' +
+            '<td style="padding:7px 4px;text-align:center;color:var(--text-light)">' + c.cnt + ' ag.</td>' +
+            '<td style="padding:7px 4px;text-align:right;color:var(--rose);font-weight:700">' + v(c.total) + '</td></tr>';
+        });
+        html_body += '</table></div>';
+      }
+    }
+
+    // 2. MELHOR DIA DO MÊS
+    if (d.by_day && d.by_day.length > 0) {
+      html_body += sep;
+      html_body += '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-light);margin-bottom:10px">📆 Melhores Dias do Mês</div>';
+      const topDiaCnt   = d.by_day.reduce((a,b) => b.cnt   > a.cnt   ? b : a);
+      const topDiaTotal = d.by_day.reduce((a,b) => b.total > a.total ? b : a);
+      const sameDia = topDiaCnt.date === topDiaTotal.date;
+      const fmtD = s => { const pts = s.split('-'); return 'Dia ' + parseInt(pts[2]); };
+      if (sameDia) {
+        html_body += _cockpitCard('🏆', fmtD(topDiaCnt.date), topDiaCnt.cnt + ' ag. · ' + v(topDiaCnt.total), 'Mais agendamentos e maior resultado');
+      } else {
+        html_body += _cockpitCard('📅', fmtD(topDiaCnt.date), topDiaCnt.cnt + ' ag.', 'Dia com mais agendamentos');
+        html_body += _cockpitCard('💰', fmtD(topDiaTotal.date), v(topDiaTotal.total), 'Dia com maior resultado financeiro');
+      }
+    }
+
+    // 3. DIA DA SEMANA
+    if (d.by_weekday && d.by_weekday.length > 0) {
+      html_body += sep;
+      html_body += '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-light);margin-bottom:10px">📊 Dia da Semana com Mais Procura</div>';
+      const DIAS_S = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
+      const topSemCnt   = d.by_weekday.reduce((a,b) => b.cnt   > a.cnt   ? b : a);
+      const topSemTotal = d.by_weekday.reduce((a,b) => b.total > a.total ? b : a);
+      const sameSem = topSemCnt.dow === topSemTotal.dow;
+      const diaLabel = d => DIAS_S[d] + (d >= 1 && d <= 6 ? '-feira' : '');
+      if (sameSem) {
+        html_body += _cockpitCard('🏆', diaLabel(topSemCnt.dow), topSemCnt.cnt + ' ag. · ' + v(topSemCnt.total), 'Dia com mais agendamentos e resultado');
+      } else {
+        html_body += _cockpitCard('📅', diaLabel(topSemCnt.dow), topSemCnt.cnt + ' ag.', 'Dia da semana com mais agendamentos');
+        html_body += _cockpitCard('💰', diaLabel(topSemTotal.dow), v(topSemTotal.total), 'Dia da semana com maior resultado');
+      }
+    }
+
+    // 4. CLIENTES DESTAQUE
+    if (d.by_client && d.by_client.length > 0) {
+      html_body += sep;
+      html_body += '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-light);margin-bottom:10px">👑 Clientes Destaque</div>';
+      const topClientCnt   = d.by_client.reduce((a,b) => b.cnt   > a.cnt   ? b : a);
+      const topClientTotal = d.by_client.reduce((a,b) => b.total > a.total ? b : a);
+      const sameClient = topClientCnt.name === topClientTotal.name;
+      if (sameClient) {
+        html_body += _cockpitCard('🏆', topClientCnt.name, topClientCnt.cnt + ' proc. · ' + v(topClientCnt.total), 'Mais procedimentos e maior resultado');
+      } else {
+        html_body += _cockpitCard('📅', topClientCnt.name, topClientCnt.cnt + ' proc.', 'Cliente com mais procedimentos');
+        html_body += _cockpitCard('💰', topClientTotal.name, v(topClientTotal.total), 'Cliente com maior resultado financeiro');
+      }
+    }
+
+    bodyEl.innerHTML = html_body || '<div style="text-align:center;padding:32px;color:var(--text-light)">Sem dados para este mês.</div>';
   } catch(e) {
     bodyEl.innerHTML = '<div style="color:var(--error);padding:16px">Erro: ' + e.message + '</div>';
   }
