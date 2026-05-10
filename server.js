@@ -2481,6 +2481,43 @@ app.get('/api/revenue/cockpit/month', requireAdmin, async (req, res) => {
       ? (Number(totals.total) / Number(totals.cnt))
       : 0;
 
+    // Por cidade
+    const byCity = await q(
+      `SELECT city_name, COUNT(*) as cnt, COALESCE(SUM(price),0)::numeric as total
+       FROM appointments
+       WHERE to_char(date,'YYYY-MM')=$1 AND status IN ('confirmed','realizado')
+       GROUP BY city_name ORDER BY cnt DESC, total DESC`,
+      [month]
+    );
+
+    // Por dia do mês
+    const byDay = await q(
+      `SELECT date::text, COUNT(*) as cnt, COALESCE(SUM(price),0)::numeric as total
+       FROM appointments
+       WHERE to_char(date,'YYYY-MM')=$1 AND status IN ('confirmed','realizado')
+       GROUP BY date ORDER BY cnt DESC, total DESC LIMIT 5`,
+      [month]
+    );
+
+    // Por dia da semana
+    const byWeekday = await q(
+      `SELECT EXTRACT(DOW FROM date)::int as dow,
+              COUNT(*) as cnt, COALESCE(SUM(price),0)::numeric as total
+       FROM appointments
+       WHERE to_char(date,'YYYY-MM')=$1 AND status IN ('confirmed','realizado')
+       GROUP BY dow ORDER BY cnt DESC, total DESC`,
+      [month]
+    );
+
+    // Por cliente
+    const byClient = await q(
+      `SELECT name, phone, COUNT(*) as cnt, COALESCE(SUM(price),0)::numeric as total
+       FROM appointments
+       WHERE to_char(date,'YYYY-MM')=$1 AND status IN ('confirmed','realizado')
+       GROUP BY name, phone ORDER BY cnt DESC, total DESC LIMIT 5`,
+      [month]
+    );
+
     res.json({
       month,
       total:   Number(totals.total),
@@ -2493,6 +2530,26 @@ app.get('/api/revenue/cockpit/month', requireAdmin, async (req, res) => {
       })),
       top3: byProc.slice(0, 3).map(r => ({
         name:  r.proc_name,
+        cnt:   Number(r.cnt),
+        total: Number(r.total),
+      })),
+      by_city: byCity.map(r => ({
+        name:  r.city_name,
+        cnt:   Number(r.cnt),
+        total: Number(r.total),
+      })),
+      by_day: byDay.map(r => ({
+        date:  r.date,
+        cnt:   Number(r.cnt),
+        total: Number(r.total),
+      })),
+      by_weekday: byWeekday.map(r => ({
+        dow:   Number(r.dow),
+        cnt:   Number(r.cnt),
+        total: Number(r.total),
+      })),
+      by_client: byClient.map(r => ({
+        name:  r.name,
         cnt:   Number(r.cnt),
         total: Number(r.total),
       })),
