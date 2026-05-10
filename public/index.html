@@ -5682,37 +5682,12 @@ async function applyBranding() {
     } catch { return 128; } // fallback: neutro
   }
 
-  const renderBrandEl = (el, size, onDark) => {
+  const renderBrandEl = (el, size) => {
     if (cfg.logo_url) {
       const img = new Image();
-      // Only set crossOrigin when needed for Canvas luminance detection
-      // Without this, logos from external URLs (Google Drive, CDNs, etc.) display correctly
-      if (onDark) img.crossOrigin = 'anonymous';
-      img.style.cssText = 'height:' + (size||36) + 'px;object-fit:contain;vertical-align:middle;transition:filter .2s';
+      img.style.cssText = 'height:' + (size||36) + 'px;object-fit:contain;vertical-align:middle';
       img.alt = bizNameBrand;
-
-      if (onDark) {
-        // Detecta luminância quando a imagem carrega
-        img.onload = function() {
-          const lum = getImgLuminance(img);
-          // Se luminância < 100 (logo escura) → inverte para branca
-          // Se luminância >= 100 (logo clara/colorida) → mantém original
-          if (lum < 100) {
-            img.style.filter = 'brightness(0) invert(1)';
-          }
-          // Salva decisão para reusos (evita recalcular)
-          window._logoIsDark = lum < 100;
-        };
-        img.onerror = function() {
-          // Se falhar ao carregar, aplica invert preventivo
-          img.style.filter = 'brightness(0) invert(1)';
-        };
-        // Se já foi detectado antes nesta sessão
-        if (window._logoIsDark === true) img.style.filter = 'brightness(0) invert(1)';
-      }
-
       img.onerror = function() {
-        // Fallback: se a imagem não carregar, mostra o nome como texto
         const parts = bizNameBrand.split(' ');
         el.innerHTML = parts.length >= 2 ? parts[0] + ' <em>' + parts.slice(1).join(' ') + '</em>' : bizNameBrand;
       };
