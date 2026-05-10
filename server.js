@@ -5455,14 +5455,19 @@ cron.schedule('0 3 * * *', async () => {
           );
           appts = rows;
         } finally { client.release(); }
-        await pool.query(
-          `INSERT INTO daily_agenda_snapshots (tenant_id, snap_date, snapshot, sent)
-           VALUES ($1, $2, $3::jsonb, FALSE)
-           ON CONFLICT (tenant_id, snap_date)
-           DO UPDATE SET snapshot=$3::jsonb, sent=FALSE, created_at=NOW()`,
-          [t.id, today, JSON.stringify({ appointments: appts, generated_at: new Date().toISOString() })]
-        );
-        console.log('[Cron] Snapshot ' + (t.business_name||t.name) + ': ' + appts.length + ' agendamentos');
+        if (appts.length > 0) {
+          // Só gera snapshot (e futuro email) se houver agendamentos no dia
+          await pool.query(
+            `INSERT INTO daily_agenda_snapshots (tenant_id, snap_date, snapshot, sent)
+             VALUES ($1, $2, $3::jsonb, FALSE)
+             ON CONFLICT (tenant_id, snap_date)
+             DO UPDATE SET snapshot=$3::jsonb, sent=FALSE, created_at=NOW()`,
+            [t.id, today, JSON.stringify({ appointments: appts, generated_at: new Date().toISOString() })]
+          );
+          console.log('[Cron] Snapshot ' + (t.business_name||t.name) + ': ' + appts.length + ' agendamentos — email será disparado às 06h30');
+        } else {
+          console.log('[Cron] Snapshot ' + (t.business_name||t.name) + ': sem agendamentos — email não será enviado');
+        }
       } catch (e) { console.error('[Cron] Snapshot erro ' + t.name + ':', e.message); }
     }
   } catch (e) { console.error('[Cron] Snapshot geral:', e.message); }
