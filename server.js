@@ -1643,7 +1643,7 @@ function requireAdmin(req, res, next) {
 app.get('/api/health', async (req, res) => {
   try {
     await req.db('SELECT 1');
-    res.json({ ok: true, version: '2.9.0', db: 'connected' });
+    res.json({ ok: true, version: '2.9.3', db: 'connected' });
   } catch {
     res.status(503).json({ ok: false, db: 'disconnected' });
   }
@@ -2985,7 +2985,7 @@ app.get('/api/backup/export', requireAdmin, async (req, res) => {
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.json({
       exportedAt: new Date().toISOString(),
-      version: '2.9.0',
+      version: '2.9.3',
       procedures:    procs.rows,
       appointments:  appts.rows,
       blocked_dates: blocked.rows,
