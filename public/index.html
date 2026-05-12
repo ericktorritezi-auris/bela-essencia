@@ -2493,9 +2493,10 @@ function toggleValues() {
       renderStats();
     }
   }
-  if (activeSec === 'revenue') { renderRevPage(_revPage); renderRevCards(); }
-  if (activeSec === 'cockpit') { initCockpit(); }
-  if (activeSec === 'procs')   { renderProcsAdmin(); }
+  if (activeSec === 'revenue')     { renderRevPage(_revPage); renderRevCards(); }
+  if (activeSec === 'cockpit')     { initCockpit(); }
+  if (activeSec === 'procs')       { renderProcsAdmin(); }
+  if (activeSec === 'receivables') { renderReceivablesTable(); }
 }
 
 function resetValuesVisibility() {
