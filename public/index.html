@@ -831,6 +831,8 @@ tr.drag-over{border-top:2.5px solid var(--rose)!important}
           <div class="nav-item" id="nav-revenue" onclick="showSec('revenue')"><span class="nav-icon">💰</span> Receita</div>
           <div class="nav-item" id="nav-cockpit" onclick="showSec('cockpit')"><span class="nav-icon">🎯</span> Cockpit</div>
           <div class="nav-item" id="nav-receivables" onclick="showSec('receivables')"><span class="nav-icon">📋</span> Contas a Receber</div>
+          <div class="nav-item" id="nav-expenses" onclick="showSec('expenses')"><span class="nav-icon">💸</span> Contas a Pagar</div>
+          <div class="nav-item" id="nav-summary-fin" onclick="showSec('summary-fin')"><span class="nav-icon">📊</span> Resumo Financeiro</div>
         </div>
         <div style="margin-top:2px">
           <div class="nav-sec-ttl">Marketing</div>
@@ -1207,11 +1209,122 @@ tr.drag-over{border-top:2.5px solid var(--rose)!important}
                 <div style="font-size:11px;color:#c0392b;margin-top:2px" id="rec-cnt-unpaid">0 pendentes</div>
               </div>
             </div>
-            <div class="tbl-wrap">
+            <div class="tbl-wrap" id="rec-table-wrap">
               <table class="tbl">
                 <thead><tr><th>Data</th><th>Cliente</th><th>Procedimento</th><th>Valor</th><th>Status</th><th>Pago</th></tr></thead>
                 <tbody id="rec-tbody"></tbody>
               </table>
+            </div>
+            <div id="rec-cards-wrap" style="display:none"></div>
+          </div>
+
+          <!-- SEC: CONTAS A PAGAR -->
+          <div id="sec-expenses" class="hidden">
+            <div class="tbl-head">
+              <div class="tbl-ttl">Contas a Pagar</div>
+              <button class="btn btn-primary" onclick="openExpenseModal()">+ Nova despesa</button>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
+              <select class="fs" id="exp-year" onchange="loadExpenses()"></select>
+              <select class="fs" id="exp-month" onchange="loadExpenses()">
+                <option value="">Todos os meses</option>
+                <option value="01">Janeiro</option><option value="02">Fevereiro</option>
+                <option value="03">Março</option><option value="04">Abril</option>
+                <option value="05">Maio</option><option value="06">Junho</option>
+                <option value="07">Julho</option><option value="08">Agosto</option>
+                <option value="09">Setembro</option><option value="10">Outubro</option>
+                <option value="11">Novembro</option><option value="12">Dezembro</option>
+              </select>
+            </div>
+            <div style="background:#fdf0ee;border:1px solid #f5c6be;border-radius:12px;padding:14px 16px;text-align:center;margin-bottom:20px;max-width:240px">
+              <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:#c0392b;margin-bottom:4px">💸 Total de Despesas</div>
+              <div style="font-size:26px;font-weight:800;color:#c0392b" id="exp-total">R$ 0,00</div>
+              <div style="font-size:11px;color:#c0392b;margin-top:2px" id="exp-cnt">0 lançamentos</div>
+            </div>
+            <div class="tbl-wrap" id="exp-table-wrap">
+              <table class="tbl">
+                <thead><tr><th>Data</th><th>Categoria</th><th>Descrição</th><th>Valor</th><th></th></tr></thead>
+                <tbody id="exp-tbody"></tbody>
+              </table>
+            </div>
+            <div id="exp-cards-wrap" style="display:none"></div>
+          </div>
+
+          <!-- SEC: RESUMO FINANCEIRO -->
+          <div id="sec-summary-fin" class="hidden">
+            <div class="tbl-head"><div class="tbl-ttl">Resumo Financeiro</div></div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:20px">
+              <select class="fs" id="sf-year" onchange="loadSummaryFin()"></select>
+              <select class="fs" id="sf-month" onchange="loadSummaryFin()">
+                <option value="">Todos os meses</option>
+                <option value="01">Janeiro</option><option value="02">Fevereiro</option>
+                <option value="03">Março</option><option value="04">Abril</option>
+                <option value="05">Maio</option><option value="06">Junho</option>
+                <option value="07">Julho</option><option value="08">Agosto</option>
+                <option value="09">Setembro</option><option value="10">Outubro</option>
+                <option value="11">Novembro</option><option value="12">Dezembro</option>
+              </select>
+            </div>
+            <!-- Cards principais -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+              <div style="background:#e8f7ef;border:1px solid #b7e0c9;border-radius:14px;padding:16px;text-align:center">
+                <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:#1e8449;margin-bottom:6px">✅ Receita Recebida</div>
+                <div style="font-size:24px;font-weight:800;color:#1e8449" id="sf-received">R$ 0,00</div>
+                <div style="font-size:11px;color:#1e8449;margin-top:3px" id="sf-received-cnt">0 procedimentos</div>
+              </div>
+              <div style="background:#fdf0ee;border:1px solid #f5c6be;border-radius:14px;padding:16px;text-align:center">
+                <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:#c0392b;margin-bottom:6px">💸 Total de Despesas</div>
+                <div style="font-size:24px;font-weight:800;color:#c0392b" id="sf-expenses">R$ 0,00</div>
+                <div style="font-size:11px;color:#c0392b;margin-top:3px" id="sf-expenses-cnt">0 lançamentos</div>
+              </div>
+            </div>
+            <!-- Card lucro -->
+            <div style="border-radius:14px;padding:18px;text-align:center;margin-bottom:20px;border:2px solid var(--border)" id="sf-profit-card">
+              <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:var(--text-light);margin-bottom:6px">💡 LUCRO DO MÊS</div>
+              <div style="font-size:32px;font-weight:800" id="sf-profit">R$ 0,00</div>
+              <div style="font-size:12px;margin-top:6px" id="sf-vs-prev"></div>
+            </div>
+            <!-- A receber -->
+            <div style="background:#fff8e1;border:1px solid #ffe082;border-radius:14px;padding:14px 16px;text-align:center">
+              <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:#f57f17;margin-bottom:4px">⏳ Ainda a Receber</div>
+              <div style="font-size:20px;font-weight:800;color:#f57f17" id="sf-pending">R$ 0,00</div>
+              <div style="font-size:11px;color:#f57f17;margin-top:2px" id="sf-pending-cnt">0 pendentes</div>
+            </div>
+          </div>
+
+          <!-- MODAL NOVA DESPESA -->
+          <div id="exp-modal-overlay" class="hidden" style="position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;padding:16px">
+            <div style="background:white;border-radius:16px;padding:24px;width:100%;max-width:400px;box-shadow:0 8px 32px rgba(0,0,0,.18)">
+              <div style="font-size:17px;font-weight:800;margin-bottom:20px">💸 Nova Despesa</div>
+              <div class="fg" style="margin-bottom:14px">
+                <label>Categoria</label>
+                <select class="fi" id="exp-cat" onchange="toggleExpDesc()">
+                  <option value="alimentacao">🍽️ Alimentação</option>
+                  <option value="combustivel">⛽ Combustível</option>
+                  <option value="pedagio">🛣️ Pedágio</option>
+                  <option value="aluguel">🏠 Aluguel</option>
+                  <option value="comissao">🤝 Comissão</option>
+                  <option value="outro">✏️ Outro</option>
+                </select>
+              </div>
+              <div class="fg" id="exp-desc-wrap" style="margin-bottom:14px;display:none">
+                <label>Descrição</label>
+                <input class="fi" id="exp-desc" placeholder="Descreva a despesa...">
+              </div>
+              <div class="fg-row" style="margin-bottom:14px">
+                <div class="fg">
+                  <label>Data</label>
+                  <input type="date" class="fi" id="exp-date">
+                </div>
+                <div class="fg">
+                  <label>Valor (R$)</label>
+                  <input type="number" step="0.01" min="0" class="fi" id="exp-amount" placeholder="0,00">
+                </div>
+              </div>
+              <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+                <button class="btn btn-ghost" onclick="closeExpenseModal()">Cancelar</button>
+                <button class="btn btn-primary" onclick="saveExpense()">Salvar</button>
+              </div>
             </div>
           </div>
 
@@ -2376,8 +2489,15 @@ async function initAdmin() {
   await applyBranding();
   // Load cities for agenda filter
   await loadCities();
-  document.getElementById('fl-city').innerHTML='<option value="">Todas as cidades</option>'+
-    CITIES.map(c=>`<option value="${c.id}">${c.short}</option>`).join('');
+  // Filtro de cidade usa TODAS as cidades cadastradas (incluindo esporádicas)
+  GET('/api/cities/all').then(allCities => {
+    document.getElementById('fl-city').innerHTML='<option value="">Todas as cidades</option>'+
+      allCities.map(c=>`<option value="${c.id}">${c.short||c.name}</option>`).join('');
+  }).catch(() => {
+    // fallback: usa CITIES carregadas
+    document.getElementById('fl-city').innerHTML='<option value="">Todas as cidades</option>'+
+      CITIES.map(c=>`<option value="${c.id}">${c.short||c.name}</option>`).join('');
+  });
   document.getElementById('fl-date').value=todayForInput();
   const now=new Date();
   document.getElementById('fl-month').value=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
@@ -2386,11 +2506,11 @@ async function initAdmin() {
 
 const SEC_TITLES={
   agenda:'Agenda',manual:'Agenda Manual',retro:'Agenda Retroativa',blocked:'Bloquear Datas',released:'Liberar Datas',nps:'NPS — Satisfação',
-  revenue:'Receita',cockpit:'Cockpit Financeiro',receivables:'Contas a Receber',promos:'Promoções',commem:'Datas Comemorativas',webpush:'Web Push',
+  revenue:'Receita',cockpit:'Cockpit Financeiro',receivables:'Contas a Receber',expenses:'Contas a Pagar','summary-fin':'Resumo Financeiro',promos:'Promoções',commem:'Datas Comemorativas',webpush:'Web Push',
   cities:'Cidades',schedules:'Configuração de Horários',
   procs:'Procedimentos',profile:'Perfil & Senha',lgpd:'Log LGPD',backup:'Backup'
 };
-const ALL_SECS = ['agenda','manual','retro','blocked','released','nps','revenue','cockpit','receivables','promos','commem','webpush','cities','schedules','procs','profile','lgpd','backup'];
+const ALL_SECS = ['agenda','manual','retro','blocked','released','nps','revenue','cockpit','receivables','expenses','summary-fin','promos','commem','webpush','cities','schedules','procs','profile','lgpd','backup'];
 
 function showSec(name){
   ALL_SECS.forEach(s=>{
@@ -2401,8 +2521,10 @@ function showSec(name){
   if(name==='agenda'){resetValuesVisibility();renderStats();renderAgenda();subscribePush('admin').catch(()=>{})}
   if(name==='manual') initManualBooking();
   if(name==='retro') initRetro();
-  if(name==='cockpit') initCockpit();
-  if(name==='receivables') initReceivables();
+  if(name==='cockpit')      initCockpit();
+  if(name==='receivables')  initReceivables();
+  if(name==='expenses')     initExpenses();
+  if(name==='summary-fin')  initSummaryFin();
   if(name==='lgpd') initLgpd();
   if(name==='released'){renderReleased();renderReleasedSlots();renderReleaseCityCheckboxes()}
   if(name==='nps') renderNPSDashboard();
@@ -2497,6 +2619,8 @@ function toggleValues() {
   if (activeSec === 'cockpit')     { initCockpit(); }
   if (activeSec === 'procs')       { renderProcsAdmin(); }
   if (activeSec === 'receivables') { renderReceivablesTable(); }
+  if (activeSec === 'expenses')   { renderExpensesTable(); }
+  if (activeSec === 'summary-fin') { loadSummaryFin(); }
 }
 
 function resetValuesVisibility() {
@@ -3641,6 +3765,211 @@ function exportLgpdCsv() {
 }
 
 // ── COCKPIT MONTH DETAIL ─────────────────────────────────────────────────────
+// ── CONTAS A PAGAR ───────────────────────────────────────────────
+let _expensesData = [];
+
+async function initExpenses() {
+  const ySel = document.getElementById('exp-year');
+  if (!ySel || ySel.options.length > 1) return;
+  const cur = new Date().getFullYear();
+  for (let y = cur; y >= cur - 3; y--) {
+    const o = document.createElement('option'); o.value = y; o.textContent = y;
+    ySel.appendChild(o);
+  }
+  const curMonth = String(new Date().getMonth() + 1).padStart(2,'0');
+  const mSel = document.getElementById('exp-month');
+  if (mSel) mSel.value = curMonth;
+  await loadExpenses();
+}
+
+async function loadExpenses() {
+  const year  = document.getElementById('exp-year')?.value  || '';
+  const month = document.getElementById('exp-month')?.value || '';
+  const tbody = document.getElementById('exp-tbody');
+  const tw    = document.getElementById('exp-table-wrap');
+  const cw    = document.getElementById('exp-cards-wrap');
+  if (tbody) tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-light)">Carregando...</td></tr>';
+  try {
+    const params = new URLSearchParams();
+    if (year && month) params.set('month', year + '-' + month);
+    else if (year)     params.set('year', year);
+    _expensesData = await GET('/api/expenses?' + params.toString());
+    renderExpensesTable();
+  } catch(e) {
+    if (tbody) tbody.innerHTML = `<tr><td colspan="5" style="color:var(--error);padding:16px">${e.message}</td></tr>`;
+  }
+}
+
+const EXP_LABELS = {alimentacao:'🍽️ Alimentação',combustivel:'⛽ Combustível',pedagio:'🛣️ Pedágio',aluguel:'🏠 Aluguel',comissao:'🤝 Comissão',outro:'✏️ Outro'};
+
+function renderExpensesTable() {
+  const total = _expensesData.reduce((s,e) => s + Number(e.amount||0), 0);
+  const te = document.getElementById('exp-total');
+  const ce = document.getElementById('exp-cnt');
+  if (te) te.textContent = _valuesVisible ? fmtCurr(total) : '••••••';
+  if (ce) ce.textContent = _expensesData.length + ' lançamento' + (_expensesData.length !== 1 ? 's' : '');
+
+  const tbody  = document.getElementById('exp-tbody');
+  const tw     = document.getElementById('exp-table-wrap');
+  const cw     = document.getElementById('exp-cards-wrap');
+  const mobile = window.innerWidth < 600;
+  if (tw) tw.style.display = mobile ? 'none' : 'block';
+  if (cw) cw.style.display = mobile ? 'block' : 'none';
+
+  const list = _expensesData;
+  if (!list.length) {
+    const empty = '<div style="text-align:center;padding:24px;color:var(--text-light)">Nenhuma despesa para este período.</div>';
+    if (tbody) tbody.innerHTML = `<tr><td colspan="5">${empty}</td></tr>`;
+    if (cw)    cw.innerHTML = empty;
+    return;
+  }
+  if (tbody) {
+    tbody.innerHTML = list.map(e => {
+      const dt  = fmtDateLong ? fmtDateLong(e.expense_date).replace(/^\w+,\s*/,'') : e.expense_date;
+      const val = _valuesVisible ? fmtCurr(Number(e.amount)) : '••••';
+      return `<tr>
+        <td style="font-size:12px;white-space:nowrap">${dt}</td>
+        <td>${EXP_LABELS[e.category]||e.category}</td>
+        <td style="color:var(--text-light);font-size:12px">${e.description||'—'}</td>
+        <td style="color:#c0392b;font-weight:700">${val}</td>
+        <td><button class="act-btn danger" onclick="deleteExpense(${e.id})" style="padding:4px 8px;font-size:11px">🗑</button></td>
+      </tr>`;
+    }).join('');
+  }
+  if (cw) {
+    cw.innerHTML = list.map(e => {
+      const dt  = fmtDateLong ? fmtDateLong(e.expense_date) : e.expense_date;
+      const val = _valuesVisible ? fmtCurr(Number(e.amount)) : '••••';
+      return `<div style="background:white;border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-weight:700">${EXP_LABELS[e.category]||e.category}</div>
+            <div style="font-size:12px;color:var(--text-light);margin-top:2px">${e.description||''}</div>
+            <div style="font-size:11px;color:var(--text-light);margin-top:2px">${dt}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:17px;font-weight:800;color:#c0392b">${val}</div>
+            <button class="act-btn danger" onclick="deleteExpense(${e.id})" style="margin-top:6px;padding:4px 8px;font-size:11px">🗑 Remover</button>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+}
+
+function openExpenseModal() {
+  const today = todayStr ? todayStr() : new Date().toISOString().slice(0,10);
+  const d = document.getElementById('exp-date');
+  if (d) d.value = today;
+  const cat = document.getElementById('exp-cat');
+  if (cat) { cat.value = 'alimentacao'; toggleExpDesc(); }
+  document.getElementById('exp-modal-overlay').classList.remove('hidden');
+}
+function closeExpenseModal() {
+  document.getElementById('exp-modal-overlay').classList.add('hidden');
+  const a = document.getElementById('exp-amount'); if (a) a.value = '';
+  const d = document.getElementById('exp-desc');   if (d) d.value = '';
+}
+function toggleExpDesc() {
+  const cat  = document.getElementById('exp-cat')?.value;
+  const wrap = document.getElementById('exp-desc-wrap');
+  if (wrap) wrap.style.display = cat === 'outro' ? 'block' : 'none';
+}
+async function saveExpense() {
+  const category    = document.getElementById('exp-cat')?.value    || 'outro';
+  const description = document.getElementById('exp-desc')?.value   || '';
+  const amount      = document.getElementById('exp-amount')?.value || '';
+  const date        = document.getElementById('exp-date')?.value   || '';
+  if (!amount || !date) { showToast('Preencha valor e data', 'error'); return; }
+  try {
+    await POST('/api/expenses', { category, description: description||null, amount: Number(amount), expense_date: date });
+    showToast('✅ Despesa registrada', 'ok');
+    closeExpenseModal();
+    await loadExpenses();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+async function deleteExpense(id) {
+  if (!confirm('Remover esta despesa?')) return;
+  try {
+    await fetch(`/api/expenses/${id}`, { method: 'DELETE', headers: { 'x-admin-token': localStorage.getItem('_adm') || '' } });
+    showToast('Despesa removida', 'ok');
+    await loadExpenses();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+// ── RESUMO FINANCEIRO ─────────────────────────────────────────────
+async function initSummaryFin() {
+  const ySel = document.getElementById('sf-year');
+  if (!ySel || ySel.options.length > 1) return;
+  const cur = new Date().getFullYear();
+  for (let y = cur; y >= cur - 3; y--) {
+    const o = document.createElement('option'); o.value = y; o.textContent = y;
+    ySel.appendChild(o);
+  }
+  const curMonth = String(new Date().getMonth() + 1).padStart(2,'0');
+  const mSel = document.getElementById('sf-month');
+  if (mSel) mSel.value = curMonth;
+  await loadSummaryFin();
+}
+
+async function loadSummaryFin() {
+  const year  = document.getElementById('sf-year')?.value  || '';
+  const month = document.getElementById('sf-month')?.value || '';
+  try {
+    const params = new URLSearchParams();
+    if (year && month) params.set('month', year + '-' + month);
+    else if (year)     params.set('year', year);
+    const [appts, exps] = await Promise.all([
+      GET('/api/appointments?' + params.toString()),
+      GET('/api/expenses?' + params.toString()),
+    ]);
+    const done    = appts.filter(a => a.status === 'confirmed' || a.status === 'realizado');
+    const received = done.filter(a => a.paid).reduce((s,a) => s + Number(a.price||0), 0);
+    const pending  = done.filter(a => !a.paid).reduce((s,a) => s + Number(a.price||0), 0);
+    const expenses = exps.reduce((s,e) => s + Number(e.amount||0), 0);
+    const profit   = received - expenses;
+
+    const v = x => _valuesVisible ? fmtCurr(x) : '••••••';
+    const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+
+    set('sf-received',     v(received));
+    set('sf-received-cnt', done.filter(a=>a.paid).length + ' procedimentos pagos');
+    set('sf-expenses',     v(expenses));
+    set('sf-expenses-cnt', exps.length + ' lançamento' + (exps.length!==1?'s':''));
+    set('sf-pending',      v(pending));
+    set('sf-pending-cnt',  done.filter(a=>!a.paid).length + ' pendentes');
+    set('sf-profit',       v(profit));
+
+    const card = document.getElementById('sf-profit-card');
+    if (card) {
+      const color = profit > 0 ? '#1e8449' : profit < 0 ? '#c0392b' : 'var(--text-light)';
+      card.style.borderColor = profit > 0 ? '#b7e0c9' : profit < 0 ? '#f5c6be' : 'var(--border)';
+      card.style.background  = profit > 0 ? '#e8f7ef' : profit < 0 ? '#fdf0ee' : 'var(--cream)';
+      document.getElementById('sf-profit').style.color = color;
+    }
+
+    // Comparativo com mês anterior
+    if (year && month) {
+      const prevDate = new Date(parseInt(year), parseInt(month) - 2, 1);
+      const prevMonth = prevDate.getFullYear() + '-' + String(prevDate.getMonth()+1).padStart(2,'0');
+      try {
+        const [pAppts, pExps] = await Promise.all([
+          GET('/api/appointments?month=' + prevMonth),
+          GET('/api/expenses?month=' + prevMonth),
+        ]);
+        const pRec  = pAppts.filter(a => (a.status==='confirmed'||a.status==='realizado') && a.paid).reduce((s,a)=>s+Number(a.price||0),0);
+        const pExp  = pExps.reduce((s,e)=>s+Number(e.amount||0),0);
+        const pProf = pRec - pExp;
+        const diff  = profit - pProf;
+        const arrow = diff > 0 ? '▲' : diff < 0 ? '▼' : '—';
+        const dColor = diff > 0 ? '#1e8449' : diff < 0 ? '#c0392b' : 'var(--text-light)';
+        const vsEl = document.getElementById('sf-vs-prev');
+        if (vsEl) vsEl.innerHTML = `<span style="color:${dColor};font-weight:700">${arrow} ${_valuesVisible?fmtCurr(Math.abs(diff)):'••••'}</span> <span style="color:var(--text-light)">vs mês anterior</span>`;
+      } catch {}
+    }
+  } catch(e) { showToast('Erro ao carregar resumo: ' + e.message, 'error'); }
+}
+
 // ── CONTAS A RECEBER ─────────────────────────────────────────────
 let _receivablesData = [];
 
@@ -3699,16 +4028,26 @@ function renderReceivablesTable() {
   if (cp) cp.textContent = allPaid.length   + ' pagamento' + (allPaid.length   !== 1 ? 's' : '');
   if (cu) cu.textContent = allUnpaid.length + ' pendente'  + (allUnpaid.length !== 1 ? 's' : '');
 
-  const tbody = document.getElementById('rec-tbody');
-  if (!tbody) return;
-  if (!list.length) {
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-light)">Nenhum lançamento para este período.</td></tr>';
+  const tbody    = document.getElementById('rec-tbody');
+  const tableWrap = document.getElementById('rec-table-wrap');
+  const cardsWrap = document.getElementById('rec-cards-wrap');
+  const isMobile  = window.innerWidth < 600;
+  if (tableWrap) tableWrap.style.display = isMobile ? 'none' : 'block';
+  if (cardsWrap) cardsWrap.style.display = isMobile ? 'block' : 'none';
+
+  const sorted = list.slice().sort((a,b) => a.date < b.date ? 1 : -1);
+
+  if (!sorted.length) {
+    const empty = '<div style="text-align:center;padding:24px;color:var(--text-light)">Nenhum lançamento para este período.</div>';
+    if (tbody)    tbody.innerHTML = `<tr><td colspan="6">${empty}</td></tr>`;
+    if (cardsWrap) cardsWrap.innerHTML = empty;
     return;
   }
-  tbody.innerHTML = list
-    .sort((a,b) => a.date < b.date ? 1 : -1)
-    .map(a => {
-      const dt = fmtDateLong ? fmtDateLong(a.date).replace(/^\w+,\s*/,'') : a.date;
+
+  // Desktop
+  if (tbody) {
+    tbody.innerHTML = sorted.map(a => {
+      const dt  = fmtDateLong ? fmtDateLong(a.date).replace(/^\w+,\s*/,'') : a.date;
       const val = a.price ? fmtCurr(Number(a.price)) : '—';
       const st  = a.status === 'realizado'
         ? '<span class="badge badge-realizado">✔ Realizado</span>'
@@ -3726,6 +4065,36 @@ function renderReceivablesTable() {
         <td>${paidCell}</td>
       </tr>`;
     }).join('');
+  }
+
+  // Mobile — cards
+  if (cardsWrap) {
+    cardsWrap.innerHTML = sorted.map(a => {
+      const dt  = fmtDateLong ? fmtDateLong(a.date) : a.date;
+      const val = a.price ? fmtCurr(Number(a.price)) : '—';
+      const stColor = a.status === 'realizado' ? '#1e8449' : 'var(--rose)';
+      const stLabel = a.status === 'realizado' ? '✔ Realizado' : '● Confirmado';
+      return `<div style="background:white;border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+          <div>
+            <div style="font-weight:700;font-size:14px">${a.name}</div>
+            <div style="font-size:12px;color:var(--text-light);margin-top:2px">${a.proc_name}</div>
+            <div style="font-size:11px;color:var(--text-light);margin-top:2px">${dt}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-weight:700;color:var(--gold);font-size:15px">${_valuesVisible?val:'••••'}</div>
+            <div style="font-size:11px;color:${stColor};margin-top:3px">${stLabel}</div>
+          </div>
+        </div>
+        <div style="border-top:1px solid var(--border);padding-top:10px;display:flex;align-items:center;gap:8px">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;flex:1">
+            <input type="checkbox" ${a.paid?'checked':''} onchange="togglePaidRec('${a.id}',this.checked)" style="width:16px;height:16px;accent-color:#27ae60;cursor:pointer">
+            <span style="font-size:13px;font-weight:700;color:${a.paid?'#1e8449':'#c0392b'}">${a.paid?'✅ Pago':'⏳ A receber'}</span>
+          </label>
+        </div>
+      </div>`;
+    }).join('');
+  }
 }
 
 async function togglePaidRec(id, paid) {
