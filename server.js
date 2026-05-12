@@ -1743,6 +1743,16 @@ app.post('/api/appointments', async (req, res) => {
   }
 
   try {
+    // Resolver cityName: se vier vazio/nulo, buscar na tabela cities
+    let resolvedCityName = cityName;
+    if (!resolvedCityName && cityId) {
+      try {
+        const cr = await req.db(`SELECT name FROM cities WHERE id=$1 LIMIT 1`, [cityId]);
+        if (cr.rows[0]) resolvedCityName = cr.rows[0].name;
+      } catch {}
+    }
+    resolvedCityName = resolvedCityName || 'Sem cidade';
+
     const appt = await tenantTransaction(req, async (client) => {
       // Valida que o horário ainda está disponível (anti-race condition)
       const busy = await client.query(
@@ -1762,7 +1772,7 @@ app.post('/api/appointments', async (req, res) => {
            (id, city_id, city_name, proc_id, proc_name, date, st, et, name, phone, price, pt,
             privacy_consent, consent_at, consent_version)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
-        [id, cityId, cityName, procId, procName, date, st, et, name, phone, price||null, pt||'fixed',
+        [id, cityId, resolvedCityName, procId, procName, date, st, et, name, phone, price||null, pt||'fixed',
          true, new Date().toISOString(), 'v1.0']
       );
       return rows[0];
@@ -1954,7 +1964,14 @@ app.get('/api/appointments', requireAdmin, async (req, res) => {
     sql += ` AND to_char(date,'YYYY') = $${params.push(req.query.year)}`;
   }
   if (city)   { sql += ` AND city_id = $${params.push(city)}`; }
-  if (status) { sql += ` AND status = $${params.push(status)}`; }
+  if (status) {
+    if (status.includes(',')) {
+      const statuses = status.split(',').map(s => s.trim()).filter(Boolean);
+      sql += ` AND status IN (${statuses.map(s => `$${params.push(s)}`).join(',')})`;
+    } else {
+      sql += ` AND status = $${params.push(status)}`;
+    }
+  }
   if (paid === 'true')  { sql += ` AND paid = TRUE`; }
   if (paid === 'false') { sql += ` AND paid = FALSE AND status IN ('confirmed','realizado')`; }
   sql += ' ORDER BY date DESC, st DESC';
@@ -2532,10 +2549,12 @@ app.get('/api/revenue/cockpit/month', requireAdmin, async (req, res) => {
 
     // Por cidade
     const byCity = await q(
-      `SELECT city_name, COUNT(*) as cnt, COALESCE(SUM(price),0)::numeric as total
+      `SELECT NULLIF(TRIM(COALESCE(city_name,'')), '') AS city_name,
+              COUNT(*) as cnt, COALESCE(SUM(price),0)::numeric as total
        FROM appointments
        WHERE to_char(date,'YYYY-MM')=$1 AND status IN ('confirmed','realizado')
-       GROUP BY city_name ORDER BY cnt DESC, total DESC`,
+       GROUP BY NULLIF(TRIM(COALESCE(city_name,'')), '')
+       ORDER BY cnt DESC, total DESC`,
       [month]
     );
 
