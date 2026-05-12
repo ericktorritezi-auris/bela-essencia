@@ -416,6 +416,11 @@ tr:hover td{background:#FAF3F6}
 .appt-card-actions .act-btn{flex:1;text-align:center;padding:9px 6px;font-size:12px;margin:0}
 
 /* ── PROC CARDS (mobile) ── */
+.paid-check{display:flex;align-items:center;gap:5px;cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.paid-check input[type=checkbox]{width:15px;height:15px;accent-color:var(--success,#27ae60);cursor:pointer;flex-shrink:0}
+.paid-check label{font-size:11px;font-weight:700;color:var(--text-light);cursor:pointer;white-space:nowrap;user-select:none}
+.badge-paid{background:#e8f7ef;color:#1e8449;padding:3px 8px;border-radius:8px;font-size:11px;font-weight:700}
+.badge-unpaid{background:#fdf0ee;color:#c0392b;padding:3px 8px;border-radius:8px;font-size:11px;font-weight:700}
 .drag-handle{cursor:grab;color:var(--text-light);font-size:16px;padding:0 8px;user-select:none;-webkit-user-select:none;touch-action:none;line-height:1}
 .drag-handle:active{cursor:grabbing}
 tr.dragging{opacity:.4;background:var(--rose-light)!important}
@@ -825,6 +830,7 @@ tr.drag-over{border-top:2.5px solid var(--rose)!important}
           <div class="nav-sec-ttl">Financeiro</div>
           <div class="nav-item" id="nav-revenue" onclick="showSec('revenue')"><span class="nav-icon">💰</span> Receita</div>
           <div class="nav-item" id="nav-cockpit" onclick="showSec('cockpit')"><span class="nav-icon">🎯</span> Cockpit</div>
+          <div class="nav-item" id="nav-receivables" onclick="showSec('receivables')"><span class="nav-icon">📋</span> Contas a Receber</div>
         </div>
         <div style="margin-top:2px">
           <div class="nav-sec-ttl">Marketing</div>
@@ -869,7 +875,7 @@ tr.drag-over{border-top:2.5px solid var(--rose)!important}
                   <select class="fs" id="fl-status" onchange="renderAgenda()"><option value="">Todos os status</option><option value="confirmed">Confirmados</option><option value="realizado">Realizados</option><option value="cancelled">Cancelados</option></select>
                 </div>
               </div>
-              <div class="agenda-table-wrap" style="overflow-x:auto"><table><thead><tr><th>Data / Hora</th><th>Cliente</th><th>Procedimento</th><th>Cidade</th><th>Valor</th><th>Status</th><th>Ações</th></tr></thead><tbody id="agenda-body"></tbody></table></div>
+              <div class="agenda-table-wrap" style="overflow-x:auto"><table><thead><tr><th>Data / Hora</th><th>Cliente</th><th>Procedimento</th><th>Cidade</th><th>Valor</th><th>Status</th><th>Pago</th><th>Ações</th></tr></thead><tbody id="agenda-body"></tbody></table></div>
               <div class="appt-cards" id="appt-cards"></div>
               <div class="pag-wrap hidden" id="agenda-pag"></div>
             </div>
@@ -1169,6 +1175,46 @@ tr.drag-over{border-top:2.5px solid var(--rose)!important}
               <div id="proc-cards-mobile" style="padding:4px 0"></div>
             </div>
           </div>
+          <!-- SEC: CONTAS A RECEBER -->
+          <div id="sec-receivables" class="hidden">
+            <div class="tbl-head"><div class="tbl-ttl">Contas a Receber</div></div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
+              <select class="fs" id="rec-year" onchange="loadReceivables()"></select>
+              <select class="fs" id="rec-month" onchange="loadReceivables()">
+                <option value="">Todos os meses</option>
+                <option value="01">Janeiro</option><option value="02">Fevereiro</option>
+                <option value="03">Março</option><option value="04">Abril</option>
+                <option value="05">Maio</option><option value="06">Junho</option>
+                <option value="07">Julho</option><option value="08">Agosto</option>
+                <option value="09">Setembro</option><option value="10">Outubro</option>
+                <option value="11">Novembro</option><option value="12">Dezembro</option>
+              </select>
+              <select class="fs" id="rec-paid-filter" onchange="renderReceivablesTable()">
+                <option value="">Todos</option>
+                <option value="paid">✅ Somente Pagos</option>
+                <option value="unpaid">⏳ Somente A Receber</option>
+              </select>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px">
+              <div style="background:#e8f7ef;border:1px solid #b7e0c9;border-radius:12px;padding:14px 16px;text-align:center">
+                <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:#1e8449;margin-bottom:4px">✅ Recebido</div>
+                <div style="font-size:22px;font-weight:800;color:#1e8449" id="rec-total-paid">R$ 0,00</div>
+                <div style="font-size:11px;color:#1e8449;margin-top:2px" id="rec-cnt-paid">0 pagamentos</div>
+              </div>
+              <div style="background:#fdf0ee;border:1px solid #f5c6be;border-radius:12px;padding:14px 16px;text-align:center">
+                <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:#c0392b;margin-bottom:4px">⏳ A Receber</div>
+                <div style="font-size:22px;font-weight:800;color:#c0392b" id="rec-total-unpaid">R$ 0,00</div>
+                <div style="font-size:11px;color:#c0392b;margin-top:2px" id="rec-cnt-unpaid">0 pendentes</div>
+              </div>
+            </div>
+            <div class="tbl-wrap">
+              <table class="tbl">
+                <thead><tr><th>Data</th><th>Cliente</th><th>Procedimento</th><th>Valor</th><th>Status</th><th>Pago</th></tr></thead>
+                <tbody id="rec-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+
           <!-- SEC: PROMOÇÕES -->
           <div id="sec-promos" class="hidden">
             <div class="tbl-wrap" style="margin-bottom:16px">
@@ -2340,11 +2386,11 @@ async function initAdmin() {
 
 const SEC_TITLES={
   agenda:'Agenda',manual:'Agenda Manual',retro:'Agenda Retroativa',blocked:'Bloquear Datas',released:'Liberar Datas',nps:'NPS — Satisfação',
-  revenue:'Receita',cockpit:'Cockpit Financeiro',promos:'Promoções',commem:'Datas Comemorativas',webpush:'Web Push',
+  revenue:'Receita',cockpit:'Cockpit Financeiro',receivables:'Contas a Receber',promos:'Promoções',commem:'Datas Comemorativas',webpush:'Web Push',
   cities:'Cidades',schedules:'Configuração de Horários',
   procs:'Procedimentos',profile:'Perfil & Senha',lgpd:'Log LGPD',backup:'Backup'
 };
-const ALL_SECS = ['agenda','manual','retro','blocked','released','nps','revenue','cockpit','promos','commem','webpush','cities','schedules','procs','profile','lgpd','backup'];
+const ALL_SECS = ['agenda','manual','retro','blocked','released','nps','revenue','cockpit','receivables','promos','commem','webpush','cities','schedules','procs','profile','lgpd','backup'];
 
 function showSec(name){
   ALL_SECS.forEach(s=>{
@@ -2356,6 +2402,7 @@ function showSec(name){
   if(name==='manual') initManualBooking();
   if(name==='retro') initRetro();
   if(name==='cockpit') initCockpit();
+  if(name==='receivables') initReceivables();
   if(name==='lgpd') initLgpd();
   if(name==='released'){renderReleased();renderReleasedSlots();renderReleaseCityCheckboxes()}
   if(name==='nps') renderNPSDashboard();
@@ -2530,11 +2577,12 @@ function renderPagination(containerId, currentPage, totalItems, onPageChange, co
 async function renderStats() {
   try {
     const s=await GET('/api/revenue/summary');
+    const v = x => _valuesVisible ? fmtCurr(x) : '<span class="val-mask">••••</span>';
     document.getElementById('today-stats').innerHTML=`
-      <div class="stat-card"><div class="stat-lbl">📅 Hoje</div><div class="stat-val">${s.today.cnt}</div><div class="stat-sub">confirmados + realizados</div></div>
-      <div class="stat-card"><div class="stat-lbl">💰 Receita Hoje</div><div class="stat-val" style="font-size:22px">${_valuesVisible?fmtCurr(s.today.total):'<span class="val-mask">••••••</span>'}</div><div class="stat-sub">confirmados + realizados</div></div>
-      <div class="stat-card"><div class="stat-lbl">📊 Semana</div><div class="stat-val">${s.week.cnt}</div><div class="stat-sub">${_valuesVisible?fmtCurr(s.week.total):'<span class="val-mask">••••</span>'}</div></div>
-      <div class="stat-card"><div class="stat-lbl">📆 Mês</div><div class="stat-val">${s.month.cnt}</div><div class="stat-sub">${_valuesVisible?fmtCurr(s.month.total):'<span class="val-mask">••••</span>'}</div></div>
+      <div class="stat-card"><div class="stat-lbl">📅 Hoje</div><div class="stat-val">${s.today.cnt}</div><div class="stat-sub">ag. confirmados + realizados</div></div>
+      <div class="stat-card"><div class="stat-lbl">✅ Recebido Hoje</div><div class="stat-val" style="font-size:20px;color:#1e8449">${v(s.today.received)}</div><div class="stat-sub" style="color:#c0392b">⏳ ${v(s.today.pending)} a receber</div></div>
+      <div class="stat-card"><div class="stat-lbl">📊 Esta Semana</div><div class="stat-val">${s.week.cnt}</div><div class="stat-sub">✅ ${v(s.week.received)} · ⏳ ${v(s.week.pending)}</div></div>
+      <div class="stat-card"><div class="stat-lbl">📆 Este Mês</div><div class="stat-val">${s.month.cnt}</div><div class="stat-sub">✅ ${v(s.month.received)} · ⏳ ${v(s.month.pending)}</div></div>
     `;
   } catch{}
 }
@@ -2545,7 +2593,9 @@ function renderStatsFromList(list, filterLabel) {
   const confirmed = list.filter(a => a.status === 'confirmed');
   const realizado = list.filter(a => a.status === 'realizado');
   const cancelled = list.filter(a => a.status === 'cancelled');
-  const revenue   = [...confirmed, ...realizado].reduce((s,a) => s + (Number(a.price)||0), 0);
+  const revenue    = [...confirmed, ...realizado].reduce((s,a) => s + (Number(a.price)||0), 0);
+  const received   = [...confirmed, ...realizado].filter(a => a.paid).reduce((s,a) => s + (Number(a.price)||0), 0);
+  const pending    = [...confirmed, ...realizado].filter(a => !a.paid).reduce((s,a) => s + (Number(a.price)||0), 0);
   document.getElementById('today-stats').innerHTML=`
     <div class="stat-card">
       <div class="stat-lbl" style="color:#1A56DB">✅ Confirmados</div>
@@ -2561,6 +2611,11 @@ function renderStatsFromList(list, filterLabel) {
       <div class="stat-lbl" style="color:var(--error)">❌ Cancelados</div>
       <div class="stat-val">${cancelled.length}</div>
       <div class="stat-sub">no filtro</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-lbl">✅ Recebido</div>
+      <div class="stat-val" style="font-size:18px;color:#1e8449">${_valuesVisible?fmtCurr(received):'<span class="val-mask">••••</span>'}</div>
+      <div class="stat-sub" style="color:#c0392b">⏳ ${_valuesVisible?fmtCurr(pending):'••••'} a receber</div>
     </div>
     <div class="stat-card">
       <div class="stat-lbl">💰 Receita Total</div>
@@ -2596,6 +2651,12 @@ function renderAgendaPage(page) {
         <td style="font-size:11px">${CITIES.find(c=>c.id===a.city_id)?.short||a.city_name}</td>
         <td style="color:var(--gold);font-weight:700">${a.price?maskedCurr(a.price):a.pt==='eval'?'Avaliação':'—'}</td>
         <td>${statusBadge(a.status)}</td>
+        <td>
+          <label class="paid-check" onclick="event.stopPropagation()">
+            <input type="checkbox" ${a.paid?'checked':''} onchange="togglePaid('${a.id}',this.checked)">
+            <label style="color:${a.paid?'#1e8449':'var(--text-light)'};font-weight:700;font-size:11px;cursor:pointer">${a.paid?'✅ Pago':'⏳ Pagar'}</label>
+          </label>
+        </td>
         <td>
           <button class="act-btn" onclick="openEditModal('${a.id}')">Editar</button>
           ${a.status==='confirmed'||a.status==='realizado'
@@ -2633,6 +2694,12 @@ function renderAgendaPage(page) {
             : `<button class="act-btn" onclick="openRestoreModal('${a.id}')" style="color:var(--gold);border-color:var(--gold)">↩ Restaurar</button><button class="act-btn danger" onclick="deleteAppt('${a.id}')" style="color:var(--error);border-color:var(--error)">🗑</button>`
           }
           <button class="act-btn" onclick="sendAgendaWA('${a.id}')" title="Enviar agendamento por WhatsApp">📅</button>
+        </div>
+        <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border-light);display:flex;align-items:center;gap:8px">
+          <label class="paid-check" onclick="event.stopPropagation()" style="flex:1">
+            <input type="checkbox" ${a.paid?'checked':''} onchange="togglePaid('${a.id}',this.checked)">
+            <label style="color:${a.paid?'#1e8449':'var(--text-light)'};font-weight:700;font-size:12px;cursor:pointer">${a.paid?'✅ Pago':'⏳ A receber'}</label>
+          </label>
         </div>
       </div>
     `;
@@ -2674,6 +2741,16 @@ async function renderAgenda() {
     document.getElementById('appt-cards').innerHTML=`<div style="color:var(--error);padding:20px;font-size:13px">Erro: ${e.message}</div>`;
   }
 }
+
+async function togglePaid(id, paid) {
+  try {
+    await PATCH(`/api/appointments/${id}/paid`, { paid });
+    showToast(paid ? '✅ Marcado como pago' : '⏳ Pagamento desmarcado', 'ok');
+    renderAgenda();
+    renderStats();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
 async function cancelAppt(id) {
   if(!confirm('Confirma cancelamento?')) return;
   try { await PATCH(`/api/appointments/${id}/cancel`); showToast('Cancelado','ok'); renderAgenda(); renderStats(); }
@@ -3563,6 +3640,106 @@ function exportLgpdCsv() {
 }
 
 // ── COCKPIT MONTH DETAIL ─────────────────────────────────────────────────────
+// ── CONTAS A RECEBER ─────────────────────────────────────────────
+let _receivablesData = [];
+
+async function initReceivables() {
+  const yearSel = document.getElementById('rec-year');
+  if (!yearSel || yearSel.options.length > 1) return;
+  const cur = new Date().getFullYear();
+  for (let y = cur; y >= cur - 3; y--) {
+    const o = document.createElement('option');
+    o.value = y; o.textContent = y;
+    yearSel.appendChild(o);
+  }
+  // Pré-selecionar mês atual
+  const curMonth = String(new Date().getMonth() + 1).padStart(2, '0');
+  const monthSel = document.getElementById('rec-month');
+  if (monthSel) monthSel.value = curMonth;
+  await loadReceivables();
+}
+
+async function loadReceivables() {
+  const year  = document.getElementById('rec-year')?.value  || '';
+  const month = document.getElementById('rec-month')?.value || '';
+  const tbody = document.getElementById('rec-tbody');
+  if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-light)">Carregando...</td></tr>';
+  try {
+    let params = new URLSearchParams();
+    params.set('status', 'confirmed,realizado');
+    if (year && month) params.set('month', year + '-' + month);
+    else if (year)     params.set('year', year);
+    const list = await GET('/api/appointments?' + params.toString());
+    // Filtrar apenas confirmados e realizados
+    _receivablesData = list.filter(a => a.status === 'confirmed' || a.status === 'realizado');
+    renderReceivablesTable();
+  } catch(e) {
+    if (tbody) tbody.innerHTML = `<tr><td colspan="6" style="color:var(--error);padding:16px">${e.message}</td></tr>`;
+  }
+}
+
+function renderReceivablesTable() {
+  const filter = document.getElementById('rec-paid-filter')?.value || '';
+  let list = _receivablesData;
+  if (filter === 'paid')   list = list.filter(a => a.paid);
+  if (filter === 'unpaid') list = list.filter(a => !a.paid);
+
+  // Calcular totais do conjunto completo (não filtrado)
+  const allPaid   = _receivablesData.filter(a => a.paid);
+  const allUnpaid = _receivablesData.filter(a => !a.paid);
+  const sumPaid   = allPaid.reduce((s,a)   => s + Number(a.price||0), 0);
+  const sumUnpaid = allUnpaid.reduce((s,a) => s + Number(a.price||0), 0);
+
+  const tp  = document.getElementById('rec-total-paid');
+  const tu  = document.getElementById('rec-total-unpaid');
+  const cp  = document.getElementById('rec-cnt-paid');
+  const cu  = document.getElementById('rec-cnt-unpaid');
+  if (tp) tp.textContent = _valuesVisible ? fmtCurr(sumPaid)   : '••••••';
+  if (tu) tu.textContent = _valuesVisible ? fmtCurr(sumUnpaid) : '••••••';
+  if (cp) cp.textContent = allPaid.length   + ' pagamento' + (allPaid.length   !== 1 ? 's' : '');
+  if (cu) cu.textContent = allUnpaid.length + ' pendente'  + (allUnpaid.length !== 1 ? 's' : '');
+
+  const tbody = document.getElementById('rec-tbody');
+  if (!tbody) return;
+  if (!list.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-light)">Nenhum lançamento para este período.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = list
+    .sort((a,b) => a.date < b.date ? 1 : -1)
+    .map(a => {
+      const dt = fmtDateLong ? fmtDateLong(a.date).replace(/^\w+,\s*/,'') : a.date;
+      const val = a.price ? fmtCurr(Number(a.price)) : '—';
+      const st  = a.status === 'realizado'
+        ? '<span class="badge badge-realizado">✔ Realizado</span>'
+        : '<span class="badge badge-confirmed">● Confirmado</span>';
+      const paidCell = `<label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+        <input type="checkbox" ${a.paid?'checked':''} onchange="togglePaidRec('${a.id}',this.checked)" style="width:15px;height:15px;accent-color:#27ae60;cursor:pointer">
+        <span style="font-size:11px;font-weight:700;color:${a.paid?'#1e8449':'#c0392b'}">${a.paid?'✅ Pago':'⏳ Pagar'}</span>
+      </label>`;
+      return `<tr>
+        <td style="font-size:12px;white-space:nowrap">${dt}</td>
+        <td style="font-weight:600">${a.name}</td>
+        <td style="font-size:12px;color:var(--text-light)">${a.proc_name}</td>
+        <td style="color:var(--gold);font-weight:700">${_valuesVisible?val:'••••'}</td>
+        <td>${st}</td>
+        <td>${paidCell}</td>
+      </tr>`;
+    }).join('');
+}
+
+async function togglePaidRec(id, paid) {
+  try {
+    await PATCH(`/api/appointments/${id}/paid`, { paid });
+    // Atualiza o item local
+    const item = _receivablesData.find(a => a.id === id);
+    if (item) item.paid = paid;
+    renderReceivablesTable();
+    renderStats();
+    showToast(paid ? '✅ Marcado como pago' : '⏳ Pagamento desmarcado', 'ok');
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
 // Helper: card de insight para o cockpit
 function _cockpitCard(icon, title, value, label) {
   return '<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;' +
@@ -3600,6 +3777,8 @@ async function openCockpitMonth(ym) {
       '<div style="display:flex;flex-wrap:wrap;gap:8px">' +
         '<span class="badge-dur" style="background:var(--rose-light);color:var(--rose);border:1px solid var(--rose-mid)">📅 ' + d.cnt + ' ag.</span>' +
         '<span class="badge-dur" style="background:var(--gold-light);color:#7a5c00;border:1px solid #e0c060">💰 ' + v(d.total) + '</span>' +
+        '<span class="badge-dur" style="background:#e8f7ef;color:#1e8449;border:1px solid #b7e0c9">✅ ' + v(d.received||0) + '</span>' +
+        '<span class="badge-dur" style="background:#fdf0ee;color:#c0392b;border:1px solid #f5c6be">⏳ ' + v(d.pending||0) + '</span>' +
         '<span class="badge-dur" style="background:#f0f9ff;color:#1a6080;border:1px solid #b0d8f0">🎯 ' + v(d.avg_ticket) + '/ag.</span>' +
       '</div>';
 
