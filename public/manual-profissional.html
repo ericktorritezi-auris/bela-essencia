@@ -363,6 +363,8 @@
     <a href="#financeiro" class="toc-link">💰 Receita</a>
     <a href="#cockpit" class="toc-link">🎯 Cockpit</a>
     <a href="#contas-receber" class="toc-link">📋 Contas a Receber</a>
+    <a href="#contas-pagar" class="toc-link">💸 Contas a Pagar</a>
+    <a href="#resumo-financeiro" class="toc-link">📊 Resumo Financeiro</a>
     <a href="#promocoes" class="toc-link">🏷️ Promoções</a>
     <a href="#push" class="toc-link">🔔 Push</a>
     <a href="#nps" class="toc-link">⭐ NPS</a>
@@ -387,6 +389,13 @@
       <div class="sidebar-title">Datas</div>
       <a href="#bloquear">🚫 Bloquear datas</a>
       <a href="#liberar">✅ Liberar datas</a>
+      <div class="sidebar-sep"></div>
+      <div class="sidebar-title">Financeiro</div>
+      <a href="#financeiro">💰 Receita</a>
+      <a href="#cockpit">🎯 Cockpit</a>
+      <a href="#contas-receber">📋 Contas a Receber</a>
+      <a href="#contas-pagar">💸 Contas a Pagar</a>
+      <a href="#resumo-financeiro">📊 Resumo Financeiro</a>
       <div class="sidebar-sep"></div>
       <div class="sidebar-title">Configurações</div>
       <a href="#cidades">📍 Cidades</a>
@@ -435,22 +444,43 @@
           <div class="section-title">Visão geral do painel</div>
         </div>
         <div class="section-body">
-          <p>O painel está organizado em seções no menu lateral esquerdo:</p>
+          <p>O painel está organizado em seções no menu lateral esquerdo, agrupadas por categoria:</p>
+
+          <p style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--rose);margin:14px 0 8px">📅 Agenda</p>
           <div class="feat-list">
-            <div class="feat-item"><span>📅</span><p><strong>Agenda</strong> — Visualize, edite e gerencie todos os agendamentos</p></div>
-            <div class="feat-item"><span>✏️</span><p><strong>Agenda Manual</strong> — Cadastre agendamentos em nome do cliente</p></div>
-            <div class="feat-item"><span>🚫</span><p><strong>Bloquear Datas</strong> — Bloqueie dias ou horários para impedimento de agendamentos</p></div>
-            <div class="feat-item"><span>✅</span><p><strong>Liberar Datas</strong> — Libere dias específicos para cidades que normalmente não atendem</p></div>
-            <div class="feat-item"><span>⭐</span><p><strong>NPS</strong> — Acompanhe a satisfação das clientes</p></div>
-            <div class="feat-item"><span>💰</span><p><strong>Receita</strong> — Controle financeiro por período</p></div>
-            <div class="feat-item"><span>🏷️</span><p><strong>Promoções</strong> — Crie descontos por procedimento e cidade</p></div>
+            <div class="feat-item"><span>📅</span><p><strong>Agenda</strong> — Visualize, edite e gerencie todos os agendamentos. Filtre por data, cidade e status</p></div>
+            <div class="feat-item"><span>✏️</span><p><strong>Agenda Manual</strong> — Cadastre agendamentos em nome da cliente com consentimento implícito</p></div>
+            <div class="feat-item"><span>⏮️</span><p><strong>Ag. Retroativa</strong> — Registre atendimentos já realizados em datas passadas</p></div>
+            <div class="feat-item"><span>🚫</span><p><strong>Bloquear Datas</strong> — Bloqueie dias inteiros ou horários específicos</p></div>
+            <div class="feat-item"><span>✅</span><p><strong>Liberar Datas</strong> — Libere dias ou horários específicos para cidades que normalmente não atendem</p></div>
+            <div class="feat-item"><span>⭐</span><p><strong>NPS</strong> — Acompanhe a satisfação das clientes após os atendimentos</p></div>
+          </div>
+
+          <p style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--rose);margin:14px 0 8px">💰 Financeiro</p>
+          <div class="feat-list">
+            <div class="feat-item"><span>💰</span><p><strong>Receita</strong> — Visão geral de faturamento por período (hoje, semana, mês, ano)</p></div>
+            <div class="feat-item"><span>🎯</span><p><strong>Cockpit</strong> — Análise mensal aprofundada com top procedimentos, cidades, dias e clientes destaque</p></div>
+            <div class="feat-item"><span>📋</span><p><strong>Contas a Receber</strong> — Lista de procedimentos pagos e pendentes com controle de pagamento</p></div>
+            <div class="feat-item"><span>💸</span><p><strong>Contas a Pagar</strong> — Registre despesas por categoria (alimentação, combustível, aluguel, comissão, etc.)</p></div>
+            <div class="feat-item"><span>📊</span><p><strong>Resumo Financeiro</strong> — Lucro do mês (receita recebida − despesas) com comparativo ao mês anterior</p></div>
+          </div>
+
+          <p style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--rose);margin:14px 0 8px">📣 Marketing</p>
+          <div class="feat-list">
+            <div class="feat-item"><span>🏷</span><p><strong>Promoções</strong> — Crie descontos por procedimento e cidade</p></div>
             <div class="feat-item"><span>🎉</span><p><strong>Datas Comemorativas</strong> — Configure popups especiais para datas festivas</p></div>
-            <div class="feat-item"><span>🔔</span><p><strong>Web Push</strong> — Envie notificações para todas as clientes</p></div>
+            <div class="feat-item"><span>🔔</span><p><strong>Web Push</strong> — Envie notificações para todas as clientes cadastradas</p></div>
+            <div class="feat-item"><span>📑</span><p><strong>Gestão do Contrato</strong> — Visualize e gerencie o contrato de uso da plataforma</p></div>
+          </div>
+
+          <p style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--rose);margin:14px 0 8px">⚙️ Configurações</p>
+          <div class="feat-list">
             <div class="feat-item"><span>📍</span><p><strong>Cidades</strong> — Gerencie os locais de atendimento</p></div>
-            <div class="feat-item"><span>⏰</span><p><strong>Horários</strong> — Configure os horários de atendimento por cidade</p></div>
-            <div class="feat-item"><span>💅</span><p><strong>Procedimentos</strong> — Gerencie os serviços oferecidos</p></div>
-            <div class="feat-item"><span>👤</span><p><strong>Perfil & Senha</strong> — Seus dados pessoais, senha e e-mail</p></div>
-            <div class="feat-item"><span>💾</span><p><strong>Backup</strong> — Exporte seus dados em qualquer momento</p></div>
+            <div class="feat-item"><span>🕐</span><p><strong>Horários</strong> — Configure os horários de atendimento por cidade e dia da semana</p></div>
+            <div class="feat-item"><span>✨</span><p><strong>Procedimentos</strong> — Gerencie os serviços oferecidos e reordene com arrastar e soltar</p></div>
+            <div class="feat-item"><span>👤</span><p><strong>Perfil / Senha</strong> — Seus dados pessoais, senha e e-mail</p></div>
+            <div class="feat-item"><span>🔒</span><p><strong>Log LGPD</strong> — Registros de consentimento das clientes (desktop)</p></div>
+            <div class="feat-item"><span>💾</span><p><strong>Backup</strong> — Exporte seus dados em qualquer momento (desktop)</p></div>
           </div>
           <div class="info-box">
             <span>👁️</span>
@@ -860,6 +890,67 @@
         </div>
       </section>
 
+
+      <!-- CONTAS A PAGAR -->
+      <section class="section" id="contas-pagar">
+        <div class="section-header">
+          <div class="section-icon">💸</div>
+          <div class="section-title">Contas a Pagar</div>
+        </div>
+        <div class="section-body">
+          <p>Registre e acompanhe todas as despesas do negócio. Acesse pelo menu lateral em <strong>💸 Contas a Pagar</strong>.</p>
+          <div class="sub">
+            <h4>Registrar nova despesa</h4>
+            <p>Clique em <strong>+ Nova despesa</strong> e preencha:</p>
+            <div class="feat-list" style="margin-top:8px">
+              <div class="feat-item"><span>🏷️</span><p><strong>Categoria</strong> — Alimentação, Combustível, Pedágio, Aluguel, Comissão ou Outro</p></div>
+              <div class="feat-item"><span>✏️</span><p><strong>Descrição</strong> — campo livre que aparece ao selecionar "Outro"</p></div>
+              <div class="feat-item"><span>📅</span><p><strong>Data</strong> — data do pagamento</p></div>
+              <div class="feat-item"><span>💰</span><p><strong>Valor</strong> — valor da despesa em reais</p></div>
+            </div>
+          </div>
+          <div class="sub">
+            <h4>Filtros e totais</h4>
+            <p>Filtre por <strong>Ano</strong> e <strong>Mês</strong> para visualizar as despesas do período. O card no topo mostra o total de despesas e a quantidade de lançamentos.</p>
+          </div>
+          <div class="sub">
+            <h4>Remover despesa</h4>
+            <p>Clique no botão <strong>🗑</strong> ao lado de qualquer lançamento para removê-lo permanentemente.</p>
+          </div>
+          <div class="tip">
+            <span>💡</span>
+            <p>Registre suas despesas mensalmente para que o <strong>Resumo Financeiro</strong> calcule o lucro real do negócio.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- RESUMO FINANCEIRO -->
+      <section class="section" id="resumo-financeiro">
+        <div class="section-header">
+          <div class="section-icon">📊</div>
+          <div class="section-title">Resumo Financeiro</div>
+        </div>
+        <div class="section-body">
+          <p>Visão consolidada do resultado financeiro do mês — receita recebida, despesas e lucro. Acesse pelo menu lateral em <strong>📊 Resumo Financeiro</strong>.</p>
+          <div class="sub">
+            <h4>Cards do resumo</h4>
+            <div class="feat-list" style="margin-top:8px">
+              <div class="feat-item"><span>✅</span><p><strong>Receita Recebida</strong> — total dos procedimentos marcados como pagos no período</p></div>
+              <div class="feat-item"><span>💸</span><p><strong>Total de Despesas</strong> — soma de todos os lançamentos de Contas a Pagar</p></div>
+              <div class="feat-item"><span>💡</span><p><strong>Lucro do Mês</strong> — Receita Recebida menos Despesas. Verde = lucro, Vermelho = prejuízo</p></div>
+              <div class="feat-item"><span>⏳</span><p><strong>Ainda a Receber</strong> — procedimentos realizados mas ainda não marcados como pagos</p></div>
+            </div>
+          </div>
+          <div class="sub">
+            <h4>Comparativo com o mês anterior</h4>
+            <p>Abaixo do Lucro do Mês aparece automaticamente a diferença em relação ao mês anterior — com seta ▲ (crescimento) ou ▼ (queda) e o valor da variação.</p>
+          </div>
+          <div class="tip">
+            <span>💡</span>
+            <p>No dia 1 de cada mês você receberá por e-mail o <strong>Resumo do Mês Anterior</strong> com todos esses dados automaticamente.</p>
+          </div>
+        </div>
+      </section>
 
       <!-- PROMOÇÕES -->
       <section class="section" id="promocoes">
