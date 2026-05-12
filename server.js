@@ -226,6 +226,7 @@ async function createTenantSchema(schemaName) {
         st TIME NOT NULL, et TIME NOT NULL, name VARCHAR(200) NOT NULL,
         phone VARCHAR(30) NOT NULL, price NUMERIC(10,2), pt VARCHAR(10),
         status VARCHAR(20) NOT NULL DEFAULT 'confirmed', push_auth TEXT,
+        paid BOOLEAN NOT NULL DEFAULT FALSE, paid_at TIMESTAMPTZ,
         privacy_consent BOOLEAN NOT NULL DEFAULT FALSE,
         consent_at      TIMESTAMPTZ,
         consent_version VARCHAR(10) NOT NULL DEFAULT 'v1.0',
@@ -1093,6 +1094,19 @@ async function initDB() {
       try { await client.query(`ALTER TABLE "${schema_name}".procedures ADD COLUMN IF NOT EXISTS description TEXT`); } catch {}
       try { await client.query(`ALTER TABLE "${schema_name}".procedures ADD COLUMN IF NOT EXISTS sort_order INTEGER`); } catch {}
       try { await client.query(`UPDATE "${schema_name}".procedures SET sort_order = id WHERE sort_order IS NULL`); } catch {}
+      // Migração: pagamento do procedimento
+      try { await client.query(`ALTER TABLE "${schema_name}".appointments ADD COLUMN IF NOT EXISTS paid BOOLEAN NOT NULL DEFAULT FALSE`); } catch {}
+      try { await client.query(`ALTER TABLE "${schema_name}".appointments ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ`); } catch {}
+      // Migração de dados: agendamentos até hoje entram como pagos (dados históricos)
+      try {
+        await client.query(
+          `UPDATE "${schema_name}".appointments
+           SET paid = TRUE, paid_at = NOW()
+           WHERE date <= CURRENT_DATE
+             AND status IN ('confirmed','realizado')
+             AND paid = FALSE`
+        );
+      } catch {}
       // Migração: campos "Sobre o Profissional"
       try { await client.query(`ALTER TABLE tenant_configs ADD COLUMN IF NOT EXISTS prof_photo_url TEXT`); } catch {}
       try { await client.query(`ALTER TABLE tenant_configs ADD COLUMN IF NOT EXISTS prof_profession VARCHAR(200)`); } catch {}
@@ -1927,16 +1941,22 @@ async function autoCompleteAppointments() {
 app.get('/api/appointments', requireAdmin, async (req, res) => {
   // Atualiza status antes de listar — marca passados como "realizado"
   await autoCompleteAppointments();
-  const { date, city, status } = req.query;
+  const { date, city, status, paid } = req.query;
   let sql = 'SELECT * FROM appointments WHERE 1=1';
   const params = [];
   if (date) {
-    // Filtro exato por data
     sql += ` AND date = $${params.push(date)}`;
   }
-  // Sem filtro de data = mostra todos os agendamentos (passados e futuros)
+  if (req.query.month && /^\d{4}-\d{2}$/.test(req.query.month)) {
+    sql += ` AND to_char(date,'YYYY-MM') = $${params.push(req.query.month)}`;
+  }
+  if (req.query.year && /^\d{4}$/.test(req.query.year)) {
+    sql += ` AND to_char(date,'YYYY') = $${params.push(req.query.year)}`;
+  }
   if (city)   { sql += ` AND city_id = $${params.push(city)}`; }
   if (status) { sql += ` AND status = $${params.push(status)}`; }
+  if (paid === 'true')  { sql += ` AND paid = TRUE`; }
+  if (paid === 'false') { sql += ` AND paid = FALSE AND status IN ('confirmed','realizado')`; }
   sql += ' ORDER BY date DESC, st DESC';
   try {
     const { rows } = await req.db(sql, params);
@@ -2005,6 +2025,21 @@ app.put('/api/appointments/:id', requireAdmin, async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// Marcar/desmarcar pagamento do procedimento
+app.patch('/api/appointments/:id/paid', requireAdmin, async (req, res) => {
+  const { paid } = req.body;
+  if (typeof paid !== 'boolean') return res.status(400).json({ error: 'paid deve ser boolean' });
+  try {
+    const paid_at = paid ? new Date().toISOString() : null;
+    const { rows } = await req.db(
+      `UPDATE appointments SET paid=$1, paid_at=$2 WHERE id=$3 RETURNING *`,
+      [paid, paid_at, req.params.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Agendamento não encontrado' });
+    res.json(rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // Admin: restaurar agendamento cancelado → confirmed ou realizado
@@ -2409,10 +2444,22 @@ app.get('/api/revenue/summary', requireAdmin, async (req, res) => {
 
     const q = (sql, p) => req.db(sql, p).then(r => r.rows[0]);
     const [todayRow, weekRow, monthRow, yearRow] = await Promise.all([
-      q(`SELECT COALESCE(SUM(price),0) as total, COUNT(*) as cnt FROM appointments WHERE date=$1 AND status IN ('confirmed','realizado')`, [today]),
-      q(`SELECT COALESCE(SUM(price),0) as total, COUNT(*) as cnt FROM appointments WHERE date>=$1 AND date<=$2 AND status IN ('confirmed','realizado')`, [ws, we]),
-      q(`SELECT COALESCE(SUM(price),0) as total, COUNT(*) as cnt FROM appointments WHERE to_char(date,'YYYY-MM')=$1 AND status IN ('confirmed','realizado')`, [filterMonth]),
-      q(`SELECT COALESCE(SUM(price),0) as total, COUNT(*) as cnt FROM appointments WHERE to_char(date,'YYYY')=$1 AND status IN ('confirmed','realizado')`, [year]),
+      q(`SELECT COALESCE(SUM(price),0) as total, COUNT(*) as cnt,
+              COALESCE(SUM(CASE WHEN paid=TRUE THEN price ELSE 0 END),0) as received,
+              COALESCE(SUM(CASE WHEN paid=FALSE AND status IN ('confirmed','realizado') THEN price ELSE 0 END),0) as pending
+         FROM appointments WHERE date=$1 AND status IN ('confirmed','realizado')`, [today]),
+      q(`SELECT COALESCE(SUM(price),0) as total, COUNT(*) as cnt,
+              COALESCE(SUM(CASE WHEN paid=TRUE THEN price ELSE 0 END),0) as received,
+              COALESCE(SUM(CASE WHEN paid=FALSE THEN price ELSE 0 END),0) as pending
+         FROM appointments WHERE date>=$1 AND date<=$2 AND status IN ('confirmed','realizado')`, [ws, we]),
+      q(`SELECT COALESCE(SUM(price),0) as total, COUNT(*) as cnt,
+              COALESCE(SUM(CASE WHEN paid=TRUE THEN price ELSE 0 END),0) as received,
+              COALESCE(SUM(CASE WHEN paid=FALSE THEN price ELSE 0 END),0) as pending
+         FROM appointments WHERE to_char(date,'YYYY-MM')=$1 AND status IN ('confirmed','realizado')`, [filterMonth]),
+      q(`SELECT COALESCE(SUM(price),0) as total, COUNT(*) as cnt,
+              COALESCE(SUM(CASE WHEN paid=TRUE THEN price ELSE 0 END),0) as received,
+              COALESCE(SUM(CASE WHEN paid=FALSE THEN price ELSE 0 END),0) as pending
+         FROM appointments WHERE to_char(date,'YYYY')=$1 AND status IN ('confirmed','realizado')`, [year]),
     ]);
     res.json({ today: todayRow, week: weekRow, month: monthRow, year: yearRow, filterMonth });
   } catch (err) {
@@ -2461,7 +2508,9 @@ app.get('/api/revenue/cockpit/month', requireAdmin, async (req, res) => {
 
     // Totais do mês
     const totals = await q1(
-      `SELECT COALESCE(SUM(price),0)::numeric as total, COUNT(*) as cnt
+      `SELECT COALESCE(SUM(price),0)::numeric as total, COUNT(*) as cnt,
+              COALESCE(SUM(CASE WHEN paid=TRUE THEN price ELSE 0 END),0)::numeric as received,
+              COALESCE(SUM(CASE WHEN paid=FALSE THEN price ELSE 0 END),0)::numeric as pending
        FROM appointments
        WHERE to_char(date,'YYYY-MM')=$1 AND status IN ('confirmed','realizado')`,
       [month]
@@ -2520,8 +2569,10 @@ app.get('/api/revenue/cockpit/month', requireAdmin, async (req, res) => {
 
     res.json({
       month,
-      total:   Number(totals.total),
-      cnt:     Number(totals.cnt),
+      total:      Number(totals.total),
+      cnt:        Number(totals.cnt),
+      received:   Number(totals.received || 0),
+      pending:    Number(totals.pending  || 0),
       avg_ticket: avg,
       by_procedure: byProc.map(r => ({
         name:  r.proc_name,
