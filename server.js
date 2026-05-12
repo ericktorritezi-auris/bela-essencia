@@ -2549,11 +2549,12 @@ app.get('/api/revenue/cockpit/month', requireAdmin, async (req, res) => {
 
     // Por cidade
     const byCity = await q(
-      `SELECT NULLIF(TRIM(COALESCE(city_name,'')), '') AS city_name,
-              COUNT(*) as cnt, COALESCE(SUM(price),0)::numeric as total
-       FROM appointments
-       WHERE to_char(date,'YYYY-MM')=$1 AND status IN ('confirmed','realizado')
-       GROUP BY NULLIF(TRIM(COALESCE(city_name,'')), '')
+      `SELECT COALESCE(NULLIF(TRIM(a.city_name),''), c.name, '(sem cidade)') AS city_name,
+              COUNT(*) as cnt, COALESCE(SUM(a.price),0)::numeric as total
+       FROM appointments a
+       LEFT JOIN cities c ON c.id = a.city_id
+       WHERE to_char(a.date,'YYYY-MM')=$1 AND a.status IN ('confirmed','realizado')
+       GROUP BY COALESCE(NULLIF(TRIM(a.city_name),''), c.name, '(sem cidade)')
        ORDER BY cnt DESC, total DESC`,
       [month]
     );
