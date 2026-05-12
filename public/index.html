@@ -3666,11 +3666,10 @@ async function loadReceivables() {
   if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-light)">Carregando...</td></tr>';
   try {
     let params = new URLSearchParams();
-    params.set('status', 'confirmed,realizado');
     if (year && month) params.set('month', year + '-' + month);
     else if (year)     params.set('year', year);
     const list = await GET('/api/appointments?' + params.toString());
-    // Filtrar apenas confirmados e realizados
+    // Filtrar apenas confirmados e realizados no frontend
     _receivablesData = list.filter(a => a.status === 'confirmed' || a.status === 'realizado');
     renderReceivablesTable();
   } catch(e) {
@@ -3839,16 +3838,17 @@ async function openCockpitMonth(ym) {
       const topCidadeTotal = d.by_city.reduce((a,b) => b.total > a.total ? b : a);
       const sameCidade = topCidadeCnt.name === topCidadeTotal.name;
       if (sameCidade) {
-        html_body += _cockpitCard('🏆', topCidadeCnt.name, topCidadeCnt.cnt + ' ag. · ' + v(topCidadeCnt.total), 'Mais agendamentos e maior resultado');
+        html_body += _cockpitCard('🏆', topCidadeCnt.name||'(sem cidade)', topCidadeCnt.cnt + ' ag. · ' + v(topCidadeCnt.total), 'Mais agendamentos e maior resultado');
       } else {
-        html_body += _cockpitCard('📅', topCidadeCnt.name, topCidadeCnt.cnt + ' ag.', 'Cidade com mais agendamentos');
-        html_body += _cockpitCard('💰', topCidadeTotal.name, v(topCidadeTotal.total), 'Cidade com maior resultado financeiro');
+        html_body += _cockpitCard('📅', topCidadeCnt.name||'(sem cidade)', topCidadeCnt.cnt + ' ag.', 'Cidade com mais agendamentos');
+        html_body += _cockpitCard('💰', topCidadeTotal.name||'(sem cidade)', v(topCidadeTotal.total), 'Cidade com maior resultado financeiro');
       }
       if (d.by_city.length > 1) {
         html_body += '<div style="margin-top:10px;overflow-x:auto"><table style="width:100%;font-size:12px;border-collapse:collapse">';
         d.by_city.forEach(c => {
+          const cityLabel = c.name || '(sem cidade)';
           html_body += '<tr style="border-bottom:1px solid var(--border)">' +
-            '<td style="padding:7px 4px;color:var(--dark);font-weight:600">' + c.name + '</td>' +
+            '<td style="padding:7px 4px;color:var(--dark);font-weight:600">' + cityLabel + '</td>' +
             '<td style="padding:7px 4px;text-align:center;color:var(--text-light)">' + c.cnt + ' ag.</td>' +
             '<td style="padding:7px 4px;text-align:right;color:var(--rose);font-weight:700">' + v(c.total) + '</td></tr>';
         });

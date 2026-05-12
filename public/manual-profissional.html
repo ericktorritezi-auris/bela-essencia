@@ -362,6 +362,7 @@
     <a href="#procedimentos" class="toc-link">💅 Procedimentos</a>
     <a href="#financeiro" class="toc-link">💰 Receita</a>
     <a href="#cockpit" class="toc-link">🎯 Cockpit</a>
+    <a href="#contas-receber" class="toc-link">📋 Contas a Receber</a>
     <a href="#promocoes" class="toc-link">🏷️ Promoções</a>
     <a href="#push" class="toc-link">🔔 Push</a>
     <a href="#nps" class="toc-link">⭐ NPS</a>
@@ -552,6 +553,37 @@
               <div class="feat-item"><span>💰</span><p>Valor do procedimento</p></div>
             </div>
             <p style="margin-top:10px">Útil quando a cliente esqueceu de salvar o agendamento no próprio celular — com um clique você envia tudo para ela.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- CONTAS A RECEBER -->
+      <section class="section" id="contas-receber">
+        <div class="section-header">
+          <div class="section-icon">📋</div>
+          <div class="section-title">Contas a Receber</div>
+        </div>
+        <div class="section-body">
+          <p>Controle financeiro completo do que foi recebido e do que ainda está pendente de pagamento. Acesse pelo menu lateral em <strong>📋 Contas a Receber</strong>.</p>
+          <div class="sub">
+            <h4>Filtros</h4>
+            <p>Filtre por <strong>Ano</strong> e <strong>Mês</strong> para visualizar os lançamentos do período desejado. Use o terceiro filtro para ver <em>Todos</em>, somente <em>✅ Pagos</em> ou somente <em>⏳ A Receber</em>.</p>
+          </div>
+          <div class="sub">
+            <h4>Cards de resumo</h4>
+            <p>No topo da tela aparecem dois cards com os totais do período selecionado — independente do filtro de listagem:</p>
+            <div class="feat-list" style="margin-top:8px">
+              <div class="feat-item"><span>✅</span><p><strong>Recebido</strong> — soma e quantidade de procedimentos já pagos</p></div>
+              <div class="feat-item"><span>⏳</span><p><strong>A Receber</strong> — soma e quantidade de procedimentos pendentes</p></div>
+            </div>
+          </div>
+          <div class="sub">
+            <h4>Marcar como pago</h4>
+            <p>Na coluna <strong>Pago</strong>, clique no checkbox para marcar ou desmarcar o pagamento de cada procedimento. A alteração é salva imediatamente e reflete também na listagem da Agenda e nos cards de Receita.</p>
+          </div>
+          <div class="tip">
+            <span>💡</span>
+            <p>Use o filtro <em>⏳ Somente A Receber</em> para ter rapidamente a lista de clientes que ainda não pagaram — ideal para fazer cobranças.</p>
           </div>
         </div>
       </section>
@@ -773,6 +805,10 @@
             <h4>Listagem por mês e card dinâmico</h4>
             <p>Ao selecionar um mês no campo <strong>Por Período</strong>, o card <em>Este Mês</em> atualiza automaticamente para mostrar o total do mês selecionado — o título do card muda para o mês escolhido (ex: <em>Abr/2026</em>). Sem filtro, exibe sempre o mês atual.<br><br>Selecione o mês no filtro para ver todos os procedimentos realizados e confirmados com seus respectivos valores.</p>
           </div>
+          <div class="sub">
+            <h4>✅ Recebido e ⏳ A Receber</h4>
+            <p>Os cards de resumo agora mostram separadamente o que foi <strong>recebido</strong> (procedimentos marcados como pagos) e o que está <strong>a receber</strong> (realizados mas ainda não pagos). Isso permite ter clareza sobre o caixa real do negócio.</p>
+          </div>
           <div class="info-box">
             <span>ℹ️</span>
             <p>Use o botão <strong>👁 Valores visíveis</strong> no topo para revelar ou ocultar os valores financeiros — útil ao mostrar a agenda para outras pessoas.</p>
@@ -802,13 +838,16 @@
           </div>
           <div class="sub">
             <h4>📊 Detalhes do mês</h4>
-            <p>Cada card tem um botão <strong>📊 Detalhes</strong>. Ao clicar, abre um popup com:</p>
-            <ul>
-              <li>Total de agendamentos e faturamento</li>
-              <li><strong>Ticket médio</strong> — faturamento ÷ agendamentos</li>
-              <li><strong>🏆 Top 3 procedimentos</strong> mais agendados no mês</li>
-              <li>Tabela completa com todos os procedimentos, quantidade e valor</li>
-            </ul>
+            <p>Cada card tem um botão <strong>📊 Detalhes</strong>. Ao clicar, abre um painel completo com:</p>
+            <div class="feat-list" style="margin-top:8px">
+              <div class="feat-item"><span>🎯</span><p>Ticket médio · <strong>✅ Total recebido</strong> · <strong>⏳ Total a receber</strong></p></div>
+              <div class="feat-item"><span>🏆</span><p>Top 3 procedimentos mais agendados</p></div>
+              <div class="feat-item"><span>📍</span><p>Desempenho por cidade — agendamentos e resultado financeiro de cada local</p></div>
+              <div class="feat-item"><span>📆</span><p>Melhor dia do mês — dia com mais agendamentos e dia com maior resultado</p></div>
+              <div class="feat-item"><span>📊</span><p>Dia da semana com mais procura — qual dia concentra mais agendamentos</p></div>
+              <div class="feat-item"><span>👑</span><p>Clientes destaque — quem mais agendou e quem mais gerou resultado no mês</p></div>
+            </div>
+            <p style="margin-top:8px">Quando o mesmo item lidera tanto em agendamentos quanto em resultado, aparece um card único com 🏆. Se forem diferentes, aparecem dois cards separados.</p>
           </div>
           <div class="sub">
             <h4>Tabela de resumo anual</h4>
