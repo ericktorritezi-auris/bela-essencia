@@ -200,6 +200,14 @@ async function createTenantSchema(schemaName) {
         description TEXT, sort_order INTEGER,
         active BOOLEAN NOT NULL DEFAULT TRUE, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )`,
+      `CREATE TABLE IF NOT EXISTS expenses (
+        id SERIAL PRIMARY KEY,
+        category VARCHAR(50) NOT NULL DEFAULT 'outro',
+        description TEXT,
+        amount NUMERIC(10,2) NOT NULL,
+        expense_date DATE NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
       `CREATE TABLE IF NOT EXISTS cities (
         id SERIAL PRIMARY KEY, name VARCHAR(100) NOT NULL, short VARCHAR(50),
         local_name VARCHAR(100), address VARCHAR(200), number VARCHAR(20),
@@ -1093,6 +1101,17 @@ async function initDB() {
     for (const { schema_name } of (await client.query(`SELECT schema_name FROM tenants WHERE schema_name IS NOT NULL`)).rows) {
       try { await client.query(`ALTER TABLE "${schema_name}".procedures ADD COLUMN IF NOT EXISTS description TEXT`); } catch {}
       try { await client.query(`ALTER TABLE "${schema_name}".procedures ADD COLUMN IF NOT EXISTS sort_order INTEGER`); } catch {}
+      // Migração: tabela de despesas (contas a pagar)
+      try {
+        await client.query(`CREATE TABLE IF NOT EXISTS "${schema_name}".expenses (
+          id SERIAL PRIMARY KEY,
+          category VARCHAR(50) NOT NULL DEFAULT 'outro',
+          description TEXT,
+          amount NUMERIC(10,2) NOT NULL,
+          expense_date DATE NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )`);
+      } catch {}
       try { await client.query(`UPDATE "${schema_name}".procedures SET sort_order = id WHERE sort_order IS NULL`); } catch {}
       // Migração: pagamento do procedimento
       try { await client.query(`ALTER TABLE "${schema_name}".appointments ADD COLUMN IF NOT EXISTS paid BOOLEAN NOT NULL DEFAULT FALSE`); } catch {}
@@ -1663,6 +1682,41 @@ app.post('/api/auth/logout', (req, res) => {
 
 app.get('/api/auth/me', (req, res) => {
   res.json({ isAdmin: !!req.session.isAdmin });
+});
+
+// ── EXPENSES (Contas a Pagar) ────────────────────────────────────────────────
+
+app.get('/api/expenses', requireAdmin, async (req, res) => {
+  try {
+    const { month, year } = req.query;
+    let sql = 'SELECT * FROM expenses WHERE 1=1';
+    const params = [];
+    if (month) sql += ` AND to_char(expense_date,'YYYY-MM') = $${params.push(month)}`;
+    else if (year) sql += ` AND to_char(expense_date,'YYYY') = $${params.push(year)}`;
+    sql += ' ORDER BY expense_date DESC, id DESC';
+    const { rows } = await req.db(sql, params);
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/expenses', requireAdmin, async (req, res) => {
+  const { category, description, amount, expense_date } = req.body;
+  if (!amount || !expense_date) return res.status(400).json({ error: 'Valor e data são obrigatórios' });
+  try {
+    const { rows } = await req.db(
+      `INSERT INTO expenses (category, description, amount, expense_date)
+       VALUES ($1,$2,$3,$4) RETURNING *`,
+      [category||'outro', description||null, Number(amount), expense_date]
+    );
+    res.json(rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/expenses/:id', requireAdmin, async (req, res) => {
+  try {
+    await req.db('DELETE FROM expenses WHERE id=$1', [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ── Procedimentos (público: GET; admin: POST/PUT/DELETE) ──────────────────────
@@ -5602,6 +5656,128 @@ cron.schedule('0 3 * * *', async () => {
 });
 
 // ── Cron: e-mail diário às 06h30 BRT (09h30 UTC) — usa snapshot da meia-noite
+// ── Resumo mensal: dia 1 de cada mês às 00h00 BRT (03h00 UTC) ────────────────
+cron.schedule('0 3 1 * *', async () => {
+  console.log('[Cron] Dia 1 — disparando resumo do mês anterior...');
+  if (!process.env.RESEND_API_KEY) return;
+  try {
+    // Mês anterior
+    const now   = nowBrasilia();
+    const prev  = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const month = prev.getFullYear() + '-' + String(prev.getMonth()+1).padStart(2,'0');
+    const MONTHS_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+    const monthLabel = MONTHS_PT[prev.getMonth()] + ' de ' + prev.getFullYear();
+
+    const { rows: tenants } = await pool.query(
+      `SELECT t.id, t.schema_name, t.name, t.owner_email, t.owner_name,
+              tc.business_name, tc.primary_color
+       FROM tenants t
+       LEFT JOIN tenant_configs tc ON tc.tenant_id=t.id
+       WHERE t.active=TRUE AND t.exempt=FALSE OR t.exempt=TRUE`
+    );
+
+    for (const t of tenants) {
+      if (!t.owner_email) continue;
+      try {
+        const db  = (sql, p) => pool.query(`SET search_path TO "${t.schema_name}",public; ${sql}`, p);
+        const dbq = async (sql, p) => { await pool.query(`SET search_path TO "${t.schema_name}",public`); return pool.query(sql, p); };
+
+        // Agendamentos do mês anterior
+        const apptRes = await pool.query(
+          `SELECT * FROM "${t.schema_name}".appointments
+           WHERE to_char(date,'YYYY-MM')=$1 AND status IN ('confirmed','realizado')`,
+          [month]
+        );
+        const appts    = apptRes.rows;
+        if (!appts.length) continue; // sem agendamentos, não envia
+
+        const received = appts.filter(a=>a.paid).reduce((s,a)=>s+Number(a.price||0),0);
+        const pending  = appts.filter(a=>!a.paid).reduce((s,a)=>s+Number(a.price||0),0);
+        const total    = received + pending;
+        const avg      = appts.length ? total/appts.length : 0;
+
+        // Despesas do mês anterior
+        const expRes = await pool.query(
+          `SELECT * FROM "${t.schema_name}".expenses
+           WHERE to_char(expense_date,'YYYY-MM')=$1`,
+          [month]
+        );
+        const expenses    = expRes.rows.reduce((s,e)=>s+Number(e.amount||0),0);
+        const profit      = received - expenses;
+        const profitColor = profit >= 0 ? '#1e8449' : '#c0392b';
+
+        // Top 3 procedimentos
+        const procMap = {};
+        appts.forEach(a => { procMap[a.proc_name] = (procMap[a.proc_name]||0) + 1; });
+        const top3 = Object.entries(procMap).sort((a,b)=>b[1]-a[1]).slice(0,3);
+
+        const color = t.primary_color || '#9B4D6A';
+        const biz   = t.business_name || t.name;
+        const owner = t.owner_name || biz;
+        const fmtR  = n => 'R$ ' + Number(n).toFixed(2).replace('.',',').replace(/\B(?=(\d{3})+(?!\d))/g,'.');
+
+        const html = `
+<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:0">
+  <div style="background:linear-gradient(135deg,${color},#6B2B46);padding:28px 32px;border-radius:12px 12px 0 0;text-align:center">
+    <div style="font-size:28px;margin-bottom:8px">📊</div>
+    <h2 style="color:#fff;margin:0;font-size:20px">Resumo de ${monthLabel}</h2>
+    <p style="color:rgba(255,255,255,.8);margin:6px 0 0;font-size:14px">${biz}</p>
+  </div>
+  <div style="background:#fff;padding:28px 32px;border-radius:0 0 12px 12px;border:1px solid #eee;border-top:none">
+    <p style="font-size:15px;color:#3D2B35">Olá, <strong>${owner}</strong>! Aqui está o seu resumo financeiro de <strong>${monthLabel}</strong>.</p>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:20px 0">
+      <div style="background:#e8f7ef;border-radius:10px;padding:14px;text-align:center">
+        <div style="font-size:10px;font-weight:800;text-transform:uppercase;color:#1e8449;margin-bottom:4px">✅ Recebido</div>
+        <div style="font-size:22px;font-weight:800;color:#1e8449">${fmtR(received)}</div>
+      </div>
+      <div style="background:#fdf0ee;border-radius:10px;padding:14px;text-align:center">
+        <div style="font-size:10px;font-weight:800;text-transform:uppercase;color:#c0392b;margin-bottom:4px">💸 Despesas</div>
+        <div style="font-size:22px;font-weight:800;color:#c0392b">${fmtR(expenses)}</div>
+      </div>
+    </div>
+
+    <div style="background:${profit>=0?'#e8f7ef':'#fdf0ee'};border:2px solid ${profitColor};border-radius:12px;padding:16px;text-align:center;margin-bottom:20px">
+      <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:${profitColor};margin-bottom:6px">💡 LUCRO DO MÊS</div>
+      <div style="font-size:30px;font-weight:800;color:${profitColor}">${fmtR(profit)}</div>
+    </div>
+
+    <div style="background:#f9f9f9;border-radius:10px;padding:14px;margin-bottom:16px">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#888;margin-bottom:10px">📋 Resumo de Atendimentos</div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px"><span>Total de agendamentos</span><strong>${appts.length}</strong></div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px"><span>Faturamento total</span><strong>${fmtR(total)}</strong></div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px"><span>Ticket médio</span><strong>${fmtR(avg)}</strong></div>
+      ${pending > 0 ? `<div style="display:flex;justify-content:space-between;font-size:13px;color:#c0392b"><span>⏳ A receber</span><strong>${fmtR(pending)}</strong></div>` : ''}
+    </div>
+
+    ${top3.length ? `
+    <div style="background:#f9f9f9;border-radius:10px;padding:14px">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#888;margin-bottom:10px">🏆 Top Procedimentos</div>
+      ${top3.map(([name,cnt],i)=>`<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px"><span>${['🥇','🥈','🥉'][i]} ${name}</span><strong>${cnt} ag.</strong></div>`).join('')}
+    </div>` : ''}
+
+    <p style="margin-top:20px;font-size:12px;color:#aaa;text-align:center">Belle Planner · Sua Agenda Online</p>
+  </div>
+</div>`;
+
+        await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            from:    `Belle Planner <${MASTER_FROM_EMAIL}>`,
+            to:      [t.owner_email],
+            subject: `📊 ${biz} — Resumo de ${monthLabel}`,
+            html,
+          }),
+        });
+        console.log(`[Cron] Resumo mensal enviado: ${biz} (${t.owner_email})`);
+      } catch(err) {
+        console.error(`[Cron] Erro resumo mensal ${t.schema_name}:`, err.message);
+      }
+    }
+  } catch(err) { console.error('[Cron] Erro geral resumo mensal:', err.message); }
+}, { timezone: 'UTC' });
+
 // ── Lembrete push 30min antes do procedimento (a cada 5min) ─────────────────
 cron.schedule('*/5 * * * *', async () => {
   try {
