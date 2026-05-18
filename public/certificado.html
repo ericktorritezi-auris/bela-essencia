@@ -100,6 +100,38 @@ async function loadCourses() {
   }
 }
 
+function renderCertOverlay(d) {
+  const overlay = document.getElementById('cert-overlay-preview');
+  if (!overlay) return;
+  try {
+    const config = JSON.parse(d.cert_field_config);
+    const mods   = (() => { try { return JSON.parse(d.cert_modules||'[]').join(' · '); } catch(e){return d.cert_modules||'';} })();
+    const _raw   = d.issue_date ? String(d.issue_date).slice(0,10) : null;
+    const date   = _raw ? new Date(_raw+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'}) : '—';
+    const values = {
+      student_name: d.student_name,
+      course_name:  d.cert_name || d.proc_name,
+      date:         date,
+      hours:        d.cert_hours ? String(d.cert_hours).padStart(2,'0')+'h' : '—',
+      modules:      mods,
+      cert_number:  d.cert_number
+    };
+    overlay.innerHTML = Object.entries(config).map(([key, pos]) => {
+      const val = values[key] || '';
+      if (!val) return '';
+      return `<div style="position:absolute;left:${pos.x}%;top:${pos.y}%;
+        transform:translate(-50%,-50%);
+        font-size:${pos.size||14}px;
+        color:${pos.color||'#111'};
+        font-weight:700;
+        text-align:${pos.align||'center'};
+        white-space:pre-wrap;
+        max-width:80%;
+        line-height:1.3">${val}</div>`;
+    }).join('');
+  } catch(e) { console.warn('Overlay erro:', e); }
+}
+
 function selectCourse(id, btn) {
   _selectedCourseId = id;
   document.querySelectorAll('.course-btn').forEach(b=>b.classList.remove('selected'));
@@ -131,7 +163,9 @@ async function verifyCert() {
 
 function renderResult(d) {
   const mods = (() => { try { return JSON.parse(d.cert_modules||'[]').join(' · ') || '—'; } catch(e){return d.cert_modules||'—';} })();
-  const issueDate = new Date(d.issue_date+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'});
+  // slice(0,10) evita Invalid Date quando vem como ISO completo do banco
+  const _rawDate = d.issue_date ? String(d.issue_date).slice(0,10) : null;
+  const issueDate = _rawDate ? new Date(_rawDate+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'}) : '—';
   const resultEl = document.getElementById('step-result');
   resultEl.style.display = 'block';
   resultEl.innerHTML = `
@@ -153,9 +187,17 @@ function renderResult(d) {
         <div class="result-row"><span class="result-row-label">Nº Registro</span><span class="result-row-val" style="color:#d4a843;font-family:monospace">${d.cert_number}</span></div>
       </div>
     </div>
-    ${d.cert_layout_url ? `<img src="${d.cert_layout_url}" class="cert-image" alt="Certificado" onerror="this.style.display='none'">` : ''}
+    ${d.cert_layout_url ? `
+    <div style="position:relative;margin-top:14px;border-radius:10px;overflow:hidden;border:1px solid rgba(200,117,142,.2)">
+      <img src="${d.cert_layout_url}" style="display:block;width:100%;height:auto" alt="Certificado" onerror="this.style.display='none'">
+      <div id="cert-overlay-preview" style="position:absolute;inset:0;pointer-events:none"></div>
+    </div>` : ''}
     <button class="btn-print no-print" onclick="window.print()">🖨️ Imprimir / Salvar PDF</button>
     <button class="btn-print no-print" style="margin-top:6px" onclick="document.getElementById('step-result').style.display='none';document.getElementById('cert-number-input').value=''">🔍 Verificar outro</button>`;
+  // Montar overlay dos campos após o HTML ser inserido
+  if (d.cert_field_config && d.cert_layout_url) {
+    setTimeout(() => renderCertOverlay(d), 50);
+  }
 }
 
 function renderInvalid(msg) {
