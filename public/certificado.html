@@ -210,16 +210,27 @@ function renderResult(d) {
       </div>
     </div>
     ${d.cert_layout_url ? `
-    <div style="position:relative;margin-top:14px;border-radius:10px;overflow:hidden;border:1px solid rgba(200,117,142,.2)">
-      <img src="${d.cert_layout_url}" style="display:block;width:100%;height:auto" alt="Certificado" onerror="this.style.display='none'">
-      <div id="cert-overlay-preview" style="position:absolute;inset:0;pointer-events:none"></div>
+    <div id="cert-img-container" style="position:relative;margin-top:14px;border-radius:10px;border:1px solid rgba(200,117,142,.2)">
+      <img id="cert-preview-img" src="${d.cert_layout_url}" style="display:block;width:100%;height:auto;border-radius:10px" alt="Certificado" onerror="this.style.display='none'">
+      <div id="cert-overlay-preview" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;border-radius:10px;overflow:hidden"></div>
     </div>` : ''}
     <button class="btn-print no-print" onclick="printCertFromValidator(window._lastCertData)">🖨️ Imprimir / Salvar PDF</button>
     <button class="btn-print no-print" style="margin-top:6px" onclick="document.getElementById('step-result').style.display='none';document.getElementById('cert-number-input').value=''">🔍 Verificar outro</button>`;
   // Guardar dados para impressão e montar overlay
   window._lastCertData = d;
   if (d.cert_field_config && d.cert_layout_url) {
-    setTimeout(() => renderCertOverlay(d), 50);
+    // Aguarda a imagem carregar para garantir dimensões corretas
+    const waitImg = () => {
+      const img = document.getElementById('cert-preview-img');
+      if (!img) { setTimeout(() => renderCertOverlay(d), 100); return; }
+      if (img.complete && img.naturalHeight > 0) {
+        renderCertOverlay(d);
+      } else {
+        img.onload = () => renderCertOverlay(d);
+        img.onerror = () => renderCertOverlay(d);
+      }
+    };
+    setTimeout(waitImg, 80);
   }
 }
 
