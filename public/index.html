@@ -2977,7 +2977,7 @@ function renderCertOverlayPreview(proc, studentName, apptDate) {
     const values = {
       student_name: studentName,
       course_name:  proc.cert_name || proc.name,
-      date:         apptDate ? new Date(apptDate + 'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'}) : new Date().toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'}),
+      date:         (() => { const d = apptDate ? String(apptDate).slice(0,10) : null; return d ? new Date(d + 'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'}) : new Date().toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'}); })(),
       hours:        String(proc.cert_hours||0).padStart(2,'0') + 'h',
       modules:      mods,
       cert_number:  '(número será gerado)'

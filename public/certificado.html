@@ -93,7 +93,7 @@ async function loadCourses() {
     grid.innerHTML = courses.map(c => `
       <button class="course-btn" onclick="selectCourse(${c.id}, this)" data-id="${c.id}">
         <div class="course-btn-name">🎓 ${c.cert_name||c.name}</div>
-        <div class="course-btn-meta">${c.c.cert_hours ? String(c.cert_hours).padStart(2,'0')+'h' : ''} ${c.cert_hours&&c.cert_description?'·':''} ${c.cert_description||''}</div>
+        <div class="course-btn-meta">${c.cert_hours ? String(c.cert_hours).padStart(2,'0')+'h' : ''} ${c.cert_hours&&c.cert_description?'·':''} ${c.cert_description||''}</div>
       </button>`).join('');
   } catch(e) {
     document.getElementById('courses-loading').textContent = 'Erro ao carregar cursos.';
