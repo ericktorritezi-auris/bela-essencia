@@ -1441,12 +1441,50 @@ tr.drag-over{border-top:2.5px solid var(--rose)!important}
                 </div>
               </div>
               <div id="cert-editor-desktop" style="display:none">
-                <div style="position:relative;display:inline-block;max-width:100%;border:2px solid var(--border);border-radius:8px;overflow:hidden;background:#f0f0f0;user-select:none">
-                  <img id="cert-bg-img" src="" alt="Template" style="display:block;max-width:100%;height:auto;max-height:65vh">
-                  <div id="cert-fields-overlay" style="position:absolute;inset:0"></div>
+                <div style="display:grid;grid-template-columns:1fr 260px;gap:16px;align-items:start">
+                  <!-- Imagem + overlay -->
+                  <div>
+                    <div style="position:relative;border:2px solid var(--border);border-radius:8px;overflow:hidden;background:#f0f0f0;user-select:none">
+                      <img id="cert-bg-img" src="" alt="Template" style="display:block;width:100%;height:auto;max-height:65vh">
+                      <div id="cert-fields-overlay" style="position:absolute;inset:0"></div>
+                    </div>
+                    <!-- Chips ainda não posicionados -->
+                    <div id="cert-field-chips" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px"></div>
+                    <div style="margin-top:6px;font-size:11px;color:var(--text-light)">💡 Arraste os campos acima para a posição correta. Clique em um campo posicionado para ajustar as propriedades.</div>
+                  </div>
+                  <!-- Painel de propriedades -->
+                  <div id="cert-props-panel" style="background:var(--cream);border:1px solid var(--border);border-radius:12px;padding:14px">
+                    <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:var(--text-light);margin-bottom:12px">⚙️ Propriedades</div>
+                    <div id="cert-props-empty" style="font-size:12px;color:var(--text-light);text-align:center;padding:16px 0">
+                      Clique em um campo posicionado para editar suas propriedades
+                    </div>
+                    <div id="cert-props-form" style="display:none">
+                      <div style="font-weight:700;font-size:13px;margin-bottom:12px;color:var(--dark)" id="cert-props-title"></div>
+                      <div style="margin-bottom:10px">
+                        <label style="font-size:11px;color:var(--text-light);font-weight:600;display:block;margin-bottom:4px">Tamanho da fonte (px)</label>
+                        <div style="display:flex;align-items:center;gap:8px">
+                          <input type="range" id="cert-prop-size" min="8" max="72" step="1" style="flex:1;accent-color:var(--rose)"
+                            oninput="updateSelectedField('size', +this.value); document.getElementById('cert-prop-size-val').textContent=this.value+'px'">
+                          <span id="cert-prop-size-val" style="font-size:12px;font-weight:700;color:var(--rose);min-width:32px">14px</span>
+                        </div>
+                      </div>
+                      <div style="margin-bottom:10px">
+                        <label style="font-size:11px;color:var(--text-light);font-weight:600;display:block;margin-bottom:4px">Cor do texto</label>
+                        <input type="color" id="cert-prop-color" value="#111111" style="width:100%;height:36px;border:1px solid var(--border);border-radius:8px;cursor:pointer"
+                          oninput="updateSelectedField('color', this.value)">
+                      </div>
+                      <div style="margin-bottom:12px">
+                        <label style="font-size:11px;color:var(--text-light);font-weight:600;display:block;margin-bottom:6px">Alinhamento</label>
+                        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px">
+                          <button onclick="updateSelectedField('align','left')"   id="cert-align-left"   style="padding:6px 4px;font-size:12px;border:1.5px solid var(--border);border-radius:6px;background:white;cursor:pointer">◀ Esq</button>
+                          <button onclick="updateSelectedField('align','center')" id="cert-align-center" style="padding:6px 4px;font-size:12px;border:1.5px solid var(--border);border-radius:6px;background:white;cursor:pointer">◉ Cen</button>
+                          <button onclick="updateSelectedField('align','right')"  id="cert-align-right"  style="padding:6px 4px;font-size:12px;border:1.5px solid var(--border);border-radius:6px;background:white;cursor:pointer">Dir ▶</button>
+                        </div>
+                      </div>
+                      <button onclick="removeSelectedField()" style="width:100%;padding:8px;background:none;border:1.5px solid var(--error);border-radius:8px;color:var(--error);font-size:12px;font-weight:700;cursor:pointer">🗑 Remover campo</button>
+                    </div>
+                  </div>
                 </div>
-                <div id="cert-field-chips" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px"></div>
-                <div style="margin-top:8px;font-size:12px;color:var(--text-light)">💡 Clique em um campo do painel acima e arraste para a posição correta no certificado.</div>
               </div>
               <div id="cert-editor-mobile" style="display:none">
                 <div id="cert-mobile-fields"></div>
@@ -4139,17 +4177,97 @@ function renderCertDesktopEditor(p) {
 function _renderDraggableField(f, pos, overlay, imgEl) {
   const el = document.createElement('div');
   el.dataset.key = f.key;
+  el.id = 'cert-field-' + f.key;
   el.style.cssText = `position:absolute;left:${pos.x}%;top:${pos.y}%;
     font-size:${pos.size||14}px;color:${pos.color||'#111'};font-weight:700;
     background:rgba(255,255,255,.82);border:1.5px dashed var(--rose);
     border-radius:4px;padding:3px 8px;cursor:move;white-space:nowrap;
-    transform:translate(-50%,-50%);user-select:none;z-index:20;touch-action:none`;
+    transform:translate(-50%,-50%);user-select:none;z-index:20;touch-action:none;transition:box-shadow .15s`;
   el.textContent = f.sample || f.label;
   overlay.appendChild(el);
-  // Mouse drag (campo já posicionado)
+  // Clique seleciona no painel de propriedades
+  el.addEventListener('click', ev => { ev.stopPropagation(); selectFieldProps(f.key); });
+  // Mouse drag
   el.addEventListener('mousedown', ev => _startFieldDrag(ev, el, f, imgEl));
-  // Touch drag (campo já posicionado)
+  // Touch drag
   el.addEventListener('touchstart', ev => _startFieldDragTouch(ev, el, f, imgEl), {passive:false});
+}
+
+// ── Painel de propriedades ─────────────────────────────────────
+let _selectedFieldKey = null;
+
+function selectFieldProps(key) {
+  _selectedFieldKey = key;
+  const f = CERT_FIELDS.find(x => x.key === key);
+  const pos = _certFieldPositions[key] || { size:14, color:'#111111', align:'center' };
+  // Destacar campo selecionado
+  document.querySelectorAll('[id^="cert-field-"]').forEach(el => {
+    el.style.boxShadow = el.id === 'cert-field-' + key
+      ? '0 0 0 3px var(--rose)' : 'none';
+    el.style.border = el.id === 'cert-field-' + key
+      ? '2px solid var(--rose)' : '1.5px dashed var(--rose)';
+  });
+  // Preencher painel
+  document.getElementById('cert-props-empty').style.display = 'none';
+  document.getElementById('cert-props-form').style.display  = 'block';
+  document.getElementById('cert-props-title').textContent   = f ? f.label : key;
+  const sizeEl = document.getElementById('cert-prop-size');
+  const sizeVal = document.getElementById('cert-prop-size-val');
+  sizeEl.value = pos.size || 14;
+  sizeVal.textContent = (pos.size || 14) + 'px';
+  document.getElementById('cert-prop-color').value = pos.color || '#111111';
+  // Destacar alinhamento ativo
+  ['left','center','right'].forEach(a => {
+    const btn = document.getElementById('cert-align-' + a);
+    if (btn) btn.style.background = (pos.align || 'center') === a ? 'var(--rose-light)' : 'white';
+    if (btn) btn.style.borderColor = (pos.align || 'center') === a ? 'var(--rose)' : 'var(--border)';
+  });
+}
+
+function updateSelectedField(prop, value) {
+  if (!_selectedFieldKey) return;
+  if (!_certFieldPositions[_selectedFieldKey]) _certFieldPositions[_selectedFieldKey] = {x:50,y:50,size:14,color:'#111111',align:'center'};
+  _certFieldPositions[_selectedFieldKey][prop] = prop === 'size' ? +value : value;
+  // Atualizar visual do campo
+  const el = document.getElementById('cert-field-' + _selectedFieldKey);
+  if (el) {
+    if (prop === 'size')  el.style.fontSize  = value + 'px';
+    if (prop === 'color') el.style.color      = value;
+    if (prop === 'align') el.style.textAlign  = value;
+  }
+  // Atualizar destaque dos botões de alinhamento
+  if (prop === 'align') {
+    ['left','center','right'].forEach(a => {
+      const btn = document.getElementById('cert-align-' + a);
+      if (btn) btn.style.background   = a === value ? 'var(--rose-light)' : 'white';
+      if (btn) btn.style.borderColor  = a === value ? 'var(--rose)' : 'var(--border)';
+    });
+  }
+}
+
+function removeSelectedField() {
+  if (!_selectedFieldKey) return;
+  if (!confirm('Remover este campo do certificado?')) return;
+  delete _certFieldPositions[_selectedFieldKey];
+  const el = document.getElementById('cert-field-' + _selectedFieldKey);
+  if (el) el.remove();
+  // Recriar como chip disponível
+  const f = CERT_FIELDS.find(x => x.key === _selectedFieldKey);
+  if (f) {
+    const chips = document.getElementById('cert-field-chips');
+    const chip = document.createElement('div');
+    chip.textContent = f.label;
+    chip.style.cssText = 'background:var(--rose-light);border:1.5px solid var(--rose-mid);border-radius:20px;padding:7px 14px;font-size:12px;font-weight:700;color:var(--rose);cursor:grab;user-select:none;white-space:nowrap;touch-action:none';
+    chips.appendChild(chip);
+    const imgEl = document.getElementById('cert-bg-img');
+    const overlay = document.getElementById('cert-fields-overlay');
+    chip.addEventListener('mousedown', ev => _startChipDrag(ev, f, overlay, imgEl, chip));
+    chip.addEventListener('touchstart', ev => _startChipDragTouch(ev, f, overlay, imgEl, chip), {passive:false});
+  }
+  // Limpar painel
+  _selectedFieldKey = null;
+  document.getElementById('cert-props-empty').style.display = 'block';
+  document.getElementById('cert-props-form').style.display  = 'none';
 }
 
 // ── Arrastar CHIP (ainda não posicionado) para a imagem ──────────
