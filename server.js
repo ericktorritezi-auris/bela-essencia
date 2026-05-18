@@ -1915,6 +1915,19 @@ app.put('/api/procedures/:id', requireAdmin, async (req, res) => {
   }
 });
 
+app.patch('/api/procedures/:id/cert-config', requireAdmin, async (req, res) => {
+  const { cert_field_config } = req.body;
+  if (!cert_field_config) return res.status(400).json({ error: 'cert_field_config obrigatório' });
+  try {
+    const { rows } = await req.db(
+      'UPDATE procedures SET cert_field_config=$1 WHERE id=$2 RETURNING *',
+      [cert_field_config, req.params.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Procedimento não encontrado' });
+    res.json(rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.delete('/api/procedures/:id', requireAdmin, async (req, res) => {
   try {
     // Soft delete – preserva histórico de agendamentos vinculados
