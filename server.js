@@ -198,7 +198,21 @@ async function createTenantSchema(schemaName) {
         id SERIAL PRIMARY KEY, name VARCHAR(200) NOT NULL, dur INTEGER NOT NULL,
         price NUMERIC(10,2), pt VARCHAR(10) NOT NULL DEFAULT 'fixed',
         description TEXT, sort_order INTEGER,
+        is_course BOOLEAN NOT NULL DEFAULT FALSE,
+        cert_name VARCHAR(300), cert_hours INTEGER, cert_description TEXT,
+        cert_modules TEXT, cert_layout_url TEXT, cert_field_config TEXT,
+        cert_abbreviation VARCHAR(8),
         active BOOLEAN NOT NULL DEFAULT TRUE, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      `CREATE TABLE IF NOT EXISTS certificates (
+        id SERIAL PRIMARY KEY,
+        cert_number VARCHAR(60) UNIQUE NOT NULL,
+        sequence_number INTEGER NOT NULL DEFAULT 1,
+        appointment_id VARCHAR(30) NOT NULL,
+        proc_id INTEGER NOT NULL,
+        student_name VARCHAR(200) NOT NULL,
+        issue_date DATE NOT NULL DEFAULT CURRENT_DATE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )`,
       `CREATE TABLE IF NOT EXISTS expenses (
         id SERIAL PRIMARY KEY,
@@ -1101,6 +1115,28 @@ async function initDB() {
     for (const { schema_name } of (await client.query(`SELECT schema_name FROM tenants WHERE schema_name IS NOT NULL`)).rows) {
       try { await client.query(`ALTER TABLE "${schema_name}".procedures ADD COLUMN IF NOT EXISTS description TEXT`); } catch {}
       try { await client.query(`ALTER TABLE "${schema_name}".procedures ADD COLUMN IF NOT EXISTS sort_order INTEGER`); } catch {}
+      // Migração: campos de curso/certificado em procedures
+      try { await client.query(`ALTER TABLE "${schema_name}".procedures ADD COLUMN IF NOT EXISTS is_course BOOLEAN NOT NULL DEFAULT FALSE`); } catch {}
+      try { await client.query(`ALTER TABLE "${schema_name}".procedures ADD COLUMN IF NOT EXISTS cert_name VARCHAR(300)`); } catch {}
+      try { await client.query(`ALTER TABLE "${schema_name}".procedures ADD COLUMN IF NOT EXISTS cert_hours INTEGER`); } catch {}
+      try { await client.query(`ALTER TABLE "${schema_name}".procedures ADD COLUMN IF NOT EXISTS cert_description TEXT`); } catch {}
+      try { await client.query(`ALTER TABLE "${schema_name}".procedures ADD COLUMN IF NOT EXISTS cert_modules TEXT`); } catch {}
+      try { await client.query(`ALTER TABLE "${schema_name}".procedures ADD COLUMN IF NOT EXISTS cert_layout_url TEXT`); } catch {}
+      try { await client.query(`ALTER TABLE "${schema_name}".procedures ADD COLUMN IF NOT EXISTS cert_field_config TEXT`); } catch {}
+      try { await client.query(`ALTER TABLE "${schema_name}".procedures ADD COLUMN IF NOT EXISTS cert_abbreviation VARCHAR(8)`); } catch {}
+      // Migração: tabela de certificados emitidos
+      try {
+        await client.query(`CREATE TABLE IF NOT EXISTS "${schema_name}".certificates (
+          id             SERIAL PRIMARY KEY,
+          cert_number    VARCHAR(60) UNIQUE NOT NULL,
+          sequence_number INTEGER NOT NULL DEFAULT 1,
+          appointment_id VARCHAR(30) NOT NULL,
+          proc_id        INTEGER NOT NULL,
+          student_name   VARCHAR(200) NOT NULL,
+          issue_date     DATE NOT NULL DEFAULT CURRENT_DATE,
+          created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )`);
+      } catch {}
       // Migração: tabela de despesas (contas a pagar)
       try {
         await client.query(`CREATE TABLE IF NOT EXISTS "${schema_name}".expenses (
@@ -1643,7 +1679,7 @@ function requireAdmin(req, res, next) {
 app.get('/api/health', async (req, res) => {
   try {
     await req.db('SELECT 1');
-    res.json({ ok: true, version: '2.9.3', db: 'connected' });
+    res.json({ ok: true, version: '2.9.4', db: 'connected' });
   } catch {
     res.status(503).json({ ok: false, db: 'disconnected' });
   }
@@ -1719,6 +1755,96 @@ app.delete('/api/expenses/:id', requireAdmin, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ── CURSOS — lista pública de cursos do tenant ────────────────────────────────
+app.get('/api/cursos', async (req, res) => {
+  try {
+    const { rows } = await req.db(
+      `SELECT id, name, cert_name, cert_hours, cert_description, cert_modules, cert_abbreviation
+       FROM procedures WHERE is_course=TRUE AND active=TRUE ORDER BY COALESCE(sort_order,id)`
+    );
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── CERTIFICATES — emitir e listar ────────────────────────────────────────────
+app.post('/api/certificates', requireAdmin, async (req, res) => {
+  const { appointment_id, proc_id, student_name } = req.body;
+  if (!appointment_id || !proc_id || !student_name)
+    return res.status(400).json({ error: 'Campos obrigatórios: appointment_id, proc_id, student_name' });
+  try {
+    // Verificar se já existe certificado para este agendamento
+    const existing = await req.db(
+      'SELECT cert_number FROM certificates WHERE appointment_id=$1', [appointment_id]
+    );
+    if (existing.rows.length) return res.json({ cert_number: existing.rows[0].cert_number, existing: true });
+
+    // Buscar dados do curso para montar o prefixo
+    const procRes = await req.db('SELECT cert_abbreviation FROM procedures WHERE id=$1', [proc_id]);
+    const abr = (procRes.rows[0]?.cert_abbreviation || 'CP').toUpperCase();
+    const schema = req.schemaName || 'public';
+    const tPrefix = schema.replace('tenant_','');
+    const tenantPfx = /^\d+$/.test(tPrefix) ? 'BP' : tPrefix.slice(0,2).toUpperCase();
+    const year = new Date().getFullYear();
+
+    // Próximo número na sequência deste curso neste ano
+    const seqRes = await req.db(
+      `SELECT COALESCE(MAX(sequence_number),0)+1 AS next FROM certificates
+       WHERE proc_id=$1 AND EXTRACT(YEAR FROM issue_date)=$2`,
+      [proc_id, year]
+    );
+    const seq = seqRes.rows[0].next;
+    const cert_number = `${tenantPfx}${abr}-${year}-${String(seq).padStart(4,'0')}`;
+
+    const { rows } = await req.db(
+      `INSERT INTO certificates (cert_number,sequence_number,appointment_id,proc_id,student_name,issue_date)
+       VALUES ($1,$2,$3,$4,$5,CURRENT_DATE) RETURNING *`,
+      [cert_number, seq, appointment_id, proc_id, student_name]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/certificates', requireAdmin, async (req, res) => {
+  const { proc_id } = req.query;
+  try {
+    let sql = 'SELECT * FROM certificates WHERE 1=1';
+    const params = [];
+    if (proc_id) sql += ` AND proc_id=$${params.push(proc_id)}`;
+    sql += ' ORDER BY created_at DESC';
+    const { rows } = await req.db(sql, params);
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── CERTIFICADO PÚBLICO — validação por número ────────────────────────────────
+// Rota PÚBLICA: sem requireAdmin, funciona mesmo com tenant suspenso
+app.get('/api/certificado/:number', async (req, res) => {
+  if (!req.schemaName) return res.status(404).json({ error: 'Tenant não encontrado' });
+  try {
+    const { rows } = await req.db(
+      `SELECT c.*, p.cert_name, p.cert_hours, p.cert_description, p.cert_modules,
+              p.cert_layout_url, p.cert_field_config, p.name as proc_name
+       FROM certificates c
+       JOIN procedures p ON p.id = c.proc_id
+       WHERE c.cert_number = $1`,
+      [req.params.number]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Certificado não encontrado' });
+    // Buscar nome do profissional
+    const profRes = await req.db('SELECT name, email FROM admin_profile LIMIT 1');
+    const tcRes = await pool.query(
+      `SELECT business_name FROM tenant_configs WHERE tenant_id=(
+        SELECT id FROM tenants WHERE schema_name=$1 LIMIT 1)`,
+      [req.schemaName]
+    );
+    res.json({
+      ...rows[0],
+      professional_name: profRes.rows[0]?.name || '',
+      business_name: tcRes.rows[0]?.business_name || ''
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ── Procedimentos (público: GET; admin: POST/PUT/DELETE) ──────────────────────
 
 // Reordenar procedimentos
@@ -1747,12 +1873,19 @@ app.get('/api/procedures', async (req, res) => {
 });
 
 app.post('/api/procedures', requireAdmin, async (req, res) => {
-  const { name, dur, price, pt, description } = req.body;
+  const { name, dur, price, pt, description,
+          is_course, cert_name, cert_hours, cert_description,
+          cert_modules, cert_layout_url, cert_field_config, cert_abbreviation } = req.body;
   if (!name || !dur) return res.status(400).json({ error: 'Nome e duração obrigatórios' });
   try {
     const { rows } = await req.db(
-      'INSERT INTO procedures (name, dur, price, pt, description) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [name, parseInt(dur), price || null, pt || 'fixed', description || null]
+      `INSERT INTO procedures (name, dur, price, pt, description,
+        is_course, cert_name, cert_hours, cert_description,
+        cert_modules, cert_layout_url, cert_field_config, cert_abbreviation)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+      [name, parseInt(dur), price||null, pt||'fixed', description||null,
+       is_course||false, cert_name||null, cert_hours||null, cert_description||null,
+       cert_modules||null, cert_layout_url||null, cert_field_config||null, cert_abbreviation||null]
     );
     res.status(201).json(rows[0]);
   } catch (err) {
@@ -1761,11 +1894,19 @@ app.post('/api/procedures', requireAdmin, async (req, res) => {
 });
 
 app.put('/api/procedures/:id', requireAdmin, async (req, res) => {
-  const { name, dur, price, pt, description } = req.body;
+  const { name, dur, price, pt, description,
+          is_course, cert_name, cert_hours, cert_description,
+          cert_modules, cert_layout_url, cert_field_config, cert_abbreviation } = req.body;
   try {
     const { rows } = await req.db(
-      'UPDATE procedures SET name=$1, dur=$2, price=$3, pt=$4, description=$5 WHERE id=$6 RETURNING *',
-      [name, parseInt(dur), price || null, pt || 'fixed', description || null, req.params.id]
+      `UPDATE procedures SET name=$1, dur=$2, price=$3, pt=$4, description=$5,
+        is_course=$6, cert_name=$7, cert_hours=$8, cert_description=$9,
+        cert_modules=$10, cert_layout_url=$11, cert_field_config=$12, cert_abbreviation=$13
+       WHERE id=$14 RETURNING *`,
+      [name, parseInt(dur), price||null, pt||'fixed', description||null,
+       is_course||false, cert_name||null, cert_hours?parseInt(cert_hours):null, cert_description||null,
+       cert_modules||null, cert_layout_url||null, cert_field_config||null, cert_abbreviation||null,
+       req.params.id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Procedimento não encontrado' });
     res.json(rows[0]);
@@ -2985,7 +3126,7 @@ app.get('/api/backup/export', requireAdmin, async (req, res) => {
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.json({
       exportedAt: new Date().toISOString(),
-      version: '2.9.3',
+      version: '2.9.4',
       procedures:    procs.rows,
       appointments:  appts.rows,
       blocked_dates: blocked.rows,
