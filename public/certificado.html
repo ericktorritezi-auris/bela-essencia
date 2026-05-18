@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Validação de Certificado</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',sans-serif;background:#0d0509;color:#f0e4ea;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:24px 16px 48px}
+.brand{font-family:'Playfair Display',serif;font-size:22px;font-weight:700;color:#f0e4ea;margin-bottom:32px;text-align:center}
+.brand span{color:#d4a843;font-style:italic}
+.card{background:#150a10;border:1px solid rgba(200,117,142,.2);border-radius:20px;padding:28px 24px;width:100%;max-width:520px}
+.card-title{font-family:'Playfair Display',serif;font-size:22px;font-weight:800;margin-bottom:6px;text-align:center}
+.card-sub{font-size:13px;color:rgba(240,228,234,.5);text-align:center;margin-bottom:24px}
+.courses-grid{display:flex;flex-direction:column;gap:8px;margin-bottom:20px}
+.course-btn{background:rgba(200,117,142,.08);border:1px solid rgba(200,117,142,.25);border-radius:12px;padding:14px 16px;cursor:pointer;text-align:left;transition:background .2s,border-color .2s;width:100%;color:#f0e4ea}
+.course-btn:hover,.course-btn.selected{background:rgba(200,117,142,.18);border-color:rgba(200,117,142,.6)}
+.course-btn-name{font-weight:700;font-size:14px}
+.course-btn-meta{font-size:12px;color:rgba(240,228,234,.45);margin-top:3px}
+.field-wrap{margin-bottom:16px}
+label{display:block;font-size:12px;font-weight:600;color:rgba(240,228,234,.5);margin-bottom:6px;text-transform:uppercase;letter-spacing:.08em}
+input{width:100%;background:rgba(255,255,255,.05);border:1.5px solid rgba(200,117,142,.3);border-radius:10px;padding:13px 15px;color:#f0e4ea;font-family:'DM Sans',sans-serif;font-size:14px;outline:none;transition:border-color .2s}
+input:focus{border-color:rgba(200,117,142,.8)}
+.btn{width:100%;padding:14px;border:none;border-radius:50px;font-size:14px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;transition:transform .2s,box-shadow .2s}
+.btn-primary{background:linear-gradient(135deg,#c8758e,#8b3d54);color:#fff;box-shadow:0 6px 24px rgba(200,117,142,.3);margin-top:4px}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 10px 32px rgba(200,117,142,.45)}
+.result-card{margin-top:20px;border-radius:16px;overflow:hidden}
+.result-valid{background:linear-gradient(135deg,rgba(30,132,73,.15),rgba(30,132,73,.05));border:1.5px solid rgba(30,132,73,.4)}
+.result-invalid{background:linear-gradient(135deg,rgba(192,57,43,.15),rgba(192,57,43,.05));border:1.5px solid rgba(192,57,43,.4)}
+.result-header{padding:16px 20px;display:flex;align-items:center;gap:10px}
+.result-badge-valid{font-size:13px;font-weight:800;color:#27ae60;text-transform:uppercase;letter-spacing:.1em}
+.result-badge-invalid{font-size:13px;font-weight:800;color:#e74c3c;text-transform:uppercase;letter-spacing:.1em}
+.result-body{padding:16px 20px;border-top:1px solid rgba(255,255,255,.06)}
+.result-row{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.05);font-size:13px}
+.result-row:last-child{border-bottom:none}
+.result-row-label{color:rgba(240,228,234,.45);font-weight:500;flex-shrink:0}
+.result-row-val{font-weight:600;text-align:right;word-break:break-all}
+.cert-image{width:100%;border-radius:10px;margin-top:14px;border:1px solid rgba(200,117,142,.2)}
+.btn-print{width:100%;padding:12px;border:1.5px solid rgba(200,117,142,.4);border-radius:50px;background:none;color:#c8758e;font-size:13px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;margin-top:12px;transition:background .2s}
+.btn-print:hover{background:rgba(200,117,142,.1)}
+.sep{height:1px;background:rgba(200,117,142,.15);margin:16px 0}
+.loading{text-align:center;padding:20px;color:rgba(240,228,234,.4);font-size:13px}
+.error-msg{color:#e74c3c;font-size:13px;margin-top:8px;text-align:center}
+@media(min-width:600px){.card{padding:36px 32px}.card-title{font-size:26px}}
+@media print{body{background:#fff;color:#000;padding:0}
+  .card,.no-print{display:none}
+  .cert-print-area{display:block!important}}
+</style>
+</head>
+<body>
+<div class="brand">Belle <span>Planner</span></div>
+<div class="card" id="main-card">
+  <div class="card-title">Verificar Certificado</div>
+  <div class="card-sub">Selecione o curso e informe o número de registro para validar o certificado.</div>
+
+  <!-- Seleção de curso -->
+  <div id="step-course">
+    <div id="courses-loading" class="loading">Carregando cursos...</div>
+    <div id="courses-grid" class="courses-grid" style="display:none"></div>
+    <div id="courses-empty" style="display:none;text-align:center;color:rgba(240,228,234,.4);font-size:13px;padding:16px 0">Nenhum curso disponível para verificação.</div>
+  </div>
+
+  <!-- Campo de número -->
+  <div id="step-number" style="display:none">
+    <div class="sep"></div>
+    <div class="field-wrap">
+      <label>Número de registro</label>
+      <input type="text" id="cert-number-input" placeholder="Ex: BECDS-2026-0001" autocomplete="off" autocapitalize="characters"
+        oninput="this.value=this.value.toUpperCase()" onkeydown="if(event.key==='Enter')verifyCert()">
+    </div>
+    <button class="btn btn-primary" onclick="verifyCert()">🔍 Verificar Certificado</button>
+    <div id="verify-error" class="error-msg" style="display:none"></div>
+  </div>
+
+  <!-- Resultado -->
+  <div id="step-result" style="display:none"></div>
+</div>
+
+<script>
+let _selectedCourseId = null;
+
+async function loadCourses() {
+  try {
+    const courses = await fetch('/api/cursos').then(r=>r.json());
+    document.getElementById('courses-loading').style.display = 'none';
+    if (!courses.length) {
+      document.getElementById('courses-empty').style.display = 'block'; return;
+    }
+    const grid = document.getElementById('courses-grid');
+    grid.style.display = 'flex';
+    grid.innerHTML = courses.map(c => `
+      <button class="course-btn" onclick="selectCourse(${c.id}, this)" data-id="${c.id}">
+        <div class="course-btn-name">🎓 ${c.cert_name||c.name}</div>
+        <div class="course-btn-meta">${c.cert_hours ? c.cert_hours+'h' : ''} ${c.cert_hours&&c.cert_description?'·':''} ${c.cert_description||''}</div>
+      </button>`).join('');
+  } catch(e) {
+    document.getElementById('courses-loading').textContent = 'Erro ao carregar cursos.';
+  }
+}
+
+function selectCourse(id, btn) {
+  _selectedCourseId = id;
+  document.querySelectorAll('.course-btn').forEach(b=>b.classList.remove('selected'));
+  btn.classList.add('selected');
+  document.getElementById('step-number').style.display = 'block';
+  document.getElementById('cert-number-input').focus();
+}
+
+async function verifyCert() {
+  const num = document.getElementById('cert-number-input').value.trim();
+  const errEl = document.getElementById('verify-error');
+  errEl.style.display = 'none';
+  if (!num) { errEl.textContent = 'Digite o número de registro.'; errEl.style.display='block'; return; }
+
+  const btn = document.querySelector('.btn-primary');
+  btn.textContent = 'Verificando...'; btn.disabled = true;
+  try {
+    const data = await fetch('/api/certificado/' + encodeURIComponent(num)).then(async r=>{
+      if (!r.ok) { const e=await r.json(); throw new Error(e.error||'Não encontrado'); }
+      return r.json();
+    });
+    renderResult(data);
+  } catch(e) {
+    renderInvalid(e.message);
+  } finally {
+    btn.textContent = '🔍 Verificar Certificado'; btn.disabled = false;
+  }
+}
+
+function renderResult(d) {
+  const mods = (() => { try { return JSON.parse(d.cert_modules||'[]').join(' · ') || '—'; } catch(e){return d.cert_modules||'—';} })();
+  const issueDate = new Date(d.issue_date+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'long',year:'numeric'});
+  const resultEl = document.getElementById('step-result');
+  resultEl.style.display = 'block';
+  resultEl.innerHTML = `
+    <div class="result-card result-valid">
+      <div class="result-header">
+        <span style="font-size:28px">✅</span>
+        <div>
+          <div class="result-badge-valid">Certificado Válido</div>
+          <div style="font-size:12px;color:rgba(240,228,234,.5);margin-top:2px">Emitido por ${d.business_name||d.professional_name||'Profissional Certificado'}</div>
+        </div>
+      </div>
+      <div class="result-body">
+        <div class="result-row"><span class="result-row-label">Aluno</span><span class="result-row-val">${d.student_name}</span></div>
+        <div class="result-row"><span class="result-row-label">Curso</span><span class="result-row-val">${d.cert_name||d.proc_name}</span></div>
+        <div class="result-row"><span class="result-row-label">Carga horária</span><span class="result-row-val">${d.cert_hours||'—'} horas</span></div>
+        <div class="result-row"><span class="result-row-label">Módulos</span><span class="result-row-val" style="text-align:right">${mods}</span></div>
+        <div class="result-row"><span class="result-row-label">Data</span><span class="result-row-val">${issueDate}</span></div>
+        <div class="result-row"><span class="result-row-label">Profissional</span><span class="result-row-val">${d.professional_name||d.business_name||'—'}</span></div>
+        <div class="result-row"><span class="result-row-label">Nº Registro</span><span class="result-row-val" style="color:#d4a843;font-family:monospace">${d.cert_number}</span></div>
+      </div>
+    </div>
+    ${d.cert_layout_url ? `<img src="${d.cert_layout_url}" class="cert-image" alt="Certificado" onerror="this.style.display='none'">` : ''}
+    <button class="btn-print no-print" onclick="window.print()">🖨️ Imprimir / Salvar PDF</button>
+    <button class="btn-print no-print" style="margin-top:6px" onclick="document.getElementById('step-result').style.display='none';document.getElementById('cert-number-input').value=''">🔍 Verificar outro</button>`;
+}
+
+function renderInvalid(msg) {
+  const resultEl = document.getElementById('step-result');
+  resultEl.style.display = 'block';
+  resultEl.innerHTML = `
+    <div class="result-card result-invalid">
+      <div class="result-header">
+        <span style="font-size:28px">❌</span>
+        <div>
+          <div class="result-badge-invalid">Certificado não encontrado</div>
+          <div style="font-size:12px;color:rgba(240,228,234,.5);margin-top:2px">${msg||'Verifique o número digitado'}</div>
+        </div>
+      </div>
+    </div>
+    <button class="btn-print no-print" style="margin-top:12px" onclick="document.getElementById('step-result').style.display='none';document.getElementById('cert-number-input').value=''">🔍 Tentar novamente</button>`;
+}
+
+// Pre-fill from URL param
+const urlN = new URLSearchParams(location.search).get('n');
+if (urlN) {
+  document.getElementById('cert-number-input')?.setAttribute('value', urlN.toUpperCase());
+  document.getElementById('step-number').style.display = 'block';
+}
+
+loadCourses();
+</script>
+</body>
+</html>

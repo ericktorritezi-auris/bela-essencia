@@ -846,6 +846,7 @@ tr.drag-over{border-top:2.5px solid var(--rose)!important}
           <div class="nav-item" id="nav-cities" onclick="showSec('cities')"><span class="nav-icon">📍</span> Cidades</div>
           <div class="nav-item" id="nav-schedules" onclick="showSec('schedules')"><span class="nav-icon">🕐</span> Horários</div>
           <div class="nav-item" id="nav-procs" onclick="showSec('procs')"><span class="nav-icon">✨</span> Procedimentos</div>
+          <div class="nav-item" id="nav-cert-config" onclick="showSec('cert-config')"><span class="nav-icon">🎓</span> Certificados</div>
           <div class="nav-item" id="nav-profile" onclick="showSec('profile')"><span class="nav-icon">👤</span> Perfil / Senha</div>
           <div class="nav-item desktop-only" id="nav-lgpd" onclick="showSec('lgpd')"><span class="nav-icon">🔒</span> Log LGPD</div>
           <div class="nav-item desktop-only" id="nav-backup" onclick="showSec('backup')"><span class="nav-icon">💾</span> Backup</div>
@@ -1423,7 +1424,41 @@ tr.drag-over{border-top:2.5px solid var(--rose)!important}
             </div>
           </div>
 
-          <!-- SEC: PERFIL / SENHA -->
+          <!-- SEC: CERTIFICADOS -->
+          <div id="sec-cert-config" class="hidden">
+            <div class="tbl-head"><div class="tbl-ttl">Configurar Certificados</div></div>
+            <p style="font-size:13px;color:var(--text-light);margin-bottom:20px">Selecione um curso para posicionar os campos no template do certificado.</p>
+            <div id="cert-config-course-list" style="display:grid;gap:10px;grid-template-columns:1fr;margin-bottom:24px"></div>
+            <div id="cert-editor-wrap" class="hidden">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+                <div>
+                  <div style="font-weight:800;font-size:15px" id="cert-editor-title">Editor de Certificado</div>
+                  <div style="font-size:12px;color:var(--text-light)" id="cert-editor-hint">Arraste os campos sobre o certificado</div>
+                </div>
+                <div style="display:flex;gap:8px">
+                  <button class="btn btn-primary" onclick="saveCertConfig()" style="padding:8px 18px;font-size:13px">💾 Salvar</button>
+                  <button class="btn btn-secondary" onclick="closeCertEditor()" style="padding:8px 14px;font-size:13px">✕</button>
+                </div>
+              </div>
+              <div id="cert-editor-desktop" style="display:none">
+                <div style="position:relative;display:inline-block;max-width:100%;border:2px solid var(--border);border-radius:8px;overflow:hidden;background:#f0f0f0;user-select:none">
+                  <img id="cert-bg-img" src="" alt="Template" style="display:block;max-width:100%;height:auto;max-height:65vh">
+                  <div id="cert-fields-overlay" style="position:absolute;inset:0"></div>
+                </div>
+                <div id="cert-field-chips" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px"></div>
+                <div style="margin-top:8px;font-size:12px;color:var(--text-light)">💡 Clique em um campo do painel acima e arraste para a posição correta no certificado.</div>
+              </div>
+              <div id="cert-editor-mobile" style="display:none">
+                <div id="cert-mobile-fields"></div>
+                <div style="margin-top:16px;border:2px solid var(--border);border-radius:8px;overflow:hidden;background:#f0f0f0;position:relative">
+                  <img id="cert-bg-img-m" src="" alt="Preview" style="display:block;width:100%;height:auto">
+                  <div id="cert-fields-overlay-m" style="position:absolute;inset:0;pointer-events:none"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+  <!-- SEC: PERFIL / SENHA -->
           <div id="sec-profile" class="hidden">
             <div class="tbl-wrap" style="margin-bottom:14px">
               <div style="padding:20px">
@@ -1724,7 +1759,7 @@ tr.drag-over{border-top:2.5px solid var(--rose)!important}
 // ══════════════════════════════════════════════════
 // VERSÃO — altere APENAS aqui; atualiza todos os rodapés
 // ══════════════════════════════════════════════════
-const APP_VERSION  = '2.9.3';
+const APP_VERSION  = '2.9.4';
 const APP_COPY     = `Versão: ${APP_VERSION} | ${(window._tenantConfig?.business_name || 'Belle Planner')} © ${new Date().getFullYear()}`;
 
 function renderFooters() {
@@ -2508,9 +2543,9 @@ const SEC_TITLES={
   agenda:'Agenda',manual:'Agenda Manual',retro:'Agenda Retroativa',blocked:'Bloquear Datas',released:'Liberar Datas',nps:'NPS — Satisfação',
   revenue:'Receita',cockpit:'Cockpit Financeiro',receivables:'Contas a Receber',expenses:'Contas a Pagar','summary-fin':'Resumo Financeiro',promos:'Promoções',commem:'Datas Comemorativas',webpush:'Web Push',
   cities:'Cidades',schedules:'Configuração de Horários',
-  procs:'Procedimentos',profile:'Perfil & Senha',lgpd:'Log LGPD',backup:'Backup'
+  procs:'Procedimentos','cert-config':'Certificados',profile:'Perfil & Senha',lgpd:'Log LGPD',backup:'Backup'
 };
-const ALL_SECS = ['agenda','manual','retro','blocked','released','nps','revenue','cockpit','receivables','expenses','summary-fin','promos','commem','webpush','cities','schedules','procs','profile','lgpd','backup'];
+const ALL_SECS = ['agenda','manual','retro','blocked','released','nps','revenue','cockpit','receivables','expenses','summary-fin','promos','commem','webpush','cities','schedules','procs','cert-config','profile','lgpd','backup'];
 
 function showSec(name){
   ALL_SECS.forEach(s=>{
@@ -2522,6 +2557,7 @@ function showSec(name){
   if(name==='manual') initManualBooking();
   if(name==='retro') initRetro();
   if(name==='cockpit')      initCockpit();
+  if(name==='cert-config')  initCertConfig();
   if(name==='receivables')  initReceivables();
   if(name==='expenses')     initExpenses();
   if(name==='summary-fin')  initSummaryFin();
@@ -2789,6 +2825,7 @@ function renderAgendaPage(page) {
             : `<button class="act-btn" onclick="openRestoreModal('${a.id}')" style="color:var(--gold);border-color:var(--gold)">↩ Restaurar</button><button class="act-btn danger" onclick="deleteAppt('${a.id}')" style="color:var(--error);border-color:var(--error);font-size:10px">🗑</button>`
           }
           <button class="act-btn" onclick="sendAgendaWA('${a.id}')" title="Enviar agendamento por WhatsApp">📅</button>
+          ${(a.status==='confirmed'||a.status==='realizado')&&_getCourseProc(a.proc_id)?`<button class="act-btn" onclick="openCertModal('${a.id}')" title="Gerar certificado" style="color:var(--gold);border-color:var(--gold)">🎓</button>`:''}
         </td>
       </tr>
     `).join('');
@@ -2819,6 +2856,7 @@ function renderAgendaPage(page) {
             : `<button class="act-btn" onclick="openRestoreModal('${a.id}')" style="color:var(--gold);border-color:var(--gold)">↩ Restaurar</button><button class="act-btn danger" onclick="deleteAppt('${a.id}')" style="color:var(--error);border-color:var(--error)">🗑</button>`
           }
           <button class="act-btn" onclick="sendAgendaWA('${a.id}')" title="Enviar agendamento por WhatsApp">📅</button>
+          ${(a.status==='confirmed'||a.status==='realizado')&&_getCourseProc(a.proc_id)?`<button class="act-btn" onclick="openCertModal('${a.id}')" style="color:var(--gold);border-color:var(--gold)">🎓 Certificado</button>`:''}
         </div>
         <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border-light);display:flex;align-items:center;gap:8px">
           <label class="paid-check" onclick="event.stopPropagation()" style="flex:1">
@@ -2865,6 +2903,152 @@ async function renderAgenda() {
     tbody.innerHTML=`<tr><td colspan="7" style="text-align:center;padding:28px;color:var(--error)">Erro: ${e.message}</td></tr>`;
     document.getElementById('appt-cards').innerHTML=`<div style="color:var(--error);padding:20px;font-size:13px">Erro: ${e.message}</div>`;
   }
+}
+
+// ── Helper: busca proc de curso no cache ────────────────────────
+function _getCourseProc(procId) {
+  if (!window._procsCache) return null;
+  const p = window._procsCache.find(x => x.id === procId);
+  return (p && p.is_course) ? p : null;
+}
+
+// ── Modal de geração de certificado ─────────────────────────────
+async function openCertModal(apptId) {
+  const a = _agendaAllData.find(x => String(x.id) === String(apptId));
+  if (!a) { showToast('Agendamento não encontrado','error'); return; }
+  const proc = _getCourseProc(a.proc_id);
+  if (!proc) { showToast('Procedimento não é um curso','error'); return; }
+
+  // Verificar se já tem certificado
+  let existingCertNumber = null;
+  try {
+    const certs = await GET('/api/certificates?proc_id=' + a.proc_id);
+    const found = certs.find(c => c.appointment_id === a.id);
+    if (found) existingCertNumber = found.cert_number;
+  } catch(e) {}
+
+  // Montar preview do certificado
+  const certPreview = proc.cert_layout_url
+    ? `<div style="position:relative;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:#f5f5f5;margin:12px 0">
+        <img src="${proc.cert_layout_url}" style="display:block;width:100%;height:auto">
+        ${renderCertOverlayPreview(proc, a.name)}
+       </div>`
+    : `<div style="padding:20px;background:var(--cream);border:1px solid var(--border);border-radius:8px;text-align:center;color:var(--text-light);margin:12px 0;font-size:13px">Template não configurado ainda. Configure em Configurações → 🎓 Certificados.</div>`;
+
+  const certNumLabel = existingCertNumber
+    ? `<div style="background:#e8f7ef;border:1px solid #b7e0c9;border-radius:8px;padding:10px 14px;font-size:13px;color:#1e8449;font-weight:700">✅ Certificado já emitido: <strong>${existingCertNumber}</strong></div>`
+    : `<div style="background:var(--cream);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--text-light)">Número será gerado ao emitir</div>`;
+
+  document.getElementById('modal-card').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div class="modal-ttl">🎓 Certificado</div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="fg">
+      <label>Nome do aluno no certificado</label>
+      <input type="text" id="cert-modal-name" value="${a.name}" style="background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:12px 14px;width:100%;font-family:inherit;font-size:14px;outline:none">
+    </div>
+    <div class="fg">
+      <label>Curso</label>
+      <div style="padding:10px 14px;background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);font-size:14px;color:var(--dark)">${proc.cert_name || proc.name}</div>
+    </div>
+    ${certNumLabel}
+    ${certPreview}
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+      ${existingCertNumber
+        ? `<button class="btn btn-primary" onclick="shareCertWA('${existingCertNumber}')">📲 Compartilhar no WhatsApp</button>
+           <button class="btn btn-secondary" onclick="printCert('${a.id}',${a.proc_id},'${a.name}')">🖨️ Imprimir / PDF</button>`
+        : `<button class="btn btn-primary" onclick="generateCert('${a.id}',${a.proc_id})">✅ Emitir Certificado</button>
+           <button class="btn btn-secondary" onclick="printCert('${a.id}',${a.proc_id},'${a.name}')">🖨️ Imprimir sem registrar</button>`
+      }
+      <button class="btn btn-ghost" onclick="closeModal()">Fechar</button>
+    </div>
+  `;
+  document.getElementById('modal-bg').classList.remove('hidden');
+}
+
+function renderCertOverlayPreview(proc, studentName) {
+  if (!proc.cert_field_config) return '';
+  try {
+    const config = JSON.parse(proc.cert_field_config);
+    const mods = proc.cert_modules ? JSON.parse(proc.cert_modules).join(', ') : '';
+    const values = {
+      student_name: studentName,
+      course_name:  proc.cert_name || proc.name,
+      date:         new Date().toLocaleDateString('pt-BR',{day:'2-digit',month:'long',year:'numeric'}),
+      hours:        (proc.cert_hours||'?') + ' horas',
+      modules:      mods,
+      cert_number:  '(número será gerado)'
+    };
+    return Object.entries(config).map(([key, pos]) =>
+      `<div style="position:absolute;left:${pos.x}%;top:${pos.y}%;transform:translate(-50%,-50%);
+        font-size:${(pos.size||14)*0.6}px;color:${pos.color||'#111'};font-weight:700;
+        white-space:nowrap;max-width:80%;overflow:hidden;text-overflow:ellipsis">
+        ${values[key]||''}</div>`
+    ).join('');
+  } catch(e) { return ''; }
+}
+
+async function generateCert(apptId, procId) {
+  const name = document.getElementById('cert-modal-name')?.value.trim();
+  if (!name) { showToast('Preencha o nome do aluno','error'); return; }
+  try {
+    const result = await POST('/api/certificates', { appointment_id: apptId, proc_id: procId, student_name: name });
+    showToast('✅ Certificado emitido: ' + result.cert_number, 'ok', 6000);
+    closeModal();
+    // Reabrir modal com o número gerado
+    openCertModal(apptId);
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+function shareCertWA(certNumber) {
+  const base = window.location.origin;
+  const link = `${base}/certificado?n=${encodeURIComponent(certNumber)}`;
+  const text = `🎓 Seu certificado está disponível!
+
+Número de registro: *${certNumber}*
+
+Acesse e baixe seu certificado:
+${link}`;
+  window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+}
+
+function printCert(apptId, procId, studentName) {
+  const a = _agendaAllData.find(x => String(x.id) === String(apptId));
+  const procs = window._procsCache || [];
+  const proc = procs.find(x => x.id === procId);
+  if (!a || !proc) { showToast('Dados não encontrados','error'); return; }
+  let certNumber = '(não registrado)';
+  GET('/api/certificates?proc_id=' + procId).then(certs => {
+    const found = certs.find(c => c.appointment_id === a.id);
+    if (found) certNumber = found.cert_number;
+    openPrintWindow(proc, a, document.getElementById('cert-modal-name')?.value||studentName, certNumber);
+  }).catch(() => openPrintWindow(proc, a, studentName, certNumber));
+}
+
+function openPrintWindow(proc, a, studentName, certNumber) {
+  const mods = proc.cert_modules ? JSON.parse(proc.cert_modules||'[]').join(' · ') : '';
+  const date = new Date(a.date + 'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'long',year:'numeric'});
+  const config = proc.cert_field_config ? JSON.parse(proc.cert_field_config) : null;
+  const layoutUrl = proc.cert_layout_url || '';
+  const values = { student_name:studentName, course_name:proc.cert_name||proc.name, date, hours:(proc.cert_hours||'?')+' horas', modules:mods, cert_number:certNumber };
+  const overlays = config ? Object.entries(config).map(([key,pos]) =>
+    `<div style="position:absolute;left:${pos.x}%;top:${pos.y}%;transform:translate(-50%,-50%);font-size:${pos.size||14}px;color:${pos.color||'#111'};font-weight:700;white-space:pre-wrap;text-align:${pos.align||'center'};max-width:80%">${values[key]||''}</div>`
+  ).join('') : '';
+  const w = window.open('','_blank','width=900,height=640');
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Certificado — ${studentName}</title>
+    <style>*{margin:0;padding:0;box-sizing:border-box}body{background:#fff}@page{size:A4 landscape;margin:0}.cert-wrap{position:relative;width:297mm;height:210mm;overflow:hidden}img{display:block;width:100%;height:auto}@media print{body{margin:0}.no-print{display:none}}</style>
+    </head><body>
+    <div style="text-align:center;padding:10px;background:#f5f5f5" class="no-print">
+      <button onclick="window.print()" style="background:#9B4D6A;color:#fff;border:none;padding:10px 28px;border-radius:20px;font-size:14px;cursor:pointer;font-weight:700">🖨️ Imprimir / Salvar PDF</button>
+      <button onclick="window.close()" style="margin-left:10px;background:#ccc;border:none;padding:10px 18px;border-radius:20px;font-size:14px;cursor:pointer">✕ Fechar</button>
+    </div>
+    <div class="cert-wrap">
+      ${layoutUrl ? `<img src="${layoutUrl}" alt="Certificado">` : `<div style="width:297mm;height:210mm;background:linear-gradient(135deg,#f5e8ee,#fff);display:flex;align-items:center;justify-content:center"><p style="font-size:18px;color:#999">Template não configurado</p></div>`}
+      <div style="position:absolute;inset:0">${overlays}</div>
+    </div>
+    </body></html>`);
+  w.document.close();
 }
 
 async function togglePaid(id, paid) {
@@ -3467,13 +3651,40 @@ function initProcDragMobile(wrap) {
   });
 }
 
+function toggleCourseFields() {
+  const cb = document.getElementById('proc-modal-is-course');
+  const fields = document.getElementById('proc-course-fields');
+  if (fields) fields.style.display = cb?.checked ? 'block' : 'none';
+}
+function addProcModule(value='') {
+  const list = document.getElementById('proc-modules-list');
+  if (!list) return;
+  const idx = list.children.length;
+  const div = document.createElement('div');
+  div.style.cssText = 'display:flex;gap:6px;margin-bottom:6px;align-items:center';
+  div.innerHTML = `<input type="text" class="fi proc-module-input" value="${value.replace(/"/g,'&quot;')}"
+    placeholder="Ex: Módulo ${idx+1} — Teoria" style="flex:1">
+    <button type="button" onclick="this.parentElement.remove()" style="background:none;border:none;color:var(--error);font-size:18px;cursor:pointer;line-height:1;flex-shrink:0">×</button>`;
+  list.appendChild(div);
+}
+function getProcModules() {
+  return [...document.querySelectorAll('.proc-module-input')]
+    .map(i => i.value.trim()).filter(Boolean);
+}
+function autoGenCertAbr(name) {
+  const stop = new Set(['de','da','do','dos','das','e','em','para','por','com','um','uma','o','a','os','as','curso','técnico','de']);
+  return name.split(/\s+/).filter(w=>w&&!stop.has(w.toLowerCase())).map(w=>w[0]).join('').toUpperCase().slice(0,8);
+}
+
 function openProcModal(id) {
   document.getElementById('modal-card').innerHTML=`
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
       <div class="modal-ttl">${id?'Editar':'Novo'} Procedimento</div>
       <button class="modal-close" onclick="closeModal()">✕</button>
     </div>
-    <div class="fg"><label>Nome</label><input type="text" id="proc-modal-name" placeholder="Nome do procedimento"></div>
+    <div class="fg"><label>Nome</label><input type="text" id="proc-modal-name" placeholder="Nome do procedimento"
+      oninput="if(document.getElementById('proc-modal-is-course')?.checked && !document.getElementById('proc-modal-cert-abr')?.value){document.getElementById('proc-modal-cert-abr').value=autoGenCertAbr(this.value)}">
+    </div>
     <div class="fg"><label>Duração (minutos)</label><input type="number" id="proc-modal-dur" value="60" min="15" step="15"></div>
     <div class="fg">
       <label>Tipo de valor</label>
@@ -3493,6 +3704,38 @@ function openProcModal(id) {
         placeholder="Descreva o procedimento, benefícios, detalhes, parcelamento..."
         style="width:100%;background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:12px 14px;font-family:'Nunito',sans-serif;font-size:13px;color:var(--dark);outline:none;resize:vertical;line-height:1.6;box-sizing:border-box"></textarea>
     </div>
+    <div class="fg" style="margin-top:10px;padding:12px 14px;background:var(--rose-light);border-radius:var(--r-sm);border:1px solid var(--rose-mid)">
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:0">
+        <input type="checkbox" id="proc-modal-is-course" onchange="toggleCourseFields()"
+          style="width:16px;height:16px;accent-color:var(--rose);cursor:pointer">
+        <span style="font-weight:700;font-size:13px;color:var(--rose)">🎓 Este procedimento é um curso</span>
+      </label>
+    </div>
+    <div id="proc-course-fields" style="display:none">
+      <div style="height:1px;background:var(--border);margin:14px 0"></div>
+      <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:var(--text-light);margin-bottom:12px">Dados do Certificado</div>
+      <div class="fg"><label>Nome oficial no certificado</label>
+        <input type="text" id="proc-modal-cert-name" placeholder="Ex: Curso de Design de Sobrancelha"></div>
+      <div class="fg-row">
+        <div class="fg"><label>Carga horária (h)</label>
+          <input type="number" id="proc-modal-cert-hours" min="1" placeholder="Ex: 8"></div>
+        <div class="fg"><label>Sigla do curso (para nº registro)</label>
+          <input type="text" id="proc-modal-cert-abr" maxlength="8" placeholder="Ex: CDS" style="text-transform:uppercase"
+            oninput="this.value=this.value.toUpperCase()"></div>
+      </div>
+      <div class="fg"><label>Descrição no certificado <small style="font-weight:400;color:var(--text-light)">(opcional)</small></label>
+        <textarea id="proc-modal-cert-desc" rows="3" placeholder="Texto descritivo que aparecerá no certificado..."
+          style="width:100%;background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:11px 13px;font-family:'Nunito',sans-serif;font-size:13px;color:var(--dark);outline:none;resize:vertical;line-height:1.6;box-sizing:border-box"></textarea></div>
+      <div class="fg">
+        <label>Módulos do curso <small style="font-weight:400;color:var(--text-light)">(um por linha)</small></label>
+        <div id="proc-modules-list"></div>
+        <button type="button" onclick="addProcModule()" class="btn btn-ghost" style="font-size:12px;margin-top:6px;padding:6px 12px">+ Adicionar módulo</button>
+      </div>
+      <div class="fg"><label>URL do template do certificado</label>
+        <input type="url" id="proc-modal-cert-layout" placeholder="https://... (imagem A4 paisagem)">
+        <div style="font-size:11px;color:var(--text-light);margin-top:4px">Após salvar, acesse <strong>⚙️ Configurações → 🎓 Certificados</strong> para posicionar os campos.</div>
+      </div>
+    </div>
     <div style="display:flex;gap:9px;margin-top:8px">
       <button class="btn btn-primary" onclick="saveProc(${id||'null'})" style="flex:1">Salvar</button>
       <button class="btn btn-secondary" onclick="closeModal()" style="flex:1;width:auto">Cancelar</button>
@@ -3506,6 +3749,20 @@ function openProcModal(id) {
       document.getElementById('proc-modal-dur').value=p.dur;
       document.getElementById('proc-modal-pt').value=p.pt;
       if(p.price) document.getElementById('proc-modal-price').value=p.price;
+      // Campos de curso
+      if (p.is_course) {
+        const cb = document.getElementById('proc-modal-is-course');
+        if (cb) { cb.checked = true; toggleCourseFields(); }
+      }
+      const _sn = (elId, val) => { const el=document.getElementById(elId); if(el&&val!=null) el.value=val; };
+      _sn('proc-modal-cert-name', p.cert_name);
+      _sn('proc-modal-cert-hours', p.cert_hours);
+      _sn('proc-modal-cert-abr', p.cert_abbreviation);
+      _sn('proc-modal-cert-desc', p.cert_description);
+      _sn('proc-modal-cert-layout', p.cert_layout_url);
+      if (p.cert_modules) {
+        try { JSON.parse(p.cert_modules).forEach(m => addProcModule(m)); } catch(e) {}
+      }
       togglePF();
     });
   }
@@ -3523,10 +3780,19 @@ async function saveProc(id) {
   const price=pt==='fixed'?parseFloat(document.getElementById('proc-modal-price').value)||null:null;
   const descEl=document.getElementById('proc-modal-desc');
   const description=(descEl&&descEl.value.trim())||null;
+  const is_course = document.getElementById('proc-modal-is-course')?.checked || false;
+  const cert_name        = document.getElementById('proc-modal-cert-name')?.value.trim()||null;
+  const cert_hours       = parseInt(document.getElementById('proc-modal-cert-hours')?.value)||null;
+  const cert_abbreviation= document.getElementById('proc-modal-cert-abr')?.value.trim().toUpperCase()||null;
+  const cert_description = document.getElementById('proc-modal-cert-desc')?.value.trim()||null;
+  const cert_layout_url  = document.getElementById('proc-modal-cert-layout')?.value.trim()||null;
+  const cert_modules     = is_course ? JSON.stringify(getProcModules()) : null;
+  const courseData = { is_course, cert_name, cert_hours, cert_abbreviation,
+                       cert_description, cert_modules, cert_layout_url };
   if(!name||!dur){showToast('Preencha nome e duração','error');return}
   try {
-    if(id) await PUT('/api/procedures/'+id,{name,dur,price,pt,description});
-    else await POST('/api/procedures',{name,dur,price,pt,description});
+    if(id) await PUT('/api/procedures/'+id,{name,dur,price,pt,description,...courseData});
+    else await POST('/api/procedures',{name,dur,price,pt,description,...courseData});
     clearProcsCache(); clearCitiesCache();
     showToast('Procedimento salvo','ok');
     closeModal(); renderProcsAdmin();
@@ -3765,6 +4031,200 @@ function exportLgpdCsv() {
 }
 
 // ── COCKPIT MONTH DETAIL ─────────────────────────────────────────────────────
+// ── CERTIFICADOS — Editor de posicionamento ──────────────────────────────────
+const CERT_FIELDS = [
+  { key:'student_name', label:'📝 Nome do Aluno',    sample:'Ana Carolina Silva'  },
+  { key:'course_name',  label:'📚 Nome do Curso',    sample:'Curso de Design de Sobrancelha' },
+  { key:'date',         label:'📅 Data',             sample:'17 de Maio de 2026'  },
+  { key:'hours',        label:'⏱ Carga Horária',     sample:'8 horas'             },
+  { key:'modules',      label:'📋 Módulos',          sample:'Módulo 1, Módulo 2'  },
+  { key:'cert_number',  label:'🔢 Nº de Registro',   sample:'BECDS-2026-0001'     },
+];
+
+let _certConfigProcId = null;
+let _certFieldPositions = {}; // { key: {x,y,size,color,align} }
+
+async function initCertConfig() {
+  const list = document.getElementById('cert-config-course-list');
+  if (!list) return;
+  list.innerHTML = '<div style="color:var(--text-light);font-size:13px">Carregando...</div>';
+  try {
+    const procs = await getProcs();
+    const courses = procs.filter(p => p.is_course && p.active);
+    if (!courses.length) {
+      list.innerHTML = '<div style="color:var(--text-light);font-size:13px">Nenhum curso cadastrado ainda. Crie um procedimento marcado como curso.</div>';
+      return;
+    }
+    list.innerHTML = courses.map(c => `
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;background:var(--cream);border:1px solid var(--border);border-radius:var(--r-sm);flex-wrap:wrap">
+        <div>
+          <div style="font-weight:700">${c.name}</div>
+          <div style="font-size:12px;color:var(--text-light)">${c.cert_layout_url ? '✅ Template configurado' : '⚠️ Sem template — adicione a URL no cadastro do procedimento'}</div>
+        </div>
+        ${c.cert_layout_url ? `<button class="btn btn-primary" onclick="openCertEditor(${c.id})" style="padding:8px 16px;font-size:13px">⚙️ Ajustar posições</button>` : ''}
+      </div>`).join('');
+  } catch(e) { list.innerHTML = `<div style="color:var(--error)">${e.message}</div>`; }
+}
+
+async function openCertEditor(procId) {
+  const procs = await getProcs();
+  const p = procs.find(x => x.id === procId);
+  if (!p) return;
+  _certConfigProcId = procId;
+  // Carregar config existente
+  try { _certFieldPositions = p.cert_field_config ? JSON.parse(p.cert_field_config) : {}; } catch(e) { _certFieldPositions = {}; }
+
+  document.getElementById('cert-editor-title').textContent = 'Editor: ' + p.name;
+  document.getElementById('cert-editor-wrap').classList.remove('hidden');
+  document.getElementById('cert-editor-wrap').scrollIntoView({behavior:'smooth',block:'start'});
+
+  const isMobile = window.innerWidth < 600;
+  const desktop = document.getElementById('cert-editor-desktop');
+  const mobile  = document.getElementById('cert-editor-mobile');
+  if (isMobile) { desktop.style.display='none'; mobile.style.display='block'; renderCertMobileEditor(p); }
+  else          { mobile.style.display='none'; desktop.style.display='block'; renderCertDesktopEditor(p); }
+}
+
+function closeCertEditor() {
+  document.getElementById('cert-editor-wrap').classList.add('hidden');
+  _certConfigProcId = null;
+}
+
+// ── Desktop: drag visual ─────────────────────────────────────────
+function renderCertDesktopEditor(p) {
+  const img = document.getElementById('cert-bg-img');
+  img.src = p.cert_layout_url;
+  const overlay = document.getElementById('cert-fields-overlay');
+  const chips   = document.getElementById('cert-field-chips');
+  overlay.innerHTML = '';
+  chips.innerHTML   = '';
+
+  // Renderizar chips já posicionados
+  CERT_FIELDS.forEach(f => {
+    const pos = _certFieldPositions[f.key];
+    if (pos) renderDraggableField(f, pos, overlay, img);
+    else {
+      // Chip no painel para arrastar
+      const chip = document.createElement('div');
+      chip.className = 'cert-chip';
+      chip.textContent = f.label;
+      chip.dataset.key = f.key;
+      chip.style.cssText = 'background:var(--rose-light);border:1.5px solid var(--rose-mid);border-radius:20px;padding:6px 14px;font-size:12px;font-weight:700;color:var(--rose);cursor:grab;user-select:none;white-space:nowrap';
+      chips.appendChild(chip);
+      chip.addEventListener('mousedown', e => startChipDrag(e, f, overlay, img, chip));
+    }
+  });
+}
+
+function renderDraggableField(f, pos, overlay, img) {
+  const el = document.createElement('div');
+  el.dataset.key = f.key;
+  el.style.cssText = `position:absolute;left:${pos.x}%;top:${pos.y}%;
+    font-size:${pos.size||14}px;color:${pos.color||'#111'};font-weight:700;
+    background:rgba(255,255,255,.75);border:1.5px dashed var(--rose);
+    border-radius:4px;padding:2px 6px;cursor:move;white-space:nowrap;
+    transform:translate(-50%,-50%);user-select:none;z-index:10`;
+  el.textContent = f.sample || f.label;
+  overlay.appendChild(el);
+  el.addEventListener('mousedown', e => startFieldDrag(e, el, f, overlay, img));
+}
+
+function startChipDrag(e, f, overlay, img, chip) {
+  e.preventDefault();
+  const rect = img.getBoundingClientRect();
+  const px = ((e.clientX - rect.left) / rect.width * 100);
+  const py = ((e.clientY - rect.top) / rect.height * 100);
+  if (px < 0 || px > 100 || py < 0 || py > 100) return;
+  chip.remove();
+  const pos = _certFieldPositions[f.key] = { x: px.toFixed(1)*1, y: py.toFixed(1)*1, size:14, color:'#111111' };
+  renderDraggableField(f, pos, overlay, img);
+}
+
+function startFieldDrag(e, el, f, overlay, img) {
+  e.preventDefault();
+  const onMove = ev => {
+    const rect = img.getBoundingClientRect();
+    let px = ((ev.clientX - rect.left) / rect.width * 100);
+    let py = ((ev.clientY - rect.top) / rect.height * 100);
+    px = Math.max(0, Math.min(100, px));
+    py = Math.max(0, Math.min(100, py));
+    el.style.left = px + '%';
+    el.style.top  = py + '%';
+    _certFieldPositions[f.key] = { ..._certFieldPositions[f.key], x: +px.toFixed(1), y: +py.toFixed(1) };
+  };
+  const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
+// ── Mobile: sliders ──────────────────────────────────────────────
+function renderCertMobileEditor(p) {
+  const img = document.getElementById('cert-bg-img-m');
+  img.src = p.cert_layout_url;
+  const container = document.getElementById('cert-mobile-fields');
+  const overlay   = document.getElementById('cert-fields-overlay-m');
+  container.innerHTML = '';
+  overlay.innerHTML = '';
+
+  CERT_FIELDS.forEach(f => {
+    const pos = _certFieldPositions[f.key] || { x:50, y:50, size:14, color:'#111111' };
+    if (!_certFieldPositions[f.key]) _certFieldPositions[f.key] = pos;
+    const div = document.createElement('div');
+    div.style.cssText = 'background:var(--cream);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px';
+    div.innerHTML = `
+      <div style="font-weight:700;font-size:13px;margin-bottom:8px">${f.label}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div><label style="font-size:11px;color:var(--text-light)">Posição X (%)</label>
+          <input type="range" min="0" max="100" value="${pos.x}" style="width:100%"
+            oninput="updateCertFieldPos('${f.key}','x',this.value)"></div>
+        <div><label style="font-size:11px;color:var(--text-light)">Posição Y (%)</label>
+          <input type="range" min="0" max="100" value="${pos.y}" style="width:100%"
+            oninput="updateCertFieldPos('${f.key}','y',this.value)"></div>
+        <div><label style="font-size:11px;color:var(--text-light)">Tamanho (px)</label>
+          <input type="number" min="8" max="48" value="${pos.size||14}" style="width:100%;padding:4px 8px;border:1px solid var(--border);border-radius:4px"
+            oninput="updateCertFieldPos('${f.key}','size',this.value)"></div>
+        <div><label style="font-size:11px;color:var(--text-light)">Cor</label>
+          <input type="color" value="${pos.color||'#111111'}" style="width:100%;height:34px;border:1px solid var(--border);border-radius:4px;cursor:pointer"
+            oninput="updateCertFieldPos('${f.key}','color',this.value)"></div>
+      </div>`;
+    container.appendChild(div);
+    // Preview overlay
+    renderMobileOverlayField(f, pos, overlay);
+  });
+}
+
+function renderMobileOverlayField(f, pos, overlay) {
+  const existing = overlay.querySelector(`[data-key="${f.key}"]`);
+  if (existing) existing.remove();
+  const el = document.createElement('div');
+  el.dataset.key = f.key;
+  el.style.cssText = `position:absolute;left:${pos.x}%;top:${pos.y}%;
+    font-size:${pos.size||14}px;color:${pos.color||'#111'};font-weight:700;
+    background:rgba(255,255,255,.7);border-radius:3px;padding:1px 4px;
+    transform:translate(-50%,-50%);white-space:nowrap;font-size:${Math.max(8,(pos.size||14)*0.5)}px`;
+  el.textContent = f.label.replace(/^[^\s]+\s/,'').slice(0,12);
+  overlay.appendChild(el);
+}
+
+function updateCertFieldPos(key, prop, value) {
+  if (!_certFieldPositions[key]) _certFieldPositions[key] = {x:50,y:50,size:14,color:'#111111'};
+  _certFieldPositions[key][prop] = prop==='color' ? value : +value;
+  const overlay = document.getElementById('cert-fields-overlay-m');
+  const f = CERT_FIELDS.find(x=>x.key===key);
+  if (overlay && f) renderMobileOverlayField(f, _certFieldPositions[key], overlay);
+}
+
+async function saveCertConfig() {
+  if (!_certConfigProcId) return;
+  try {
+    await PUT('/api/procedures/' + _certConfigProcId, {
+      cert_field_config: JSON.stringify(_certFieldPositions)
+    });
+    clearProcsCache();
+    showToast('✅ Configuração salva', 'ok');
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
 // ── CONTAS A PAGAR ───────────────────────────────────────────────
 let _expensesData = [];
 
