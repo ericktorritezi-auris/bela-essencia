@@ -3028,7 +3028,8 @@ function printCert(apptId, procId, studentName) {
 
 function openPrintWindow(proc, a, studentName, certNumber) {
   const mods = proc.cert_modules ? JSON.parse(proc.cert_modules||'[]').join(' · ') : '';
-  const date = new Date(a.date + 'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'});
+  const _rawDate = typeof a.date === 'string' ? a.date.slice(0,10) : new Date(a.date).toISOString().slice(0,10);
+  const date = new Date(_rawDate + 'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'});
   const config = proc.cert_field_config ? JSON.parse(proc.cert_field_config) : null;
   const layoutUrl = proc.cert_layout_url || '';
   const values = { student_name:studentName, course_name:proc.cert_name||proc.name, date, hours:String(proc.cert_hours||0).padStart(2,'0')+'h', modules:mods, cert_number:certNumber };
