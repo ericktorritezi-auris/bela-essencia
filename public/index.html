@@ -2872,6 +2872,8 @@ function renderAgendaPage(page) {
 }
 
 async function renderAgenda() {
+  // Garante que o cache de procedimentos está populado (necessário para botão 🎓)
+  await getProcs().catch(()=>{});
   const fd=document.getElementById('fl-date').value;
   const fc=document.getElementById('fl-city').value;
   const fs=document.getElementById('fl-status').value;
@@ -2907,8 +2909,8 @@ async function renderAgenda() {
 
 // ── Helper: busca proc de curso no cache ────────────────────────
 function _getCourseProc(procId) {
-  if (!window._procsCache) return null;
-  const p = window._procsCache.find(x => x.id === procId);
+  if (!window._procsCache || procId == null) return null;
+  const p = window._procsCache.find(x => Number(x.id) === Number(procId));
   return (p && p.is_course) ? p : null;
 }
 
@@ -2956,7 +2958,7 @@ async function openCertModal(apptId) {
     ${certPreview}
     <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
       ${existingCertNumber
-        ? `<button class="btn btn-primary" onclick="shareCertWA('${existingCertNumber}')">📲 Compartilhar no WhatsApp</button>
+        ? `<button class="btn btn-primary" onclick="shareCertWA('${existingCertNumber}', '${(proc.cert_name||proc.name).replace(/'/g,String.fromCharCode(39))}')">📲 Compartilhar no WhatsApp</button>
            <button class="btn btn-secondary" onclick="printCert('${a.id}',${a.proc_id},'${a.name}')">🖨️ Imprimir / PDF</button>`
         : `<button class="btn btn-primary" onclick="generateCert('${a.id}',${a.proc_id})">✅ Emitir Certificado</button>
            <button class="btn btn-secondary" onclick="printCert('${a.id}',${a.proc_id},'${a.name}')">🖨️ Imprimir sem registrar</button>`
@@ -3001,16 +3003,20 @@ async function generateCert(apptId, procId) {
   } catch(e) { showToast(e.message, 'error'); }
 }
 
-function shareCertWA(certNumber) {
+function shareCertWA(certNumber, courseName) {
   const base = window.location.origin;
-  const link = `${base}/certificado?n=${encodeURIComponent(certNumber)}`;
-  const text = `🎓 Seu certificado está disponível!
-
-Número de registro: *${certNumber}*
-
-Acesse e baixe seu certificado:
-${link}`;
-  window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+  const link = base + '/certificado?n=' + encodeURIComponent(certNumber);
+  const courseInfo = courseName ? '\u{1F4DA} Curso: *' + courseName + '*\n' : '';
+  const text =
+    '\u{1F393} *Parab\u00e9ns pelo seu certificado!*\n\n' +
+    courseInfo +
+    '\u{1F522} N\u00famero de registro: *' + certNumber + '*\n\n' +
+    'Para verificar a autenticidade do seu certificado:\n\n' +
+    '1\uFE0F\u20E3 Acesse o link abaixo\n' +
+    '2\uFE0F\u20E3 Selecione o curso realizado\n' +
+    '3\uFE0F\u20E3 Digite o n\u00famero de registro\n\n' +
+    '\u{1F517} ' + link;
+  window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
 }
 
 function printCert(apptId, procId, studentName) {
@@ -3708,7 +3714,7 @@ function openProcModal(id) {
     <div class="fg" style="margin-top:10px;padding:12px 14px;background:var(--rose-light);border-radius:var(--r-sm);border:1px solid var(--rose-mid)">
       <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:0">
         <input type="checkbox" id="proc-modal-is-course" onchange="toggleCourseFields()"
-          style="width:16px;height:16px;accent-color:var(--rose);cursor:pointer">
+          style="width:18px;height:18px;accent-color:var(--rose);cursor:pointer;flex-shrink:0;appearance:auto;-webkit-appearance:checkbox">
         <span style="font-weight:700;font-size:13px;color:var(--rose)">🎓 Este procedimento é um curso</span>
       </label>
     </div>
