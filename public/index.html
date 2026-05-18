@@ -4092,69 +4092,151 @@ function closeCertEditor() {
 
 // ── Desktop: drag visual ─────────────────────────────────────────
 function renderCertDesktopEditor(p) {
-  const img = document.getElementById('cert-bg-img');
-  img.src = p.cert_layout_url;
+  const imgEl = document.getElementById('cert-bg-img');
+  imgEl.src = p.cert_layout_url;
   const overlay = document.getElementById('cert-fields-overlay');
   const chips   = document.getElementById('cert-field-chips');
   overlay.innerHTML = '';
   chips.innerHTML   = '';
 
-  // Renderizar chips já posicionados
-  CERT_FIELDS.forEach(f => {
-    const pos = _certFieldPositions[f.key];
-    if (pos) renderDraggableField(f, pos, overlay, img);
-    else {
-      // Chip no painel para arrastar
-      const chip = document.createElement('div');
-      chip.className = 'cert-chip';
-      chip.textContent = f.label;
-      chip.dataset.key = f.key;
-      chip.style.cssText = 'background:var(--rose-light);border:1.5px solid var(--rose-mid);border-radius:20px;padding:6px 14px;font-size:12px;font-weight:700;color:var(--rose);cursor:grab;user-select:none;white-space:nowrap';
-      chips.appendChild(chip);
-      chip.addEventListener('mousedown', e => startChipDrag(e, f, overlay, img, chip));
-    }
-  });
+  // Aguardar imagem carregar para garantir dimensões corretas
+  const doRender = () => {
+    overlay.innerHTML = '';
+    chips.innerHTML   = '';
+    CERT_FIELDS.forEach(f => {
+      const pos = _certFieldPositions[f.key];
+      if (pos) {
+        _renderDraggableField(f, pos, overlay, imgEl);
+      } else {
+        const chip = document.createElement('div');
+        chip.textContent = f.label;
+        chip.style.cssText = 'background:var(--rose-light);border:1.5px solid var(--rose-mid);border-radius:20px;padding:7px 14px;font-size:12px;font-weight:700;color:var(--rose);cursor:grab;user-select:none;white-space:nowrap;touch-action:none';
+        chips.appendChild(chip);
+        chip.addEventListener('mousedown', ev => _startChipDrag(ev, f, overlay, imgEl, chip));
+        chip.addEventListener('touchstart', ev => _startChipDragTouch(ev, f, overlay, imgEl, chip), {passive:false});
+      }
+    });
+  };
+  if (imgEl.complete && imgEl.naturalWidth) doRender();
+  else imgEl.onload = doRender;
 }
 
-function renderDraggableField(f, pos, overlay, img) {
+function _renderDraggableField(f, pos, overlay, imgEl) {
   const el = document.createElement('div');
   el.dataset.key = f.key;
   el.style.cssText = `position:absolute;left:${pos.x}%;top:${pos.y}%;
     font-size:${pos.size||14}px;color:${pos.color||'#111'};font-weight:700;
-    background:rgba(255,255,255,.75);border:1.5px dashed var(--rose);
-    border-radius:4px;padding:2px 6px;cursor:move;white-space:nowrap;
-    transform:translate(-50%,-50%);user-select:none;z-index:10`;
+    background:rgba(255,255,255,.82);border:1.5px dashed var(--rose);
+    border-radius:4px;padding:3px 8px;cursor:move;white-space:nowrap;
+    transform:translate(-50%,-50%);user-select:none;z-index:20;touch-action:none`;
   el.textContent = f.sample || f.label;
   overlay.appendChild(el);
-  el.addEventListener('mousedown', e => startFieldDrag(e, el, f, overlay, img));
+  // Mouse drag (campo já posicionado)
+  el.addEventListener('mousedown', ev => _startFieldDrag(ev, el, f, imgEl));
+  // Touch drag (campo já posicionado)
+  el.addEventListener('touchstart', ev => _startFieldDragTouch(ev, el, f, imgEl), {passive:false});
 }
 
-function startChipDrag(e, f, overlay, img, chip) {
+// ── Arrastar CHIP (ainda não posicionado) para a imagem ──────────
+function _startChipDrag(e, f, overlay, imgEl, chip) {
   e.preventDefault();
-  const rect = img.getBoundingClientRect();
-  const px = ((e.clientX - rect.left) / rect.width * 100);
-  const py = ((e.clientY - rect.top) / rect.height * 100);
-  if (px < 0 || px > 100 || py < 0 || py > 100) return;
-  chip.remove();
-  const pos = _certFieldPositions[f.key] = { x: px.toFixed(1)*1, y: py.toFixed(1)*1, size:14, color:'#111111' };
-  renderDraggableField(f, pos, overlay, img);
+  // Ghost que segue o cursor
+  const ghost = document.createElement('div');
+  ghost.textContent = f.label;
+  ghost.style.cssText = 'position:fixed;z-index:9999;pointer-events:none;background:var(--rose-light);border:1.5px solid var(--rose-mid);border-radius:20px;padding:6px 14px;font-size:12px;font-weight:700;color:var(--rose);white-space:nowrap;opacity:.85;transform:translate(-50%,-50%)';
+  document.body.appendChild(ghost);
+
+  const move = ev => {
+    ghost.style.left = ev.clientX + 'px';
+    ghost.style.top  = ev.clientY + 'px';
+  };
+  const up = ev => {
+    ghost.remove();
+    document.removeEventListener('mousemove', move);
+    document.removeEventListener('mouseup', up);
+    // Verificar se soltou sobre a imagem
+    const rect = imgEl.getBoundingClientRect();
+    let px = (ev.clientX - rect.left) / rect.width * 100;
+    let py = (ev.clientY - rect.top)  / rect.height * 100;
+    if (px < 0 || px > 100 || py < 0 || py > 100) return; // soltou fora
+    chip.remove();
+    const pos = _certFieldPositions[f.key] = { x:+px.toFixed(1), y:+py.toFixed(1), size:14, color:'#111111' };
+    _renderDraggableField(f, pos, overlay, imgEl);
+  };
+  document.addEventListener('mousemove', move);
+  document.addEventListener('mouseup', up);
+  // Mover ghost para posição inicial
+  ghost.style.left = e.clientX + 'px';
+  ghost.style.top  = e.clientY + 'px';
 }
 
-function startFieldDrag(e, el, f, overlay, img) {
+function _startChipDragTouch(e, f, overlay, imgEl, chip) {
   e.preventDefault();
-  const onMove = ev => {
-    const rect = img.getBoundingClientRect();
-    let px = ((ev.clientX - rect.left) / rect.width * 100);
-    let py = ((ev.clientY - rect.top) / rect.height * 100);
-    px = Math.max(0, Math.min(100, px));
-    py = Math.max(0, Math.min(100, py));
+  const t = e.touches[0];
+  const ghost = document.createElement('div');
+  ghost.textContent = f.label;
+  ghost.style.cssText = 'position:fixed;z-index:9999;pointer-events:none;background:var(--rose-light);border:1.5px solid var(--rose-mid);border-radius:20px;padding:6px 14px;font-size:12px;font-weight:700;color:var(--rose);white-space:nowrap;opacity:.85;transform:translate(-50%,-50%)';
+  document.body.appendChild(ghost);
+  ghost.style.left = t.clientX + 'px';
+  ghost.style.top  = t.clientY + 'px';
+  const move = ev => {
+    const tc = ev.touches[0];
+    ghost.style.left = tc.clientX + 'px';
+    ghost.style.top  = tc.clientY + 'px';
+  };
+  const end = ev => {
+    ghost.remove();
+    document.removeEventListener('touchmove', move);
+    document.removeEventListener('touchend', end);
+    const tc = ev.changedTouches[0];
+    const rect = imgEl.getBoundingClientRect();
+    let px = (tc.clientX - rect.left) / rect.width * 100;
+    let py = (tc.clientY - rect.top)  / rect.height * 100;
+    if (px < 0 || px > 100 || py < 0 || py > 100) return;
+    chip.remove();
+    const pos = _certFieldPositions[f.key] = { x:+px.toFixed(1), y:+py.toFixed(1), size:14, color:'#111111' };
+    _renderDraggableField(f, pos, overlay, imgEl);
+  };
+  document.addEventListener('touchmove', move, {passive:false});
+  document.addEventListener('touchend', end);
+}
+
+// ── Arrastar CAMPO já posicionado ────────────────────────────────
+function _startFieldDrag(e, el, f, imgEl) {
+  e.preventDefault();
+  e.stopPropagation();
+  const move = ev => {
+    const rect = imgEl.getBoundingClientRect();
+    let px = (ev.clientX - rect.left) / rect.width * 100;
+    let py = (ev.clientY - rect.top)  / rect.height * 100;
+    px = Math.max(1, Math.min(99, px));
+    py = Math.max(1, Math.min(99, py));
     el.style.left = px + '%';
     el.style.top  = py + '%';
-    _certFieldPositions[f.key] = { ..._certFieldPositions[f.key], x: +px.toFixed(1), y: +py.toFixed(1) };
+    _certFieldPositions[f.key] = { ..._certFieldPositions[f.key], x:+px.toFixed(1), y:+py.toFixed(1) };
   };
-  const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
-  document.addEventListener('mousemove', onMove);
-  document.addEventListener('mouseup', onUp);
+  const up = () => { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); };
+  document.addEventListener('mousemove', move);
+  document.addEventListener('mouseup', up);
+}
+
+function _startFieldDragTouch(e, el, f, imgEl) {
+  e.preventDefault();
+  e.stopPropagation();
+  const move = ev => {
+    const tc = ev.touches[0];
+    const rect = imgEl.getBoundingClientRect();
+    let px = (tc.clientX - rect.left) / rect.width * 100;
+    let py = (tc.clientY - rect.top)  / rect.height * 100;
+    px = Math.max(1, Math.min(99, px));
+    py = Math.max(1, Math.min(99, py));
+    el.style.left = px + '%';
+    el.style.top  = py + '%';
+    _certFieldPositions[f.key] = { ..._certFieldPositions[f.key], x:+px.toFixed(1), y:+py.toFixed(1) };
+  };
+  const end = () => { document.removeEventListener('touchmove', move); document.removeEventListener('touchend', end); };
+  document.addEventListener('touchmove', move, {passive:false});
+  document.addEventListener('touchend', end);
 }
 
 // ── Mobile: sliders ──────────────────────────────────────────────
