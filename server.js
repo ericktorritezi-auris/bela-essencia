@@ -1758,9 +1758,12 @@ app.delete('/api/expenses/:id', requireAdmin, async (req, res) => {
 // ── CURSOS — lista pública de cursos do tenant ────────────────────────────────
 app.get('/api/cursos', async (req, res) => {
   try {
-    const { rows } = await req.db(
+    // req.db pode não existir se tenant suspenso ou sem schema — usar pool direto com schema
+    const schema = req.schemaName;
+    if (!schema) return res.json([]);
+    const { rows } = await pool.query(
       `SELECT id, name, cert_name, cert_hours, cert_description, cert_modules, cert_abbreviation
-       FROM procedures WHERE is_course=TRUE AND active=TRUE ORDER BY COALESCE(sort_order,id)`
+       FROM "${schema}".procedures WHERE is_course=TRUE AND active=TRUE ORDER BY COALESCE(sort_order,id)`
     );
     res.json(rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -1820,12 +1823,13 @@ app.get('/api/certificates', requireAdmin, async (req, res) => {
 // Rota PÚBLICA: sem requireAdmin, funciona mesmo com tenant suspenso
 app.get('/api/certificado/:number', async (req, res) => {
   if (!req.schemaName) return res.status(404).json({ error: 'Tenant não encontrado' });
+  const schema = req.schemaName;
   try {
-    const { rows } = await req.db(
+    const { rows } = await pool.query(
       `SELECT c.*, p.cert_name, p.cert_hours, p.cert_description, p.cert_modules,
               p.cert_layout_url, p.cert_field_config, p.name as proc_name
-       FROM certificates c
-       JOIN procedures p ON p.id = c.proc_id
+       FROM "${schema}".certificates c
+       JOIN "${schema}".procedures p ON p.id = c.proc_id
        WHERE c.cert_number = $1`,
       [req.params.number]
     );
