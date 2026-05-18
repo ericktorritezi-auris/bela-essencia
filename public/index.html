@@ -2933,7 +2933,7 @@ async function openCertModal(apptId) {
   const certPreview = proc.cert_layout_url
     ? `<div style="position:relative;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:#f5f5f5;margin:12px 0">
         <img src="${proc.cert_layout_url}" style="display:block;width:100%;height:auto">
-        ${renderCertOverlayPreview(proc, a.name)}
+        ${renderCertOverlayPreview(proc, a.name, a.date)}
        </div>`
     : `<div style="padding:20px;background:var(--cream);border:1px solid var(--border);border-radius:8px;text-align:center;color:var(--text-light);margin:12px 0;font-size:13px">Template não configurado ainda. Configure em Configurações → 🎓 Certificados.</div>`;
 
@@ -2969,7 +2969,7 @@ async function openCertModal(apptId) {
   document.getElementById('modal-bg').classList.remove('hidden');
 }
 
-function renderCertOverlayPreview(proc, studentName) {
+function renderCertOverlayPreview(proc, studentName, apptDate) {
   if (!proc.cert_field_config) return '';
   try {
     const config = JSON.parse(proc.cert_field_config);
@@ -2977,7 +2977,7 @@ function renderCertOverlayPreview(proc, studentName) {
     const values = {
       student_name: studentName,
       course_name:  proc.cert_name || proc.name,
-      date:         new Date().toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'}),
+      date:         apptDate ? new Date(apptDate + 'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'}) : new Date().toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'}),
       hours:        String(proc.cert_hours||0).padStart(2,'0') + 'h',
       modules:      mods,
       cert_number:  '(número será gerado)'
@@ -2994,8 +2994,16 @@ function renderCertOverlayPreview(proc, studentName) {
 async function generateCert(apptId, procId) {
   const name = document.getElementById('cert-modal-name')?.value.trim();
   if (!name) { showToast('Preencha o nome do aluno','error'); return; }
+  // Buscar data do agendamento para usar como data do certificado
+  const appt = _agendaAllData.find(x => String(x.id) === String(apptId));
+  const apptDate = appt?.date ? String(appt.date).slice(0,10) : null;
   try {
-    const result = await POST('/api/certificates', { appointment_id: apptId, proc_id: procId, student_name: name });
+    const result = await POST('/api/certificates', {
+      appointment_id: apptId,
+      proc_id: procId,
+      student_name: name,
+      appointment_date: apptDate
+    });
     showToast('✅ Certificado emitido: ' + result.cert_number, 'ok', 6000);
     closeModal();
     // Reabrir modal com o número gerado
