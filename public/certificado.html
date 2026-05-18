@@ -93,7 +93,7 @@ async function loadCourses() {
     grid.innerHTML = courses.map(c => `
       <button class="course-btn" onclick="selectCourse(${c.id}, this)" data-id="${c.id}">
         <div class="course-btn-name">🎓 ${c.cert_name||c.name}</div>
-        <div class="course-btn-meta">${c.cert_hours ? c.cert_hours+'h' : ''} ${c.cert_hours&&c.cert_description?'·':''} ${c.cert_description||''}</div>
+        <div class="course-btn-meta">${c.c.cert_hours ? String(c.cert_hours).padStart(2,'0')+'h' : ''} ${c.cert_hours&&c.cert_description?'·':''} ${c.cert_description||''}</div>
       </button>`).join('');
   } catch(e) {
     document.getElementById('courses-loading').textContent = 'Erro ao carregar cursos.';
@@ -131,7 +131,7 @@ async function verifyCert() {
 
 function renderResult(d) {
   const mods = (() => { try { return JSON.parse(d.cert_modules||'[]').join(' · ') || '—'; } catch(e){return d.cert_modules||'—';} })();
-  const issueDate = new Date(d.issue_date+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'long',year:'numeric'});
+  const issueDate = new Date(d.issue_date+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'});
   const resultEl = document.getElementById('step-result');
   resultEl.style.display = 'block';
   resultEl.innerHTML = `
@@ -146,7 +146,7 @@ function renderResult(d) {
       <div class="result-body">
         <div class="result-row"><span class="result-row-label">Aluno</span><span class="result-row-val">${d.student_name}</span></div>
         <div class="result-row"><span class="result-row-label">Curso</span><span class="result-row-val">${d.cert_name||d.proc_name}</span></div>
-        <div class="result-row"><span class="result-row-label">Carga horária</span><span class="result-row-val">${d.cert_hours||'—'} horas</span></div>
+        <div class="result-row"><span class="result-row-label">Carga horária</span><span class="result-row-val">${d.cert_hours ? String(d.cert_hours).padStart(2,'0')+'h' : '—'}</span></div>
         <div class="result-row"><span class="result-row-label">Módulos</span><span class="result-row-val" style="text-align:right">${mods}</span></div>
         <div class="result-row"><span class="result-row-label">Data</span><span class="result-row-val">${issueDate}</span></div>
         <div class="result-row"><span class="result-row-label">Profissional</span><span class="result-row-val">${d.professional_name||d.business_name||'—'}</span></div>

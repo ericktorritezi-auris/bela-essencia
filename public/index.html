@@ -2975,8 +2975,8 @@ function renderCertOverlayPreview(proc, studentName) {
     const values = {
       student_name: studentName,
       course_name:  proc.cert_name || proc.name,
-      date:         new Date().toLocaleDateString('pt-BR',{day:'2-digit',month:'long',year:'numeric'}),
-      hours:        (proc.cert_hours||'?') + ' horas',
+      date:         new Date().toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'}),
+      hours:        String(proc.cert_hours||0).padStart(2,'0') + 'h',
       modules:      mods,
       cert_number:  '(número será gerado)'
     };
@@ -3028,10 +3028,10 @@ function printCert(apptId, procId, studentName) {
 
 function openPrintWindow(proc, a, studentName, certNumber) {
   const mods = proc.cert_modules ? JSON.parse(proc.cert_modules||'[]').join(' · ') : '';
-  const date = new Date(a.date + 'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'long',year:'numeric'});
+  const date = new Date(a.date + 'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'});
   const config = proc.cert_field_config ? JSON.parse(proc.cert_field_config) : null;
   const layoutUrl = proc.cert_layout_url || '';
-  const values = { student_name:studentName, course_name:proc.cert_name||proc.name, date, hours:(proc.cert_hours||'?')+' horas', modules:mods, cert_number:certNumber };
+  const values = { student_name:studentName, course_name:proc.cert_name||proc.name, date, hours:String(proc.cert_hours||0).padStart(2,'0')+'h', modules:mods, cert_number:certNumber };
   const overlays = config ? Object.entries(config).map(([key,pos]) =>
     `<div style="position:absolute;left:${pos.x}%;top:${pos.y}%;transform:translate(-50%,-50%);font-size:${pos.size||14}px;color:${pos.color||'#111'};font-weight:700;white-space:pre-wrap;text-align:${pos.align||'center'};max-width:80%">${values[key]||''}</div>`
   ).join('') : '';
@@ -4299,7 +4299,7 @@ function updateCertFieldPos(key, prop, value) {
 async function saveCertConfig() {
   if (!_certConfigProcId) return;
   try {
-    await PUT('/api/procedures/' + _certConfigProcId, {
+    await PATCH('/api/procedures/' + _certConfigProcId + '/cert-config', {
       cert_field_config: JSON.stringify(_certFieldPositions)
     });
     clearProcsCache();
