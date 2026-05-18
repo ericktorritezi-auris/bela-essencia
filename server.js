@@ -1149,6 +1149,8 @@ async function initDB() {
         )`);
       } catch {}
       try { await client.query(`UPDATE "${schema_name}".procedures SET sort_order = id WHERE sort_order IS NULL`); } catch {}
+      // Migração: reminder_sent (push 30min)
+      try { await client.query(`ALTER TABLE "${schema_name}".appointments ADD COLUMN IF NOT EXISTS reminder_sent BOOLEAN NOT NULL DEFAULT FALSE`); } catch {}
       // Migração: pagamento do procedimento
       try { await client.query(`ALTER TABLE "${schema_name}".appointments ADD COLUMN IF NOT EXISTS paid BOOLEAN NOT NULL DEFAULT FALSE`); } catch {}
       try { await client.query(`ALTER TABLE "${schema_name}".appointments ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ`); } catch {}
