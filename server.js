@@ -5592,6 +5592,11 @@ app.post('/api/push/subscribe/admin', requireAdmin, async (req, res) => {
 app.use(express.static(path.join(__dirname, 'public')));
 
 // SPA fallback – qualquer rota não encontrada retorna o index.html
+// ── Página pública de validação de certificados
+app.get('/certificado', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'certificado.html'));
+});
+
 // ── Subdomínio contratos.belleplanner.com.br — página de aceite contratual
 app.get('*', (req, res, next) => {
   if (req.hostname === 'contratos.belleplanner.com.br') {
