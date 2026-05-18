@@ -1758,20 +1758,27 @@ app.delete('/api/expenses/:id', requireAdmin, async (req, res) => {
 // ── CURSOS — lista pública de cursos do tenant ────────────────────────────────
 app.get('/api/cursos', async (req, res) => {
   try {
-    // req.db pode não existir se tenant suspenso ou sem schema — usar pool direto com schema
     const schema = req.schemaName;
     if (!schema) return res.json([]);
-    const { rows } = await pool.query(
-      `SELECT id, name, cert_name, cert_hours, cert_description, cert_modules, cert_abbreviation
-       FROM "${schema}".procedures WHERE is_course=TRUE AND active=TRUE ORDER BY COALESCE(sort_order,id)`
-    );
+    // Usar req.db se disponível, senão pool direto com schema qualificado
+    const query = req.db
+      ? req.db(`SELECT id, name, cert_name, cert_hours, cert_description, cert_modules, cert_abbreviation
+                FROM procedures WHERE is_course=TRUE AND active=TRUE ORDER BY COALESCE(sort_order,id)`)
+      : pool.query(`SELECT id, name, cert_name, cert_hours, cert_description, cert_modules, cert_abbreviation
+                    FROM "${schema}".procedures WHERE is_course=TRUE AND active=TRUE ORDER BY COALESCE(sort_order,id)`);
+    const result = await query;
+    const rows = result.rows || [];
+    console.log(`[Cursos] schema=${schema} req.db=${!!req.db} encontrou=${rows.length} cursos`);
     res.json(rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) {
+    console.error('[Cursos] Erro:', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ── CERTIFICATES — emitir e listar ────────────────────────────────────────────
 app.post('/api/certificates', requireAdmin, async (req, res) => {
-  const { appointment_id, proc_id, student_name } = req.body;
+  const { appointment_id, proc_id, student_name, appointment_date } = req.body;
   if (!appointment_id || !proc_id || !student_name)
     return res.status(400).json({ error: 'Campos obrigatórios: appointment_id, proc_id, student_name' });
   try {
@@ -1798,10 +1805,12 @@ app.post('/api/certificates', requireAdmin, async (req, res) => {
     const seq = seqRes.rows[0].next;
     const cert_number = `${tenantPfx}${abr}-${year}-${String(seq).padStart(4,'0')}`;
 
+    // issue_date = data do agendamento (se fornecida) ou data de hoje
+    const issueDate = appointment_date || null;
     const { rows } = await req.db(
       `INSERT INTO certificates (cert_number,sequence_number,appointment_id,proc_id,student_name,issue_date)
-       VALUES ($1,$2,$3,$4,$5,CURRENT_DATE) RETURNING *`,
-      [cert_number, seq, appointment_id, proc_id, student_name]
+       VALUES ($1,$2,$3,$4,$5,COALESCE($6::date, CURRENT_DATE)) RETURNING *`,
+      [cert_number, seq, appointment_id, proc_id, student_name, issueDate]
     );
     res.status(201).json(rows[0]);
   } catch (err) { res.status(500).json({ error: err.message }); }
