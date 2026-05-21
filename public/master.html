@@ -1393,12 +1393,43 @@ async function openEditModal(id) {
       <div class="fg"><label>Bio</label><textarea class="fi" id="e-prof-bio" rows="3" style="resize:vertical;font-family:inherit;font-size:13px" placeholder="Texto livre sobre o profissional...">${t.prof_bio||''}</textarea></div>
       <div class="fg"><label>Formações &amp; Especialidades</label><textarea class="fi" id="e-prof-specialties" rows="2" style="resize:vertical;font-family:inherit;font-size:13px" placeholder="Ex: Micropigmentação de Sobrancelhas, Microblading, Design...">${t.prof_specialties||''}</textarea></div>
     </div>
+
+    <!-- INTEGRAÇÃO SISTÊMICA -->
+    <div style="margin-top:18px;border-top:2px solid var(--border);padding-top:16px">
+      <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.12em;color:var(--text-light);margin-bottom:12px">🔗 Integração Sistêmica</div>
+      <div class="fg">
+        <label>URL do Webhook <small style="font-weight:400;color:var(--text-light)">(deixe vazio para desativar)</small></label>
+        <input type="url" id="e-webhook-url" value="${t.webhook_url||''}" placeholder="https://..." style="background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:10px 13px;width:100%;font-family:inherit;font-size:13px">
+      </div>
+      <div class="fg">
+        <label>Webhook Secret</label>
+        <div style="display:flex;gap:8px">
+          <input type="text" id="e-webhook-secret" value="${t.webhook_secret||''}" placeholder="Token de validação" style="background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:10px 13px;flex:1;font-family:monospace;font-size:12px">
+          <button type="button" onclick="genWebhookSecret()" style="padding:10px 14px;background:var(--rose-light);border:1.5px solid var(--rose-mid);border-radius:var(--r-sm);font-size:12px;font-weight:700;color:var(--rose);cursor:pointer;white-space:nowrap">↺ Gerar</button>
+        </div>
+        <div style="font-size:11px;color:var(--text-light);margin-top:4px">Copie este valor e adicione como <code>WEBHOOK_AGENDA_SECRET</code> nas variáveis do Railway.</div>
+      </div>
+    </div>
+
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('edit')">Cancelar</button>
       <button class="btn btn-primary" onclick="saveEdit()">Salvar alterações</button>
     </div>
   `;
   document.getElementById('modal-edit-bg').classList.remove('hidden');
+}
+
+function genWebhookSecret() {
+  const arr = new Uint8Array(32);
+  crypto.getRandomValues(arr);
+  const secret = Array.from(arr).map(b => b.toString(16).padStart(2,'0')).join('');
+  const el = document.getElementById('e-webhook-secret');
+  if (el) {
+    el.value = secret;
+    el.select();
+    document.execCommand('copy');
+    showToast('Secret gerado e copiado!', 'ok');
+  }
 }
 
 async function saveEdit() {
@@ -1424,6 +1455,17 @@ async function saveEdit() {
     setup_fee:      document.getElementById('e-setup').value,
     active: true,
   };
+  // ── Webhook: salvar separadamente via PATCH dedicado ─────────
+  const webhookUrl    = document.getElementById('e-webhook-url')?.value.trim() || '';
+  const webhookSecret = document.getElementById('e-webhook-secret')?.value.trim() || '';
+  try {
+    await fetch(`/master/api/tenants/${_editId}/webhook`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ webhook_url: webhookUrl, webhook_secret: webhookSecret })
+    });
+  } catch(e) { console.warn('[Webhook] saveEdit patch:', e.message); }
   try {
     await PUT(`/master/api/tenants/${_editId}`, body);
     toast('✓ Tenant atualizado', 'ok');

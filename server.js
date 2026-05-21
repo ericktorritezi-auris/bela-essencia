@@ -1089,6 +1089,9 @@ async function initDB() {
     // Migração v1.7.0: push_auth nos agendamentos (liga subscription ao agendamento)
     await client.query(`ALTER TABLE appointments ADD COLUMN IF NOT EXISTS push_auth TEXT`);
       await client.query(`ALTER TABLE appointments ADD COLUMN IF NOT EXISTS reminder_sent BOOLEAN NOT NULL DEFAULT FALSE`);
+      // Migração: webhook integração sistêmica (Synapse Core)
+      try { await client.query(`ALTER TABLE tenant_configs ADD COLUMN IF NOT EXISTS webhook_url TEXT`); } catch {}
+      try { await client.query(`ALTER TABLE tenant_configs ADD COLUMN IF NOT EXISTS webhook_secret VARCHAR(128)`); } catch {}
     // Migração: cidades — adiciona uf e neighborhood em public e em todos os schemas de tenant
     await client.query(`ALTER TABLE cities ADD COLUMN IF NOT EXISTS uf VARCHAR(2)`);
     await client.query(`ALTER TABLE cities ADD COLUMN IF NOT EXISTS neighborhood VARCHAR(100)`);
@@ -2004,6 +2007,18 @@ app.post('/api/appointments', async (req, res) => {
     // Notificação assíncrona — não bloqueia a resposta
     appt._schemaName = req.schemaName; // para isolamento de push por tenant
     notifyAdminNewBooking(appt).catch(e => console.error('[Push] notifyAdminNewBooking:', e.message));
+    // ── Webhook: appointment.created ─────────────────────────────
+    dispatchWebhook(req.schemaName, 'appointment.created', {
+      id:           appt.id,
+      patient_name: appt.name,
+      patient_phone:appt.phone,
+      procedure:    appt.proc_name,
+      date:         appt.date,
+      time:         appt.st ? String(appt.st).slice(0,5) : null,
+      city:         appt.city_name,
+      status:       appt.status,
+      price:        appt.price ? Number(appt.price) : null
+    }).catch(e => console.error('[Webhook] created error:', e.message));
     res.status(201).json(appt);
   } catch (err) {
     const status = err.code === 409 ? 409 : 500;
@@ -3687,6 +3702,7 @@ app.get('/master/api/tenants', requireMaster, async (req, res) => {
              tc.tagline, tc.whatsapp_number, tc.resend_from_email, tc.admin_user,
              tc.logo_url, tc.prof_photo_url, tc.prof_profession,
              tc.prof_city, tc.prof_bio, tc.prof_specialties,
+             tc.webhook_url, tc.webhook_secret,
              (SELECT COUNT(*) FROM payments p WHERE p.tenant_id=t.id AND p.status='paid') as payment_count,
              (SELECT COALESCE(SUM(amount),0) FROM payments p WHERE p.tenant_id=t.id AND p.status='paid') as total_paid
       FROM tenants t LEFT JOIN tenant_configs tc ON tc.tenant_id=t.id
@@ -3819,6 +3835,20 @@ app.post('/master/api/tenants', requireMaster, async (req, res) => {
     await client.query('ROLLBACK');
     res.status(500).json({ error: err.message });
   } finally { client.release(); }
+});
+
+// ── Webhook config por tenant (Integração Sistêmica) ─────────────────────────
+app.patch('/master/api/tenants/:id/webhook', requireMaster, async (req, res) => {
+  const { webhook_url, webhook_secret } = req.body;
+  const { id } = req.params;
+  try {
+    await pool.query(
+      `UPDATE tenant_configs SET webhook_url=$1, webhook_secret=$2 WHERE tenant_id=$3`,
+      [webhook_url || null, webhook_secret || null, id]
+    );
+    await logAction(parseInt(id), 'webhook_config_updated', `Webhook configurado: ${webhook_url || '(removido)'}`);
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.put('/master/api/tenants/:id', requireMaster, async (req, res) => {
@@ -4724,6 +4754,68 @@ async function sendTenantWelcomeEmail(tenant, { admin_user, admin_pass, business
 }
 
 // ── Cron: verifica vencimentos diariamente às 08h00 BRT (= 11h00 UTC) ────────
+// ══════════════════════════════════════════════════════════════════════════════
+// INTEGRAÇÃO SISTÊMICA — Webhook para Synapse Core
+// ══════════════════════════════════════════════════════════════════════════════
+const WEBHOOK_URL    = 'https://www.synapsecore.app.br/api/webhooks/agenda';
+const WEBHOOK_SECRET = process.env.WEBHOOK_AGENDA_SECRET || '';
+
+async function dispatchWebhook(schemaName, event, appointmentData) {
+  if (!WEBHOOK_SECRET) return; // não configurado — ignora silenciosamente
+
+  // Buscar nome do tenant para o payload
+  let tenantName = schemaName;
+  try {
+    const { rows } = await pool.query(
+      `SELECT tc.business_name FROM tenant_configs tc
+       JOIN tenants t ON t.id = tc.tenant_id
+       WHERE t.schema_name = $1 LIMIT 1`,
+      [schemaName]
+    );
+    if (rows[0]?.business_name) tenantName = rows[0].business_name;
+  } catch (_) {}
+
+  const payload = JSON.stringify({
+    event,
+    tenant: tenantName,
+    timestamp: new Date().toISOString(),
+    appointment: appointmentData
+  });
+
+  const headers = {
+    'Content-Type':    'application/json',
+    'X-Webhook-Secret': WEBHOOK_SECRET,
+    'X-Belle-Event':   event,
+    'X-Belle-Tenant':  schemaName
+  };
+
+  const attempt = async () => {
+    const res = await fetch(WEBHOOK_URL, {
+      method: 'POST',
+      headers,
+      body: payload,
+      signal: AbortSignal.timeout(8000)
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  };
+
+  // 3 tentativas com 5min de intervalo
+  for (let i = 0; i < 3; i++) {
+    try {
+      await attempt();
+      console.log(`[Webhook] ✅ ${event} → tenant=${schemaName}`);
+      return; // sucesso — sai do loop
+    } catch (err) {
+      if (i < 2) {
+        console.warn(`[Webhook] ⚠️ Tentativa ${i + 1}/3 falhou (${err.message}) — aguardando 5min`);
+        await new Promise(r => setTimeout(r, 5 * 60 * 1000));
+      } else {
+        console.error(`[Webhook] ❌ ${event} falhou após 3 tentativas — ${err.message}`);
+      }
+    }
+  }
+}
+
 cron.schedule('0 11 * * *', async () => {
   console.log('[Master Cron] Verificando vencimentos de tenants...');
   try {
@@ -5990,6 +6082,18 @@ cron.schedule('*/5 * * * *', async () => {
               );
               console.log(`[Push Reminder] Enviado para ${appt.name} — ${schema} — ${appt.date} ${appt.st}`);
             }
+            // ── Webhook: appointment.reminder ─────────────────────
+            dispatchWebhook(schema, 'appointment.reminder', {
+              id:           appt.id,
+              patient_name: appt.name,
+              patient_phone:appt.phone,
+              procedure:    appt.proc_name,
+              date:         appt.date,
+              time:         appt.st ? String(appt.st).slice(0,5) : null,
+              city:         appt.city_name,
+              status:       appt.status,
+              price:        appt.price ? Number(appt.price) : null
+            }).catch(e => console.error('[Webhook] reminder error:', e.message));
             // Marca como enviado independente de ter subscription ativa
             // (evita reenvio a cada 5min)
             await pool.query(
