@@ -2685,6 +2685,126 @@ app.get('/api/availability', async (req, res) => {
   }
 });
 
+// ── Disponibilidade mensal (admin) ───────────────────────────────────────────
+app.get('/api/availability/month', requireAdmin, async (req, res) => {
+  const { year, month, cityId } = req.query;
+  if (!year || !month || !cityId) {
+    return res.status(400).json({ error: 'year, month e cityId são obrigatórios' });
+  }
+
+  try {
+    const y = parseInt(year);
+    const m = parseInt(month);
+    const cId = parseInt(cityId);
+
+    // Data atual no fuso Brasil
+    const nowBRT = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+    const todayStr = `${nowBRT.getFullYear()}-${String(nowBRT.getMonth()+1).padStart(2,'0')}-${String(nowBRT.getDate()).padStart(2,'0')}`;
+
+    // Dias do mês
+    const daysInMonth = new Date(y, m, 0).getDate();
+    const result = {};
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dateStr = `${y}-${String(m).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+
+      // Pular dias anteriores a hoje
+      if (dateStr < todayStr) continue;
+
+      const isToday   = dateStr === todayStr;
+      const nowMinBRT = isToday ? nowBRT.getHours() * 60 + nowBRT.getMinutes() : 0;
+      const dayOfWeek = new Date(y, m-1, day).getDay();
+
+      // 1. Dia bloqueado?
+      const blk = await req.db(
+        `SELECT 1 FROM blocked_dates WHERE date=$1 AND (cardinality(city_ids)=0 OR $2=ANY(city_ids))`,
+        [dateStr, cId]
+      );
+      if (blk.rowCount > 0) continue;
+
+      // 2. Exclusividade de outra cidade?
+      const excl = await req.db(
+        `SELECT 1 FROM released_dates WHERE date=$1 AND cardinality(city_ids)>0 AND NOT ($2=ANY(city_ids)) LIMIT 1`,
+        [dateStr, cId]
+      );
+      if (excl.rowCount > 0) continue;
+
+      // 3. Config de trabalho para este dia
+      const cfg = await resolveWorkConfig(cId, dayOfWeek);
+
+      // 4. Released slots deste dia para esta cidade
+      const relSlots = await req.db(
+        `SELECT st, et FROM released_slots WHERE date=$1 AND (cardinality(city_ids)=0 OR $2=ANY(city_ids))`,
+        [dateStr, cId]
+      );
+
+      let workStart, workEnd, breaks = [];
+      let hasWork = false;
+
+      if (cfg.is_active && cfg.work_start && cfg.work_end) {
+        workStart = cfg.work_start;
+        workEnd   = cfg.work_end;
+        breaks    = (cfg.breaks || []).filter(b => b && b.s && b.e);
+        hasWork   = true;
+      } else if (relSlots.rowCount > 0) {
+        // Dia desabilitado mas com horários liberados
+        const slots30 = [];
+        for (const rs of relSlots.rows) {
+          const [sh, sm] = rs.st.split(':').map(Number);
+          const [eh, em] = rs.et.split(':').map(Number);
+          const sMin = sh*60+sm, eMin = eh*60+em;
+          for (let t = sMin; t < eMin; t += 30) {
+            const h = String(Math.floor(t/60)).padStart(2,'0');
+            const mi = String(t%60).padStart(2,'0');
+            slots30.push(`${h}:${mi}`);
+          }
+        }
+        if (slots30.length) result[dateStr] = slots30;
+        continue;
+      } else {
+        continue; // dia desabilitado sem liberação
+      }
+
+      // 5. Converter work_start/work_end em minutos
+      const timeToMin = t => { const [h,mi] = String(t).split(':').map(Number); return h*60+mi; };
+      const minToTime = n => `${String(Math.floor(n/60)).padStart(2,'0')}:${String(n%60).padStart(2,'0')}`;
+      const wsMin = timeToMin(workStart);
+      const weMin = timeToMin(workEnd);
+
+      // 6. Agendamentos existentes + slots bloqueados
+      const [appts, bkSlots, excSlots] = await Promise.all([
+        req.db(`SELECT st, et FROM appointments WHERE date=$1 AND status!='cancelled'`, [dateStr]),
+        req.db(`SELECT st, et FROM blocked_slots WHERE date=$1 AND (cardinality(city_ids)=0 OR $2=ANY(city_ids))`, [dateStr, cId]),
+        req.db(`SELECT st, et FROM released_slots WHERE date=$1 AND cardinality(city_ids)>0 AND NOT ($2=ANY(city_ids))`, [dateStr, cId])
+      ]);
+
+      const busy = [
+        ...appts.rows.map(a  => ({ s: timeToMin(a.st), e: timeToMin(a.et) })),
+        ...bkSlots.rows.map(b => ({ s: timeToMin(b.st), e: timeToMin(b.e || b.et) })),
+        ...excSlots.rows.map(e => ({ s: timeToMin(e.st), e: timeToMin(e.e || e.et) }))
+      ];
+      const breakMin = breaks.map(b => ({ s: timeToMin(b.s), e: timeToMin(b.e) }));
+
+      // 7. Gerar slots de 30min com duração mínima de 30min
+      const dur = 30;
+      const slots = [];
+      for (let t = wsMin; t + dur <= weMin; t += 30) {
+        if (isToday && t < nowMinBRT) continue;
+        const e = t + dur;
+        const inBreak  = breakMin.some(b => t < b.e && e > b.s);
+        const inBusy   = busy.some(b  => t < b.e && e > b.s);
+        if (!inBreak && !inBusy) slots.push(minToTime(t));
+      }
+
+      if (slots.length > 0) result[dateStr] = slots;
+    }
+
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Resumo de receita (admin) ─────────────────────────────────────────────────
 app.get('/api/revenue/summary', requireAdmin, async (req, res) => {
   await autoCompleteAppointments();

@@ -824,6 +824,7 @@ tr.drag-over{border-top:2.5px solid var(--rose)!important}
           <div class="nav-item" id="nav-retro" onclick="showSec('retro')"><span class="nav-icon">⏮️</span> Ag. Retroativa</div>
           <div class="nav-item" id="nav-blocked" onclick="showSec('blocked')"><span class="nav-icon">🚫</span> Bloquear Datas</div>
           <div class="nav-item" id="nav-released" onclick="showSec('released')"><span class="nav-icon">✅</span> Liberar Datas</div>
+          <div class="nav-item" id="nav-avail" onclick="showSec('avail')"><span class="nav-icon">📅</span> Disponibilidade</div>
           <div class="nav-item" id="nav-nps" onclick="showSec('nps')"><span class="nav-icon">⭐</span> NPS</div>
         </div>
         <div style="margin-top:2px">
@@ -947,6 +948,35 @@ tr.drag-over{border-top:2.5px solid var(--rose)!important}
                 <div id="rls-list"></div>
               </div>
             </div>
+          </div>
+
+          <!-- SEC: DISPONIBILIDADE -->
+          <div id="sec-avail" class="hidden">
+            <div class="tbl-head">
+              <div class="tbl-ttl">📅 Disponibilidade</div>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:20px;align-items:flex-end">
+              <div>
+                <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-light);display:block;margin-bottom:4px">Ano</label>
+                <select id="avail-year" onchange="loadAvail()" style="background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:9px 13px;font-family:inherit;font-size:13px;min-width:90px"></select>
+              </div>
+              <div>
+                <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-light);display:block;margin-bottom:4px">Mês</label>
+                <select id="avail-month" onchange="loadAvail()" style="background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:9px 13px;font-family:inherit;font-size:13px;min-width:120px">
+                  <option value="1">Janeiro</option><option value="2">Fevereiro</option>
+                  <option value="3">Março</option><option value="4">Abril</option>
+                  <option value="5">Maio</option><option value="6">Junho</option>
+                  <option value="7">Julho</option><option value="8">Agosto</option>
+                  <option value="9">Setembro</option><option value="10">Outubro</option>
+                  <option value="11">Novembro</option><option value="12">Dezembro</option>
+                </select>
+              </div>
+              <div>
+                <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-light);display:block;margin-bottom:4px">Cidade</label>
+                <select id="avail-city" onchange="loadAvail()" style="background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:9px 13px;font-family:inherit;font-size:13px;min-width:160px"></select>
+              </div>
+            </div>
+            <div id="avail-result" style="font-size:13px;line-height:2"></div>
           </div>
 
           <!-- SEC: NPS DASHBOARD -->
@@ -2578,12 +2608,12 @@ async function initAdmin() {
 }
 
 const SEC_TITLES={
-  agenda:'Agenda',manual:'Agenda Manual',retro:'Agenda Retroativa',blocked:'Bloquear Datas',released:'Liberar Datas',nps:'NPS — Satisfação',
+  agenda:'Agenda',manual:'Agenda Manual',retro:'Agenda Retroativa',blocked:'Bloquear Datas','avail':'Disponibilidade',released:'Liberar Datas',nps:'NPS — Satisfação',
   revenue:'Receita',cockpit:'Cockpit Financeiro',receivables:'Contas a Receber',expenses:'Contas a Pagar','summary-fin':'Resumo Financeiro',promos:'Promoções',commem:'Datas Comemorativas',webpush:'Web Push',
   cities:'Cidades',schedules:'Configuração de Horários',
   procs:'Procedimentos','cert-config':'Certificados',profile:'Perfil & Senha',lgpd:'Log LGPD',backup:'Backup'
 };
-const ALL_SECS = ['agenda','manual','retro','blocked','released','nps','revenue','cockpit','receivables','expenses','summary-fin','promos','commem','webpush','cities','schedules','procs','cert-config','profile','lgpd','backup'];
+const ALL_SECS = ['agenda','manual','retro','blocked','released','avail','nps','revenue','cockpit','receivables','expenses','summary-fin','promos','commem','webpush','cities','schedules','procs','cert-config','profile','lgpd','backup'];
 
 function showSec(name){
   ALL_SECS.forEach(s=>{
@@ -2596,6 +2626,7 @@ function showSec(name){
   if(name==='retro') initRetro();
   if(name==='cockpit')      initCockpit();
   if(name==='cert-config')  initCertConfig();
+  if(name==='avail')        initAvail();
   if(name==='receivables')  initReceivables();
   if(name==='expenses')     initExpenses();
   if(name==='summary-fin')  initSummaryFin();
@@ -4084,6 +4115,82 @@ function exportLgpdCsv() {
 }
 
 // ── COCKPIT MONTH DETAIL ─────────────────────────────────────────────────────
+// ── DISPONIBILIDADE ──────────────────────────────────────────────────────────
+let _availInitialized = false;
+
+async function initAvail() {
+  // Preencher ano (atual + próximo)
+  const yearSel = document.getElementById('avail-year');
+  if (yearSel && !yearSel.options.length) {
+    const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+    const y = now.getFullYear();
+    [y, y+1].forEach(yr => {
+      const opt = document.createElement('option');
+      opt.value = opt.textContent = yr;
+      yearSel.appendChild(opt);
+    });
+    // Selecionar mês atual
+    const monthSel = document.getElementById('avail-month');
+    if (monthSel) monthSel.value = now.getMonth() + 1;
+  }
+
+  // Preencher cidades
+  const citySel = document.getElementById('avail-city');
+  if (citySel && !citySel.options.length) {
+    try {
+      const cities = await GET('/api/cities/all');
+      cities.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = c.name;
+        citySel.appendChild(opt);
+      });
+    } catch(e) { showToast('Erro ao carregar cidades', 'error'); return; }
+  }
+
+  if (!_availInitialized) {
+    _availInitialized = true;
+    await loadAvail();
+  }
+}
+
+async function loadAvail() {
+  const year    = document.getElementById('avail-year')?.value;
+  const month   = document.getElementById('avail-month')?.value;
+  const cityId  = document.getElementById('avail-city')?.value;
+  const result  = document.getElementById('avail-result');
+  if (!year || !month || !cityId || !result) return;
+
+  result.innerHTML = '<span style="color:var(--text-light)">Carregando...</span>';
+
+  try {
+    const data = await GET(`/api/availability/month?year=${year}&month=${month}&cityId=${cityId}`);
+    const dates = Object.keys(data).sort();
+
+    if (!dates.length) {
+      result.innerHTML = '<span style="color:var(--text-light)">Nenhum horário disponível neste período.</span>';
+      return;
+    }
+
+    const monthNames = ['','Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+                        'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+    const weekNames  = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+
+    result.innerHTML = dates.map(date => {
+      const [y, m, d] = date.split('-').map(Number);
+      const dow  = weekNames[new Date(y, m-1, d).getDay()];
+      const slots = data[date].join('  ·  ');
+      return `<div style="display:flex;align-items:baseline;gap:12px;padding:8px 0;border-bottom:1px solid var(--border-light);flex-wrap:wrap">
+        <span style="font-weight:700;min-width:130px;flex-shrink:0;color:var(--dark)">${String(d).padStart(2,'0')}/${String(m).padStart(2,'0')}/${y} <span style="font-weight:400;color:var(--text-light);font-size:11px">${dow}</span></span>
+        <span style="color:var(--rose);font-weight:600;letter-spacing:.03em">${slots}</span>
+      </div>`;
+    }).join('');
+
+  } catch(e) {
+    result.innerHTML = `<span style="color:var(--error)">${e.message}</span>`;
+  }
+}
+
 // ── CERTIFICADOS — Editor de posicionamento ──────────────────────────────────
 const CERT_FIELDS = [
   { key:'student_name', label:'📝 Nome do Aluno',    sample:'Ana Carolina Silva'  },
