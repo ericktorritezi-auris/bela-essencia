@@ -6033,6 +6033,17 @@ cron.schedule('0 3 * * *', async () => {
             [t.id, today, JSON.stringify({ appointments: appts, generated_at: new Date().toISOString() })]
           );
           console.log('[Cron] Snapshot ' + (t.business_name||t.name) + ': ' + appts.length + ' agendamentos — email será disparado às 06h30');
+          // ── Webhook: agenda.daily ─────────────────────────────
+          dispatchWebhook(t.schema_name, 'agenda.daily', {
+            date:  today,
+            total: appts.length,
+            appointments: appts.map(a => ({
+              patient_name: a.name,
+              procedure:    a.proc_name,
+              time:         a.st ? String(a.st).slice(0,5) : null,
+              city:         a.city_name
+            }))
+          }).catch(e => console.error('[Webhook] agenda.daily:', e.message));
         } else {
           console.log('[Cron] Snapshot ' + (t.business_name||t.name) + ': sem agendamentos — email não será enviado');
         }
@@ -6332,9 +6343,53 @@ async function start() {
   try {
     await initDB();
     await initVapid(); // gera/carrega chaves VAPID automaticamente
-    app.listen(PORT, () => {
+    app.listen(PORT, async () => {
       console.log(`✅  Bela Essência rodando na porta ${PORT}`);
       // E-mail diário configurado via cron às 06h30 BRT (ver abaixo)
+
+      // ── ONE-SHOT: agenda.daily via webhook (só neste deploy, para teste) ──
+      setTimeout(async () => {
+        try {
+          const today = todayBrasilia();
+          const { rows: tenants } = await pool.query(
+            `SELECT t.id, t.schema_name, tc.business_name
+             FROM tenants t LEFT JOIN tenant_configs tc ON tc.tenant_id=t.id
+             WHERE t.active=TRUE AND tc.webhook_secret IS NOT NULL AND tc.webhook_secret != ''`
+          );
+          for (const t of tenants) {
+            try {
+              const client = await pool.connect();
+              let appts = [];
+              try {
+                await client.query(`SET search_path TO "${t.schema_name}", public`);
+                const { rows } = await client.query(
+                  `SELECT a.*, c.name as city_name FROM appointments a
+                   LEFT JOIN cities c ON c.id = a.city_id
+                   WHERE a.date = $1 AND a.status != 'cancelled'
+                   ORDER BY a.st`,
+                  [today]
+                );
+                appts = rows;
+              } finally { client.release(); }
+              if (appts.length > 0) {
+                await dispatchWebhook(t.schema_name, 'agenda.daily', {
+                  date:  today,
+                  total: appts.length,
+                  appointments: appts.map(a => ({
+                    patient_name: a.name,
+                    procedure:    a.proc_name,
+                    time:         a.st ? String(a.st).slice(0,5) : null,
+                    city:         a.city_name
+                  }))
+                });
+                console.log(`[One-Shot] ✅ agenda.daily → ${t.business_name||t.schema_name} — ${appts.length} agendamentos`);
+              } else {
+                console.log(`[One-Shot] agenda.daily — sem agendamentos hoje para ${t.business_name||t.schema_name}`);
+              }
+            } catch(e) { console.error('[One-Shot] erro tenant:', e.message); }
+          }
+        } catch(e) { console.error('[One-Shot] erro geral:', e.message); }
+      }, 10000); // aguarda 10s para o servidor estabilizar
     });
   } catch (err) {
     console.error('❌  Falha ao iniciar servidor:', err.message);
