@@ -4895,12 +4895,11 @@ async function dispatchWebhook(schemaName, event, appointmentData) {
     if (rows[0]?.business_name) tenantName = rows[0].business_name;
   } catch (_) {}
 
-  const payload = JSON.stringify({
-    event,
-    tenant: tenantName,
-    timestamp: new Date().toISOString(),
-    appointment: appointmentData
-  });
+  // agenda.daily: dados espalhados na raiz — outros eventos: aninhados em "appointment"
+  const body = event === 'agenda.daily'
+    ? { event, tenant: tenantName, timestamp: new Date().toISOString(), ...appointmentData }
+    : { event, tenant: tenantName, timestamp: new Date().toISOString(), appointment: appointmentData };
+  const payload = JSON.stringify(body);
 
   const headers = {
     'Content-Type':    'application/json',
