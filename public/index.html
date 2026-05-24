@@ -346,6 +346,8 @@ h1,h2,h3,h4{font-family:'Cormorant Garamond',serif}
 .tbl-head{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .tbl-ttl{font-family:'Cormorant Garamond',serif;font-size:19px;font-weight:600;color:var(--dark)}
 .tbl-filters{display:flex;gap:7px;flex-wrap:wrap}
+#fl-name-wrap{flex:1 1 100%}
+@media(min-width:600px){#fl-name-wrap{flex:1 1 160px}}
 .fi,.fs{padding:7px 11px;border:1.5px solid var(--border);border-radius:var(--r-sm);font-family:'Nunito',sans-serif;font-size:12px;color:var(--dark);background:var(--cream);outline:none;transition:var(--tr)}
 .fi:focus,.fs:focus{border-color:var(--rose)}
 table{width:100%;border-collapse:collapse}
@@ -877,6 +879,13 @@ tr.drag-over{border-top:2.5px solid var(--rose)!important}
                   <input type="date" class="fi" id="fl-date" onchange="renderAgenda()">
                   <select class="fs" id="fl-city" onchange="renderAgenda()"><option value="">Todas as cidades</option></select>
                   <select class="fs" id="fl-status" onchange="renderAgenda()"><option value="">Todos os status</option><option value="confirmed">Confirmados</option><option value="realizado">Realizados</option><option value="cancelled">Cancelados</option></select>
+                  <div id="fl-name-wrap" style="position:relative;display:flex;align-items:center;flex:1;min-width:160px">
+                    <span style="position:absolute;left:10px;font-size:13px;color:var(--text-light);pointer-events:none">🔍</span>
+                    <input type="text" class="fi" id="fl-name" placeholder="Buscar cliente..." autocomplete="off" autocorrect="off" spellcheck="false"
+                      style="padding-left:30px;padding-right:28px;width:100%"
+                      oninput="scheduleNameFilter()">
+                    <button id="fl-name-clear" onclick="clearNameFilter()" style="position:absolute;right:8px;background:none;border:none;font-size:14px;color:var(--text-light);cursor:pointer;display:none;line-height:1;padding:2px 4px" title="Limpar">✕</button>
+                  </div>
                 </div>
               </div>
               <div class="agenda-table-wrap" style="overflow-x:auto"><table><thead><tr><th>Data / Hora</th><th>Cliente</th><th>Procedimento</th><th>Cidade</th><th>Valor</th><th>Status</th><th>Pago</th><th>Ações</th></tr></thead><tbody id="agenda-body"></tbody></table></div>
@@ -2866,9 +2875,13 @@ function renderAgendaPage(page) {
   const tbody  = document.getElementById('agenda-body');
   const cards  = document.getElementById('appt-cards');
 
+  const _fnActive = (document.getElementById('fl-name')?.value||'').trim();
   if (!paged.length) {
-    tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:36px;color:var(--text-light)">Nenhum agendamento encontrado</td></tr>';
-    cards.innerHTML='<div style="text-align:center;padding:36px;color:var(--text-light);font-size:13px">Nenhum agendamento encontrado</div>';
+    const _emptyMsg = _fnActive
+      ? `Nenhum agendamento encontrado para "<strong>${_fnActive}</strong>".`
+      : 'Nenhum agendamento encontrado';
+    tbody.innerHTML=`<tr><td colspan="7" style="text-align:center;padding:36px;color:var(--text-light)">${_emptyMsg}</td></tr>`;
+    cards.innerHTML=`<div style="text-align:center;padding:36px;color:var(--text-light);font-size:13px">${_emptyMsg}</div>`;
     document.getElementById('agenda-pag').classList.add('hidden');
     return;
   }
@@ -2946,11 +2959,12 @@ async function renderAgenda() {
   const fd=document.getElementById('fl-date').value;
   const fc=document.getElementById('fl-city').value;
   const fs=document.getElementById('fl-status').value;
+  const fn=(document.getElementById('fl-name')?.value||'').trim();
   const params=new URLSearchParams();
   if(fd) params.set('date',fd);
   if(fc) params.set('city',fc);
   if(fs) params.set('status',fs);
-  const hasFilter = !!(fd || fc || fs);
+  const hasFilter = !!(fd || fc || fs || fn);
   const tbody=document.getElementById('agenda-body');
   tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-light)">Carregando...</td></tr>';
   try {
@@ -2966,7 +2980,11 @@ async function renderAgenda() {
       renderStats(); // sem filtro = stats globais normais
     }
     // Armazena todos os dados e renderiza a primeira página
-    _agendaAllData = list;
+    // Filtro de nome client-side — aplicado sobre o array completo
+    const _fn = (document.getElementById('fl-name')?.value||'').trim().toLowerCase();
+    _agendaAllData = _fn
+      ? list.filter(a => a.name && a.name.toLowerCase().includes(_fn))
+      : list;
     _agendaPage    = 1;
     renderAgendaPage(1);
 
@@ -2974,6 +2992,27 @@ async function renderAgenda() {
     tbody.innerHTML=`<tr><td colspan="7" style="text-align:center;padding:28px;color:var(--error)">Erro: ${e.message}</td></tr>`;
     document.getElementById('appt-cards').innerHTML=`<div style="color:var(--error);padding:20px;font-size:13px">Erro: ${e.message}</div>`;
   }
+}
+
+// ── Filtro de nome — debounce + clear ────────────────────────────
+let _nameFilterTimer = null;
+
+function scheduleNameFilter() {
+  // Mostrar/esconder botão ✕
+  const val = document.getElementById('fl-name')?.value || '';
+  const clr = document.getElementById('fl-name-clear');
+  if (clr) clr.style.display = val ? 'block' : 'none';
+  // Debounce 300ms
+  clearTimeout(_nameFilterTimer);
+  _nameFilterTimer = setTimeout(() => renderAgenda(), 300);
+}
+
+function clearNameFilter() {
+  const el = document.getElementById('fl-name');
+  if (el) { el.value = ''; el.focus(); }
+  const clr = document.getElementById('fl-name-clear');
+  if (clr) clr.style.display = 'none';
+  renderAgenda();
 }
 
 // ── Helper: busca proc de curso no cache ────────────────────────
