@@ -345,9 +345,10 @@ h1,h2,h3,h4{font-family:'Cormorant Garamond',serif}
 .tbl-wrap{background:white;border-radius:var(--r-md);box-shadow:var(--sh-sm);border:1px solid var(--border);overflow:hidden;margin-bottom:20px}
 .tbl-head{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .tbl-ttl{font-family:'Cormorant Garamond',serif;font-size:19px;font-weight:600;color:var(--dark)}
-.tbl-filters{display:flex;gap:7px;flex-wrap:wrap}
-#fl-name-wrap{flex:1 1 100%}
-@media(min-width:600px){#fl-name-wrap{flex:1 1 160px}}
+.tbl-filters{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+.fl-group{display:flex;flex-direction:column;gap:0}
+.fl-label{display:none;font-size:10px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px}
+.fl-group .fi,.fl-group .fs{width:100%}
 .fi,.fs{padding:7px 11px;border:1.5px solid var(--border);border-radius:var(--r-sm);font-family:'Nunito',sans-serif;font-size:12px;color:var(--dark);background:var(--cream);outline:none;transition:var(--tr)}
 .fi:focus,.fs:focus{border-color:var(--rose)}
 table{width:100%;border-collapse:collapse}
@@ -445,8 +446,10 @@ tr.drag-over{border-top:2.5px solid var(--rose)!important}
   td,th{padding:9px 10px}
   .rev-grid{grid-template-columns:repeat(2,1fr)}
   .tbl-head{flex-direction:column;align-items:flex-start}
-  .tbl-filters{width:100%}
-  .fi,.fs{flex:1;min-width:0}
+  .tbl-filters{width:100%;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .fl-label{display:block}
+  .fl-group-status,.fl-group-name{grid-column:1/-1}
+  .fi,.fs{width:100%;min-width:0}
   .pwa-actions{flex-direction:column}
   .agenda-table-wrap{display:none!important}
   .appt-cards{display:block}
@@ -876,15 +879,26 @@ tr.drag-over{border-top:2.5px solid var(--rose)!important}
               <div class="tbl-head">
                 <div class="tbl-ttl">Agendamentos</div>
                 <div class="tbl-filters">
-                  <input type="date" class="fi" id="fl-date" onchange="renderAgenda()">
-                  <select class="fs" id="fl-city" onchange="renderAgenda()"><option value="">Todas as cidades</option></select>
-                  <select class="fs" id="fl-status" onchange="renderAgenda()"><option value="">Todos os status</option><option value="confirmed">Confirmados</option><option value="realizado">Realizados</option><option value="cancelled">Cancelados</option></select>
-                  <div id="fl-name-wrap" style="position:relative;display:flex;align-items:center;flex:1;min-width:160px">
-                    <span style="position:absolute;left:10px;font-size:13px;color:var(--text-light);pointer-events:none">🔍</span>
-                    <input type="text" class="fi" id="fl-name" placeholder="Buscar cliente..." autocomplete="off" autocorrect="off" spellcheck="false"
-                      style="padding-left:30px;padding-right:28px;width:100%"
-                      oninput="scheduleNameFilter()">
-                    <button id="fl-name-clear" onclick="clearNameFilter()" style="position:absolute;right:8px;background:none;border:none;font-size:14px;color:var(--text-light);cursor:pointer;display:none;line-height:1;padding:2px 4px" title="Limpar">✕</button>
+                  <div class="fl-group fl-group-date">
+                    <label class="fl-label" for="fl-date">📅 Data</label>
+                    <input type="date" class="fi" id="fl-date" onchange="renderAgenda()">
+                  </div>
+                  <div class="fl-group fl-group-city">
+                    <label class="fl-label" for="fl-city">📍 Cidade</label>
+                    <select class="fs" id="fl-city" onchange="renderAgenda()"><option value="">Todas as cidades</option></select>
+                  </div>
+                  <div class="fl-group fl-group-status">
+                    <label class="fl-label" for="fl-status">🔖 Status</label>
+                    <select class="fs" id="fl-status" onchange="renderAgenda()"><option value="">Todos os status</option><option value="confirmed">Confirmados</option><option value="realizado">Realizados</option><option value="cancelled">Cancelados</option></select>
+                  </div>
+                  <div class="fl-group fl-group-name" id="fl-name-wrap" style="position:relative">
+                    <label class="fl-label" for="fl-name">🔍 Cliente</label>
+                    <div style="position:relative;display:flex;align-items:center">
+                      <input type="text" class="fi" id="fl-name" placeholder="Buscar por nome..." autocomplete="off" autocorrect="off" spellcheck="false"
+                        style="padding-right:28px;width:100%"
+                        oninput="scheduleNameFilter()">
+                      <button id="fl-name-clear" onclick="clearNameFilter()" style="position:absolute;right:8px;background:none;border:none;font-size:14px;color:var(--text-light);cursor:pointer;display:none;line-height:1;padding:2px 4px" title="Limpar">✕</button>
+                    </div>
                   </div>
                 </div>
               </div>
