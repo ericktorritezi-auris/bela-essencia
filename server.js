@@ -2073,6 +2073,71 @@ app.get('/api/meu-contrato', requireAdmin, async (req, res) => {
 // ── Agendamento Retroativo (admin) ───────────────────────────────────────────
 // Permite lançar atendimentos já realizados sem restrição de horário de trabalho.
 // Única regra: não pode conflitar (OVERLAPS) com agendamentos existentes.
+// ── Agenda Tática — sem validações de disponibilidade ────────────────────────
+app.post('/api/appointments/tatica', requireAdmin, async (req, res) => {
+  const { cityId, cityName, procId, procName, date, st, et, name, phone, price, pt } = req.body;
+
+  if (!cityId || !procId || !date || !st || !et || !name) {
+    return res.status(400).json({ error: 'Campos obrigatórios: cidade, procedimento, data, horário e nome do cliente.' });
+  }
+  if (!/^\d{2}:\d{2}$/.test(st) || !/^\d{2}:\d{2}$/.test(et)) {
+    return res.status(400).json({ error: 'Formato de horário inválido (HH:MM).' });
+  }
+
+  try {
+    // Resolver cityName se não vier no body
+    let resolvedCityName = cityName;
+    if (!resolvedCityName && cityId) {
+      try {
+        const cr = await req.db(`SELECT name FROM cities WHERE id=$1 LIMIT 1`, [cityId]);
+        if (cr.rows[0]) resolvedCityName = cr.rows[0].name;
+      } catch {}
+    }
+    resolvedCityName = resolvedCityName || 'Sem cidade';
+
+    // Resolver procName se não vier no body
+    let resolvedProcName = procName;
+    if (!resolvedProcName && procId) {
+      try {
+        const pr = await req.db(`SELECT name FROM procedures WHERE id=$1 LIMIT 1`, [procId]);
+        if (pr.rows[0]) resolvedProcName = pr.rows[0].name;
+      } catch {}
+    }
+    resolvedProcName = resolvedProcName || 'Procedimento';
+
+    // ZERO validações de disponibilidade — agenda soberana
+    const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    const { rows } = await req.db(
+      `INSERT INTO appointments
+         (id, city_id, city_name, proc_id, proc_name, date, st, et,
+          name, phone, price, pt, status, privacy_consent)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'confirmed',TRUE)
+       RETURNING *`,
+      [id, cityId, resolvedCityName, procId, resolvedProcName,
+       date, st, et, name, phone || '', price || null, pt || 'fixed']
+    );
+    const appt = { ...rows[0], _schemaName: req.schemaName };
+
+    // Push admin + webhook Synapse Core
+    notifyAdminNewBooking(appt).catch(e => console.error('[Push] tática:', e.message));
+    dispatchWebhook(req.schemaName, 'appointment.created', {
+      id:           appt.id,
+      patient_name: appt.name,
+      patient_phone:appt.phone,
+      procedure:    appt.proc_name,
+      date:         appt.date,
+      time:         appt.st ? String(appt.st).slice(0,5) : null,
+      city:         appt.city_name,
+      status:       appt.status,
+      price:        appt.price ? Number(appt.price) : null
+    }).catch(e => console.error('[Webhook] tática:', e.message));
+
+    res.status(201).json(appt);
+  } catch (err) {
+    res.status(err.code || 500).json({ error: err.message });
+  }
+});
+
 app.post('/api/appointments/retroativo', requireAdmin, async (req, res) => {
   const { cityId, cityName, procId, procName, date, st, et, name, phone, price, pt, status } = req.body;
 
