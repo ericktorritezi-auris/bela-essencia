@@ -1094,34 +1094,44 @@ async function initDB() {
       try { await client.query(`ALTER TABLE tenant_configs ADD COLUMN IF NOT EXISTS webhook_secret VARCHAR(128)`); } catch {}
       // ── Limpeza automática: cidade "Null" em tenants com cidades reais ──────────
       try {
-        // Só apaga se: (1) existe cidade com nome inválido E (2) existe ao menos 1 cidade real
-        // E (3) nenhum agendamento está vinculado à cidade inválida
-        const nullCities = await client.query(
-          `SELECT id FROM "${schema_name}".cities
-           WHERE LOWER(TRIM(name)) IN ('null','','none','n/a')
-              OR name IS NULL`
+        // Buscar TODAS as cidades do schema para diagnóstico
+        const allCities = await client.query(
+          `SELECT id, name, is_active FROM "${schema_name}".cities ORDER BY id`
         );
-        if (nullCities.rowCount > 0) {
-          const realCities = await client.query(
-            `SELECT COUNT(*) as cnt FROM "${schema_name}".cities
-             WHERE LOWER(TRIM(name)) NOT IN ('null','','none','n/a')
-               AND name IS NOT NULL`
-          );
-          if (parseInt(realCities.rows[0].cnt) > 0) {
-            for (const nc of nullCities.rows) {
-              const linked = await client.query(
-                `SELECT COUNT(*) as cnt FROM "${schema_name}".appointments WHERE city_id = $1`,
-                [nc.id]
-              );
-              if (parseInt(linked.rows[0].cnt) === 0) {
-                await client.query(`DELETE FROM "${schema_name}".work_configs WHERE city_id = $1`, [nc.id]);
-                await client.query(`DELETE FROM "${schema_name}".work_breaks WHERE config_id NOT IN (SELECT id FROM "${schema_name}".work_configs)`);
-                await client.query(`DELETE FROM "${schema_name}".city_procedures WHERE city_id = $1`, [nc.id]);
-                await client.query(`DELETE FROM "${schema_name}".cities WHERE id = $1`, [nc.id]);
-                console.log(`[Migration] Cidade inválida removida do schema ${schema_name} (id: ${nc.id})`);
-              }
+        console.log(`[Migration] ${schema_name}: ${allCities.rowCount} cidade(s) — ${JSON.stringify(allCities.rows.map(r=>({id:r.id,name:r.name,active:r.is_active})))}`);
+
+        // Cidade inválida: nome null, vazio, ou qualquer variação de "null"
+        const nullCities = allCities.rows.filter(r =>
+          r.name === null || r.name === undefined ||
+          ['null','none','n/a',''].includes((r.name||'').trim().toLowerCase())
+        );
+        const realCities = allCities.rows.filter(r =>
+          r.name !== null && r.name !== undefined &&
+          !['null','none','n/a',''].includes((r.name||'').trim().toLowerCase())
+        );
+
+        console.log(`[Migration] ${schema_name}: ${nullCities.length} cidade(s) inválida(s), ${realCities.length} real(is)`);
+
+        // Apaga cidade inválida se: tem cidade real E não tem agendamentos vinculados
+        if (nullCities.length > 0 && realCities.length > 0) {
+          for (const nc of nullCities) {
+            const linked = await client.query(
+              `SELECT COUNT(*) as cnt FROM "${schema_name}".appointments WHERE city_id = $1`,
+              [nc.id]
+            );
+            const cnt = parseInt(linked.rows[0].cnt);
+            if (cnt === 0) {
+              try { await client.query(`DELETE FROM "${schema_name}".work_configs WHERE city_id = $1`, [nc.id]); } catch {}
+              try { await client.query(`DELETE FROM "${schema_name}".work_breaks WHERE config_id NOT IN (SELECT id FROM "${schema_name}".work_configs)`); } catch {}
+              try { await client.query(`DELETE FROM "${schema_name}".city_procedures WHERE city_id = $1`, [nc.id]); } catch {}
+              await client.query(`DELETE FROM "${schema_name}".cities WHERE id = $1`, [nc.id]);
+              console.log(`[Migration] ✅ Cidade inválida removida: schema=${schema_name} id=${nc.id} name="${nc.name}"`);
+            } else {
+              console.log(`[Migration] ⚠️ Cidade inválida mantida (tem ${cnt} agendamento(s)): schema=${schema_name} id=${nc.id}`);
             }
           }
+        } else if (nullCities.length > 0 && realCities.length === 0) {
+          console.log(`[Migration] ℹ️ Cidade inválida mantida (sem cidades reais ainda): schema=${schema_name}`);
         }
       } catch(e) { console.warn(`[Migration] Limpeza cidade inválida ${schema_name}:`, e.message); }
     // Migração: cidades — adiciona uf e neighborhood em public e em todos os schemas de tenant
@@ -4075,6 +4085,55 @@ app.post('/master/api/tenants', requireMaster, async (req, res) => {
     await client.query('ROLLBACK');
     res.status(500).json({ error: err.message });
   } finally { client.release(); }
+});
+
+// ── Limpeza manual: remover cidade inválida de um tenant ─────────────────────
+app.delete('/master/api/tenants/:id/null-city', requireMaster, async (req, res) => {
+  try {
+    const { rows: tRows } = await pool.query(
+      'SELECT schema_name FROM tenants WHERE id=$1 LIMIT 1', [req.params.id]
+    );
+    if (!tRows.length) return res.status(404).json({ error: 'Tenant não encontrado' });
+    const schema = tRows[0].schema_name;
+
+    // Listar todas as cidades para diagnóstico
+    const { rows: cities } = await pool.query(
+      `SELECT id, name, is_active FROM "${schema}".cities ORDER BY id`
+    );
+
+    const nullCities = cities.filter(r =>
+      r.name === null || ['null','none','n/a',''].includes((r.name||'').trim().toLowerCase())
+    );
+    const realCities = cities.filter(r =>
+      r.name !== null && !['null','none','n/a',''].includes((r.name||'').trim().toLowerCase())
+    );
+
+    if (nullCities.length === 0) {
+      return res.json({ ok: true, message: 'Nenhuma cidade inválida encontrada', cities });
+    }
+    if (realCities.length === 0) {
+      return res.json({ ok: false, message: 'Sem cidades reais — não foi possível remover', cities });
+    }
+
+    const removed = [];
+    const skipped = [];
+    for (const nc of nullCities) {
+      const { rows: linked } = await pool.query(
+        `SELECT COUNT(*) as cnt FROM "${schema}".appointments WHERE city_id = $1`, [nc.id]
+      );
+      if (parseInt(linked[0].cnt) === 0) {
+        try { await pool.query(`DELETE FROM "${schema}".work_configs WHERE city_id = $1`, [nc.id]); } catch {}
+        try { await pool.query(`DELETE FROM "${schema}".work_breaks WHERE config_id NOT IN (SELECT id FROM "${schema}".work_configs)`); } catch {}
+        try { await pool.query(`DELETE FROM "${schema}".city_procedures WHERE city_id = $1`, [nc.id]); } catch {}
+        await pool.query(`DELETE FROM "${schema}".cities WHERE id = $1`, [nc.id]);
+        await logAction(parseInt(req.params.id), 'null_city_removed', `Cidade inválida removida: id=${nc.id} name="${nc.name}"`);
+        removed.push(nc);
+      } else {
+        skipped.push({ ...nc, appointments: parseInt(linked[0].cnt) });
+      }
+    }
+    res.json({ ok: true, removed, skipped, realCities: realCities.length });
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // ── Webhook config por tenant (Integração Sistêmica) ─────────────────────────
