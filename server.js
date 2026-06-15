@@ -1092,6 +1092,38 @@ async function initDB() {
       // Migração: webhook integração sistêmica (Synapse Core)
       try { await client.query(`ALTER TABLE tenant_configs ADD COLUMN IF NOT EXISTS webhook_url TEXT`); } catch {}
       try { await client.query(`ALTER TABLE tenant_configs ADD COLUMN IF NOT EXISTS webhook_secret VARCHAR(128)`); } catch {}
+      // ── Limpeza automática: cidade "Null" em tenants com cidades reais ──────────
+      try {
+        // Só apaga se: (1) existe cidade com nome inválido E (2) existe ao menos 1 cidade real
+        // E (3) nenhum agendamento está vinculado à cidade inválida
+        const nullCities = await client.query(
+          `SELECT id FROM "${schema_name}".cities
+           WHERE LOWER(TRIM(name)) IN ('null','','none','n/a')
+              OR name IS NULL`
+        );
+        if (nullCities.rowCount > 0) {
+          const realCities = await client.query(
+            `SELECT COUNT(*) as cnt FROM "${schema_name}".cities
+             WHERE LOWER(TRIM(name)) NOT IN ('null','','none','n/a')
+               AND name IS NOT NULL`
+          );
+          if (parseInt(realCities.rows[0].cnt) > 0) {
+            for (const nc of nullCities.rows) {
+              const linked = await client.query(
+                `SELECT COUNT(*) as cnt FROM "${schema_name}".appointments WHERE city_id = $1`,
+                [nc.id]
+              );
+              if (parseInt(linked.rows[0].cnt) === 0) {
+                await client.query(`DELETE FROM "${schema_name}".work_configs WHERE city_id = $1`, [nc.id]);
+                await client.query(`DELETE FROM "${schema_name}".work_breaks WHERE config_id NOT IN (SELECT id FROM "${schema_name}".work_configs)`);
+                await client.query(`DELETE FROM "${schema_name}".city_procedures WHERE city_id = $1`, [nc.id]);
+                await client.query(`DELETE FROM "${schema_name}".cities WHERE id = $1`, [nc.id]);
+                console.log(`[Migration] Cidade inválida removida do schema ${schema_name} (id: ${nc.id})`);
+              }
+            }
+          }
+        }
+      } catch(e) { console.warn(`[Migration] Limpeza cidade inválida ${schema_name}:`, e.message); }
     // Migração: cidades — adiciona uf e neighborhood em public e em todos os schemas de tenant
     await client.query(`ALTER TABLE cities ADD COLUMN IF NOT EXISTS uf VARCHAR(2)`);
     await client.query(`ALTER TABLE cities ADD COLUMN IF NOT EXISTS neighborhood VARCHAR(100)`);
@@ -3483,6 +3515,9 @@ app.post('/api/cities', requireAdmin, async (req, res) => {
   const { name, uf, local_name, address, number, complement, neighborhood, cep, proc_ids } = req.body;
   if (!name||!uf||!local_name||!address||!number||!neighborhood||!cep)
     return res.status(400).json({ error: 'Campos obrigatórios faltando' });
+  // Rejeitar nomes inválidos (null, vazio, placeholders)
+  if (['null','none','n/a','undefined',''].includes(name.trim().toLowerCase()))
+    return res.status(400).json({ error: 'Nome de cidade inválido. Informe um nome real.' });
   try {
     const mapsUrl = `https://maps.google.com/?q=${encodeURIComponent(address+' '+number+' '+name+' '+uf)}`;
     const { rows } = await req.db(
@@ -3510,6 +3545,26 @@ app.post('/api/cities', requireAdmin, async (req, res) => {
         );
       }
     }
+
+    // ── Auto-limpeza: remover cidade inválida agora que existe cidade real ──
+    if (!['null','none','n/a','undefined',''].includes((city.name||'').trim().toLowerCase())) {
+      try {
+        const nullCities = await req.db(
+          `SELECT id FROM cities WHERE (LOWER(TRIM(name)) IN ('null','','none','n/a') OR name IS NULL) AND id != $1`,
+          [city.id]
+        );
+        for (const nc of nullCities.rows) {
+          const linked = await req.db(`SELECT COUNT(*) as cnt FROM appointments WHERE city_id = $1`, [nc.id]);
+          if (parseInt(linked.rows[0].cnt) === 0) {
+            await req.db(`DELETE FROM work_configs WHERE city_id = $1`, [nc.id]);
+            await req.db(`DELETE FROM city_procedures WHERE city_id = $1`, [nc.id]);
+            await req.db(`DELETE FROM cities WHERE id = $1`, [nc.id]);
+            console.log(`[Cities] Cidade inválida auto-removida: id=${nc.id} schema=${req.schemaName}`);
+          }
+        }
+      } catch(e) { console.warn('[Cities] Auto-limpeza:', e.message); }
+    }
+
     res.status(201).json(city);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
