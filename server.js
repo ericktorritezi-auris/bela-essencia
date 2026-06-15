@@ -1092,48 +1092,6 @@ async function initDB() {
       // Migração: webhook integração sistêmica (Synapse Core)
       try { await client.query(`ALTER TABLE tenant_configs ADD COLUMN IF NOT EXISTS webhook_url TEXT`); } catch {}
       try { await client.query(`ALTER TABLE tenant_configs ADD COLUMN IF NOT EXISTS webhook_secret VARCHAR(128)`); } catch {}
-      // ── Limpeza automática: cidade "Null" em tenants com cidades reais ──────────
-      try {
-        // Buscar TODAS as cidades do schema para diagnóstico
-        const allCities = await client.query(
-          `SELECT id, name, is_active FROM "${schema_name}".cities ORDER BY id`
-        );
-        console.log(`[Migration] ${schema_name}: ${allCities.rowCount} cidade(s) — ${JSON.stringify(allCities.rows.map(r=>({id:r.id,name:r.name,active:r.is_active})))}`);
-
-        // Cidade inválida: nome null, vazio, ou qualquer variação de "null"
-        const nullCities = allCities.rows.filter(r =>
-          r.name === null || r.name === undefined ||
-          ['null','none','n/a',''].includes((r.name||'').trim().toLowerCase())
-        );
-        const realCities = allCities.rows.filter(r =>
-          r.name !== null && r.name !== undefined &&
-          !['null','none','n/a',''].includes((r.name||'').trim().toLowerCase())
-        );
-
-        console.log(`[Migration] ${schema_name}: ${nullCities.length} cidade(s) inválida(s), ${realCities.length} real(is)`);
-
-        // Apaga cidade inválida se: tem cidade real E não tem agendamentos vinculados
-        if (nullCities.length > 0 && realCities.length > 0) {
-          for (const nc of nullCities) {
-            const linked = await client.query(
-              `SELECT COUNT(*) as cnt FROM "${schema_name}".appointments WHERE city_id = $1`,
-              [nc.id]
-            );
-            const cnt = parseInt(linked.rows[0].cnt);
-            if (cnt === 0) {
-              try { await client.query(`DELETE FROM "${schema_name}".work_configs WHERE city_id = $1`, [nc.id]); } catch {}
-              try { await client.query(`DELETE FROM "${schema_name}".work_breaks WHERE config_id NOT IN (SELECT id FROM "${schema_name}".work_configs)`); } catch {}
-              try { await client.query(`DELETE FROM "${schema_name}".city_procedures WHERE city_id = $1`, [nc.id]); } catch {}
-              await client.query(`DELETE FROM "${schema_name}".cities WHERE id = $1`, [nc.id]);
-              console.log(`[Migration] ✅ Cidade inválida removida: schema=${schema_name} id=${nc.id} name="${nc.name}"`);
-            } else {
-              console.log(`[Migration] ⚠️ Cidade inválida mantida (tem ${cnt} agendamento(s)): schema=${schema_name} id=${nc.id}`);
-            }
-          }
-        } else if (nullCities.length > 0 && realCities.length === 0) {
-          console.log(`[Migration] ℹ️ Cidade inválida mantida (sem cidades reais ainda): schema=${schema_name}`);
-        }
-      } catch(e) { console.warn(`[Migration] Limpeza cidade inválida ${schema_name}:`, e.message); }
     // Migração: cidades — adiciona uf e neighborhood em public e em todos os schemas de tenant
     await client.query(`ALTER TABLE cities ADD COLUMN IF NOT EXISTS uf VARCHAR(2)`);
     await client.query(`ALTER TABLE cities ADD COLUMN IF NOT EXISTS neighborhood VARCHAR(100)`);
@@ -1280,6 +1238,24 @@ async function initDB() {
           `UPDATE "${schema_name}".cities SET uf='PR' WHERE (uf IS NULL OR uf='') AND id > 0`
         );
       } catch {}
+      // ── Limpeza automática: cidade "Null" ────────────────────────────────────
+      try {
+        const _allC = await client.query(`SELECT id, name FROM "${schema_name}".cities ORDER BY id`);
+        const _nullC = _allC.rows.filter(r => !r.name || ['null','none','n/a'].includes(r.name.trim().toLowerCase()));
+        const _realC = _allC.rows.filter(r => r.name && !['null','none','n/a'].includes(r.name.trim().toLowerCase()));
+        console.log('[Migration] ' + schema_name + ': invalidas=' + _nullC.length + ' reais=' + _realC.length);
+        if (_nullC.length > 0 && _realC.length > 0) {
+          for (const _nc of _nullC) {
+            const _lk = await client.query(`SELECT COUNT(*) as cnt FROM "${schema_name}".appointments WHERE city_id=$1`, [_nc.id]);
+            if (parseInt(_lk.rows[0].cnt) === 0) {
+              try { await client.query(`DELETE FROM "${schema_name}".work_configs WHERE city_id=$1`, [_nc.id]); } catch {}
+              try { await client.query(`DELETE FROM "${schema_name}".city_procedures WHERE city_id=$1`, [_nc.id]); } catch {}
+              await client.query(`DELETE FROM "${schema_name}".cities WHERE id=$1`, [_nc.id]);
+              console.log('[Migration] Cidade invalida removida: ' + schema_name + ' id=' + _nc.id);
+            }
+          }
+        }
+      } catch(_e) { console.warn('[Migration] null city:', _e.message); }
     }
     // Preenche UF=PR no schema public também
     await client.query(`UPDATE cities SET uf='PR' WHERE (uf IS NULL OR uf='') AND id > 0`);
