@@ -1238,24 +1238,6 @@ async function initDB() {
           `UPDATE "${schema_name}".cities SET uf='PR' WHERE (uf IS NULL OR uf='') AND id > 0`
         );
       } catch {}
-      // ── Limpeza automática: cidade "Null" ────────────────────────────────────
-      try {
-        const _allC = await client.query(`SELECT id, name FROM "${schema_name}".cities ORDER BY id`);
-        const _nullC = _allC.rows.filter(r => !r.name || ['null','none','n/a'].includes(r.name.trim().toLowerCase()));
-        const _realC = _allC.rows.filter(r => r.name && !['null','none','n/a'].includes(r.name.trim().toLowerCase()));
-        console.log('[Migration] ' + schema_name + ': invalidas=' + _nullC.length + ' reais=' + _realC.length);
-        if (_nullC.length > 0 && _realC.length > 0) {
-          for (const _nc of _nullC) {
-            const _lk = await client.query(`SELECT COUNT(*) as cnt FROM "${schema_name}".appointments WHERE city_id=$1`, [_nc.id]);
-            if (parseInt(_lk.rows[0].cnt) === 0) {
-              try { await client.query(`DELETE FROM "${schema_name}".work_configs WHERE city_id=$1`, [_nc.id]); } catch {}
-              try { await client.query(`DELETE FROM "${schema_name}".city_procedures WHERE city_id=$1`, [_nc.id]); } catch {}
-              await client.query(`DELETE FROM "${schema_name}".cities WHERE id=$1`, [_nc.id]);
-              console.log('[Migration] Cidade invalida removida: ' + schema_name + ' id=' + _nc.id);
-            }
-          }
-        }
-      } catch(_e) { console.warn('[Migration] null city:', _e.message); }
     }
     // Preenche UF=PR no schema public também
     await client.query(`UPDATE cities SET uf='PR' WHERE (uf IS NULL OR uf='') AND id > 0`);
@@ -1491,6 +1473,43 @@ async function initDB() {
     `);
 
     await client.query('COMMIT');
+
+    // ── Limpeza pós-COMMIT: cidade "Null" — usa pool (fora de qualquer transação) ──
+    try {
+      const { rows: tSchemas } = await pool.query(
+        `SELECT schema_name FROM tenants WHERE schema_name IS NOT NULL AND active=TRUE`
+      );
+      for (const { schema_name: sn } of tSchemas) {
+        try {
+          const { rows: allCities } = await pool.query(
+            `SELECT id, name FROM "${sn}".cities ORDER BY id`
+          );
+          const nullCities = allCities.filter(r =>
+            !r.name || ['null','none','n/a','undefined'].includes(r.name.trim().toLowerCase())
+          );
+          const realCities = allCities.filter(r =>
+            r.name && !['null','none','n/a','undefined'].includes(r.name.trim().toLowerCase())
+          );
+          console.log(`[Migration] ${sn}: ${nullCities.length} invalida(s), ${realCities.length} real(is)`);
+          if (nullCities.length > 0 && realCities.length > 0) {
+            for (const nc of nullCities) {
+              const { rows: linked } = await pool.query(
+                `SELECT COUNT(*) as cnt FROM "${sn}".appointments WHERE city_id=$1`, [nc.id]
+              );
+              if (parseInt(linked[0].cnt) === 0) {
+                await pool.query(`DELETE FROM "${sn}".work_breaks WHERE config_id IN (SELECT id FROM "${sn}".work_configs WHERE city_id=$1)`, [nc.id]);
+                await pool.query(`DELETE FROM "${sn}".work_configs WHERE city_id=$1`, [nc.id]);
+                await pool.query(`DELETE FROM "${sn}".city_procedures WHERE city_id=$1`, [nc.id]);
+                await pool.query(`DELETE FROM "${sn}".cities WHERE id=$1`, [nc.id]);
+                console.log(`[Migration] ✅ Cidade invalida removida: ${sn} id=${nc.id} name="${nc.name}"`);
+              } else {
+                console.log(`[Migration] ⚠️ Cidade invalida mantida (tem agendamentos): ${sn} id=${nc.id}`);
+              }
+            }
+          }
+        } catch(e) { console.warn(`[Migration] null city ${sn}:`, e.message); }
+      }
+    } catch(e) { console.warn('[Migration] null city geral:', e.message); }
 
     // Seed: insere procedimentos padrão apenas se a tabela estiver vazia
     const { rowCount } = await client.query('SELECT 1 FROM procedures LIMIT 1');
