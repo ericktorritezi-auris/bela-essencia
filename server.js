@@ -1474,13 +1474,28 @@ async function initDB() {
 
     await client.query('COMMIT');
 
-    // ── Limpeza pós-COMMIT: cidade "Null" — usa pool (fora de qualquer transação) ──
+    // ── Limpeza pós-COMMIT — usa pool (fora de qualquer transação) ─────────────
     try {
       const { rows: tSchemas } = await pool.query(
         `SELECT schema_name FROM tenants WHERE schema_name IS NOT NULL AND active=TRUE`
       );
       for (const { schema_name: sn } of tSchemas) {
         try {
+          // 1. Remover work_configs ÓRFÃOS (city_id sem cidade correspondente)
+          const { rows: orphans } = await pool.query(
+            `SELECT wc.id, wc.city_id FROM "${sn}".work_configs wc
+             WHERE NOT EXISTS (SELECT 1 FROM "${sn}".cities c WHERE c.id = wc.city_id)`
+          );
+          if (orphans.length > 0) {
+            console.log(`[Migration] ${sn}: ${orphans.length} work_config(s) orfao(s) encontrado(s)`);
+            for (const o of orphans) {
+              await pool.query(`DELETE FROM "${sn}".work_breaks WHERE config_id=$1`, [o.id]);
+              await pool.query(`DELETE FROM "${sn}".work_configs WHERE id=$1`, [o.id]);
+            }
+            console.log(`[Migration] ✅ ${sn}: work_configs orfaos removidos`);
+          }
+
+          // 2. Remover cidades com nome inválido (se ainda existirem)
           const { rows: allCities } = await pool.query(
             `SELECT id, name FROM "${sn}".cities ORDER BY id`
           );
@@ -1507,9 +1522,9 @@ async function initDB() {
               }
             }
           }
-        } catch(e) { console.warn(`[Migration] null city ${sn}:`, e.message); }
+        } catch(e) { console.warn(`[Migration] cleanup ${sn}:`, e.message); }
       }
-    } catch(e) { console.warn('[Migration] null city geral:', e.message); }
+    } catch(e) { console.warn('[Migration] cleanup geral:', e.message); }
 
     // Seed: insere procedimentos padrão apenas se a tabela estiver vazia
     const { rowCount } = await client.query('SELECT 1 FROM procedures LIMIT 1');
