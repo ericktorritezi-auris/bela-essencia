@@ -1641,6 +1641,7 @@ tr.drag-over{border-top:2.5px solid var(--rose)!important}
                 <div class="fg"><label>E-mail</label><input type="email" id="pf-email" placeholder="email@exemplo.com"></div>
                 <div class="fg"><label>Login</label><input type="text" id="pf-login" placeholder="Seu login de acesso" autocomplete="username"></div>
                 <button class="btn btn-primary" onclick="saveProfile()" style="width:auto;padding:10px 24px">Salvar dados</button>
+                <button class="btn" onclick="clearAppCache()" style="width:auto;padding:10px 24px;background:var(--rose-light);border:1.5px solid var(--rose-mid);color:var(--rose);font-weight:700;margin-left:8px">🗑 Limpar Cache</button>
                 <button class="btn btn-secondary" onclick="testSendEmail()" style="width:auto;padding:10px 20px;margin-left:8px">📧 Testar e-mail agora</button>
                 <a href="/manual-profissional.html" target="_blank" class="btn btn-secondary" style="width:auto;padding:10px 20px;margin-left:8px;text-decoration:none;display:inline-flex;align-items:center;gap:5px">📖 Manual da profissional</a>
               </div>
@@ -3001,7 +3002,7 @@ function renderAgendaPage(page) {
           <button class="act-btn" onclick="openEditModal('${a.id}')">Editar</button>
           ${a.status==='confirmed'||a.status==='realizado'
             ? `<button class="act-btn danger" onclick="confirmRecurAction('${a.id}','cancel',${a.recurrence_group_id||'null'})">Cancelar</button>`
-            : `<button class="act-btn" onclick="openRestoreModal('${a.id}')" style="color:var(--gold);border-color:var(--gold)">↩ Restaurar</button><button class="act-btn danger" onclick="confirmRecurAction('${a.id}','delete',${a.recurrence_group_id||'null'})" style="color:var(--error);border-color:var(--error);font-size:10px">🗑</button>`
+            : `<button class="act-btn" onclick="openRestoreModal('${a.id}')" style="color:var(--gold);border-color:var(--gold)">↩ Restaurar</button>${a.recurrence_group_id ? `<button class="act-btn" onclick="restoreSeries('${a.id}')" style="color:var(--rose);border-color:var(--rose);font-size:10px">🔁 Restaurar Série</button>` : ''}<button class="act-btn danger" onclick="confirmRecurAction('${a.id}','delete',${a.recurrence_group_id||'null'})" style="color:var(--error);border-color:var(--error);font-size:10px">🗑</button>`
           }
           <button class="act-btn" onclick="sendAgendaWA('${a.id}')" title="Enviar agendamento por WhatsApp">📅</button>
           ${(a.status==='confirmed'||a.status==='realizado')&&_getCourseProc(a.proc_id)?`<button class="act-btn" onclick="openCertModal('${a.id}')" title="Gerar certificado" style="color:var(--gold);border-color:var(--gold)">🎓</button>`:''}
@@ -3032,7 +3033,7 @@ function renderAgendaPage(page) {
           <button class="act-btn" onclick="openEditModal('${a.id}')">Editar</button>
           ${a.status==='confirmed'||a.status==='realizado'
             ? `<button class="act-btn danger" onclick="confirmRecurAction('${a.id}','cancel',${a.recurrence_group_id||'null'})" style="color:var(--warn);border-color:var(--warn)">Cancelar</button>`
-            : `<button class="act-btn" onclick="openRestoreModal('${a.id}')" style="color:var(--gold);border-color:var(--gold)">↩ Restaurar</button><button class="act-btn danger" onclick="confirmRecurAction('${a.id}','delete',${a.recurrence_group_id||'null'})" style="color:var(--error);border-color:var(--error)">🗑</button>`
+            : `<button class="act-btn" onclick="openRestoreModal('${a.id}')" style="color:var(--gold);border-color:var(--gold)">↩ Restaurar</button>${a.recurrence_group_id ? `<button class="act-btn" onclick="restoreSeries('${a.id}')" style="color:var(--rose);border-color:var(--rose);font-size:10px">🔁 Restaurar Série</button>` : ''}<button class="act-btn danger" onclick="confirmRecurAction('${a.id}','delete',${a.recurrence_group_id||'null'})" style="color:var(--error);border-color:var(--error)">🗑</button>`
           }
           <button class="act-btn" onclick="sendAgendaWA('${a.id}')" title="Enviar agendamento por WhatsApp">📅</button>
           ${(a.status==='confirmed'||a.status==='realizado')&&_getCourseProc(a.proc_id)?`<button class="act-btn" onclick="openCertModal('${a.id}')" style="color:var(--gold);border-color:var(--gold)">🎓 Certificado</button>`:''}
@@ -3088,6 +3089,23 @@ async function renderAgenda() {
   } catch(e) {
     tbody.innerHTML=`<tr><td colspan="7" style="text-align:center;padding:28px;color:var(--error)">Erro: ${e.message}</td></tr>`;
     document.getElementById('appt-cards').innerHTML=`<div style="color:var(--error);padding:20px;font-size:13px">Erro: ${e.message}</div>`;
+  }
+}
+
+// ── LIMPEZA DE CACHE ──────────────────────────────────────────────────────────
+async function clearAppCache() {
+  try {
+    if ('serviceWorker' in navigator && 'caches' in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k)));
+      if (navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({ type: 'SKIP_WAITING' });
+      }
+    }
+    showToast('✅ Cache limpo! Recarregando...', 'ok');
+    setTimeout(() => location.reload(true), 1200);
+  } catch(e) {
+    showToast('Erro ao limpar cache: ' + e.message, 'error');
   }
 }
 
@@ -3212,15 +3230,23 @@ function confirmRecurAction(apptId, action, recurrenceGroupId) {
       var url = '/api/appointments/' + apptId + (action === 'delete' ? '/delete-series' : '/cancel-series');
       console.log('[RCA_ALL] fetch: PATCH ' + url);
       var r = await fetch(url, { method:'PATCH', headers:{'Content-Type':'application/json'}, credentials:'include', body:'{}' });
+      if (!r.ok) { var err = await r.json().catch(()=>({})); throw new Error(err.error || 'Erro ' + r.status); }
       var res = await r.json();
       console.log('[RCA_ALL] resposta: ' + JSON.stringify(res));
-      alert('RESULTADO CANCEL-SERIES\nStatus: ' + r.status + '\nResposta: ' + JSON.stringify(res));
+      // Aplicar filtro de data do range da série cancelada
       var dateEl = document.getElementById('fl-date');
-      if (dateEl) dateEl.value = '';
+      if (dateEl && res.from) {
+        dateEl.value = res.from; // data inicial da série cancelada
+      } else if (dateEl) {
+        dateEl.value = '';
+      }
       renderAgenda();
+      var n = res.cancelled || 0;
+      var label = url.includes('delete') ? 'excluído(s)' : 'cancelado(s)';
+      showToast('✅ ' + n + ' agendamento(s) ' + label + ' na série', 'ok');
     } catch(e) {
       console.error('[RCA_ALL] ERRO: ' + e.message);
-      alert('ERRO: ' + e.message);
+      showToast(e.message, 'error');
     }
   };
   document.getElementById('_rca_back').onclick = closeModal;
@@ -3233,10 +3259,7 @@ async function cancelAppt(id, scope) {
       const res = await PATCH('/api/appointments/' + id + '/cancel-series', {});
       console.log('[cancelAppt] resposta servidor:', JSON.stringify(res));
       const n = res && res.cancelled ? res.cancelled : '?';
-      const prev = res && res.preview ? res.preview.join(', ') : 'sem preview';
-      const grp  = res && res.group ? res.group : '?';
-      const frm  = res && res.from  ? res.from  : '?';
-      alert('DIAGNÓSTICO CANCEL-SERIES\nGrupo: ' + grp + '\nDe: ' + frm + '\nCancelados: ' + n + '\nDatas: ' + prev);
+
       const dateEl = document.getElementById('fl-date');
       if (dateEl) dateEl.value = '';
       showToast('✅ Série cancelada: ' + n + ' agendamento(s) afetado(s)', 'ok');
@@ -3261,6 +3284,19 @@ async function deleteAppt(id, scope) {
       showToast('Agendamento excluído', 'ok');
     }
     renderAgenda();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+// ── Restaurar série de agendamentos cancelados ───────────────────────────────
+async function restoreSeries(id) {
+  if (!window.confirm('Restaurar ESTE e todos os próximos agendamentos cancelados desta série?')) return;
+  try {
+    const res = await PATCH('/api/appointments/' + id + '/restore-series', {});
+    const n = res && res.restored ? res.restored : 0;
+    const dateEl = document.getElementById('fl-date');
+    if (dateEl && res.from) dateEl.value = res.from;
+    renderAgenda();
+    showToast('✅ ' + n + ' agendamento(s) restaurado(s) na série', 'ok');
   } catch(e) { showToast(e.message, 'error'); }
 }
 
