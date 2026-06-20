@@ -3163,60 +3163,19 @@ function edUpdateRecurPreview() {
 
 // ── Modal de confirmação para cancelar/excluir série ──
 function confirmRecurAction(apptId, action, recurrenceGroupId) {
-  // action: 'cancel' | 'delete'
-  if (!recurrenceGroupId || recurrenceGroupId === 'null') {
+  if (!recurrenceGroupId || recurrenceGroupId === 'null' || recurrenceGroupId === null) {
     if (action === 'cancel') cancelAppt(apptId, 'single');
     else deleteAppt(apptId, 'single');
     return;
   }
-
-  // Remover modal anterior se existir
-  const prev = document.getElementById('recur-confirm-modal');
-  if (prev) prev.remove();
-
-  // Guardar contexto no window para os botões acessarem
-  window._recurCtx = { apptId, action };
-
-  const label = action === 'cancel' ? 'Cancelar' : 'Excluir';
-  const el = document.createElement('div');
-  el.id = 'recur-confirm-modal';
-  el.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.52);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
-  el.innerHTML =
-    '<div style="background:#fff;border-radius:14px;padding:24px;max-width:340px;width:100%;box-shadow:0 8px 40px rgba(0,0,0,.18)">' +
-      '<div style="font-size:15px;font-weight:800;color:var(--dark);margin-bottom:10px">⚠️ Agendamento recorrente</div>' +
-      '<p style="font-size:13px;color:var(--text-light);line-height:1.6;margin-bottom:20px">Este agendamento faz parte de uma série recorrente. O que deseja fazer?</p>' +
-      '<div style="display:flex;flex-direction:column;gap:9px">' +
-        '<button id="recur-btn-single" style="padding:12px;border:1.5px solid var(--border);border-radius:var(--r-sm);background:var(--cream);font-size:13px;font-weight:700;cursor:pointer;text-align:left">' +
-          label + ' apenas <strong>este</strong> agendamento' +
-        '</button>' +
-        '<button id="recur-btn-forward" style="padding:12px;border:1.5px solid var(--error);border-radius:var(--r-sm);background:#FFF5F5;font-size:13px;font-weight:700;cursor:pointer;color:var(--error);text-align:left">' +
-          label + ' <strong>este e todos os próximos</strong>' +
-        '</button>' +
-        '<button id="recur-btn-back" style="padding:10px;border:none;background:none;font-size:13px;color:var(--text-light);cursor:pointer">Voltar</button>' +
-      '</div>' +
-    '</div>';
-  document.body.appendChild(el);
-
-  function closeRecurModal() {
-    const m = document.getElementById('recur-confirm-modal');
-    if (m) m.remove();
-  }
-
-  document.getElementById('recur-btn-single').addEventListener('click', function() {
-    closeRecurModal();
-    const ctx = window._recurCtx || {};
-    if (ctx.action === 'cancel') cancelAppt(ctx.apptId, 'single');
-    else deleteAppt(ctx.apptId, 'single');
-  });
-
-  document.getElementById('recur-btn-forward').addEventListener('click', function() {
-    closeRecurModal();
-    const ctx = window._recurCtx || {};
-    if (ctx.action === 'cancel') cancelAppt(ctx.apptId, 'forward');
-    else deleteAppt(ctx.apptId, 'forward');
-  });
-
-  document.getElementById('recur-btn-back').addEventListener('click', closeRecurModal);
+  const verb = action === 'cancel' ? 'cancelar' : 'excluir';
+  const forward = window.confirm(
+    'Este agendamento faz parte de uma série recorrente.\n\n' +
+    'Clique OK para ' + verb + ' ESTE E TODOS OS PRÓXIMOS.\n' +
+    'Clique Cancelar para ' + verb + ' apenas ESTE.'
+  );
+  if (action === 'cancel') cancelAppt(apptId, forward ? 'forward' : 'single');
+  else deleteAppt(apptId, forward ? 'forward' : 'single');
 }
 
 async function cancelAppt(id, scope) {
