@@ -3228,11 +3228,10 @@ function confirmRecurAction(apptId, action, recurrenceGroupId) {
     console.log('[RCA_ALL] apptId=' + apptId + ' action=' + action);
     try {
       var url = '/api/appointments/' + apptId + (action === 'delete' ? '/delete-series' : '/cancel-series');
-      console.log('[RCA_ALL] fetch: PATCH ' + url);
-      var r = await fetch(url, { method:'PATCH', headers:{'Content-Type':'application/json'}, credentials:'include', body:'{}' });
+      var method = action === 'delete' ? 'DELETE' : 'PATCH';
+      var r = await fetch(url, { method:method, headers:{'Content-Type':'application/json'}, credentials:'include', body:'{}' });
       if (!r.ok) { var err = await r.json().catch(()=>({})); throw new Error(err.error || 'Erro ' + r.status); }
       var res = await r.json();
-      console.log('[RCA_ALL] resposta: ' + JSON.stringify(res));
       // Aplicar filtro de data do range da série cancelada
       var dateEl = document.getElementById('fl-date');
       if (dateEl && res.from) {
