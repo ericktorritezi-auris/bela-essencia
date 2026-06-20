@@ -2551,30 +2551,30 @@ app.patch('/api/appointments/:id/restore', requireAdmin, async (req, res) => {
 });
 
 // Admin: cancelar agendamento
+// ── Cancelar série inteira a partir deste (endpoint dedicado) ────────────────
+app.patch('/api/appointments/:id/cancel-series', requireAdmin, async (req, res) => {
+  try {
+    const { rows: target } = await req.db(
+      `SELECT recurrence_group_id, date::text as date_str FROM appointments WHERE id=$1`,
+      [req.params.id]
+    );
+    if (!target.length) return res.status(404).json({ error: 'Agendamento não encontrado' });
+    const { recurrence_group_id, date_str } = target[0];
+    if (!recurrence_group_id) {
+      await req.db(`UPDATE appointments SET status='cancelled' WHERE id=$1`, [req.params.id]);
+      return res.json({ ok: true, cancelled: 1 });
+    }
+    const { rowCount } = await req.db(
+      `UPDATE appointments SET status='cancelled'
+       WHERE recurrence_group_id=$1 AND date >= $2::date AND status != 'cancelled'`,
+      [recurrence_group_id, date_str]
+    );
+    res.json({ ok: true, cancelled: rowCount });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
 app.patch('/api/appointments/:id/cancel', requireAdmin, async (req, res) => {
   try {
-    const { scope } = req.body; // 'single' (default) | 'forward'
-
-    if (scope === 'forward') {
-      // Cancelar este e todos os próximos da mesma série
-      const { rows: target } = await req.db(
-        'SELECT recurrence_group_id, date FROM appointments WHERE id=$1', [req.params.id]
-      );
-      if (!target.length) return res.status(404).json({ error: 'Agendamento não encontrado' });
-      const { recurrence_group_id, date } = target[0];
-      if (!recurrence_group_id) {
-        // Sem série — cancela apenas este
-        await req.db(`UPDATE appointments SET status='cancelled', updated_at=NOW() WHERE id=$1`, [req.params.id]);
-        return res.json({ ok: true, cancelled: 1 });
-      }
-      const { rowCount } = await req.db(
-        `UPDATE appointments SET status='cancelled', updated_at=NOW()
-         WHERE recurrence_group_id=$1 AND date >= $2 AND status != 'cancelled'`,
-        [recurrence_group_id, date]
-      );
-      return res.json({ ok: true, cancelled: rowCount });
-    }
-
     // scope === 'single' (comportamento padrão)
     const { rows } = await req.db(
       `UPDATE appointments SET status='cancelled', updated_at=NOW() WHERE id=$1 RETURNING *`,
@@ -2598,27 +2598,29 @@ app.patch('/api/appointments/:id/cancel', requireAdmin, async (req, res) => {
 });
 
 // Admin: excluir agendamento definitivamente da base (hard delete)
+// ── Excluir série inteira a partir deste (endpoint dedicado) ─────────────────
+app.delete('/api/appointments/:id/delete-series', requireAdmin, async (req, res) => {
+  try {
+    const { rows: target } = await req.db(
+      `SELECT recurrence_group_id, date::text as date_str FROM appointments WHERE id=$1`,
+      [req.params.id]
+    );
+    if (!target.length) return res.status(404).json({ error: 'Agendamento não encontrado' });
+    const { recurrence_group_id, date_str } = target[0];
+    if (!recurrence_group_id) {
+      await req.db('DELETE FROM appointments WHERE id=$1', [req.params.id]);
+      return res.json({ ok: true, deleted: 1 });
+    }
+    const { rowCount } = await req.db(
+      `DELETE FROM appointments WHERE recurrence_group_id=$1 AND date >= $2::date`,
+      [recurrence_group_id, date_str]
+    );
+    res.json({ ok: true, deleted: rowCount });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
 app.delete('/api/appointments/:id', requireAdmin, async (req, res) => {
   try {
-    const scope = req.query.scope || 'single'; // 'single' | 'forward'
-
-    if (scope === 'forward') {
-      const { rows: target } = await req.db(
-        'SELECT recurrence_group_id, date FROM appointments WHERE id=$1', [req.params.id]
-      );
-      if (!target.length) return res.status(404).json({ error: 'Agendamento não encontrado' });
-      const { recurrence_group_id, date } = target[0];
-      if (!recurrence_group_id) {
-        await req.db('DELETE FROM appointments WHERE id=$1', [req.params.id]);
-        return res.json({ ok: true, deleted: 1 });
-      }
-      const { rowCount } = await req.db(
-        `DELETE FROM appointments WHERE recurrence_group_id=$1 AND date >= $2`,
-        [recurrence_group_id, date]
-      );
-      return res.json({ ok: true, deleted: rowCount });
-    }
-
     // scope === 'single'
     const { rowCount } = await req.db(
       'DELETE FROM appointments WHERE id=$1',
