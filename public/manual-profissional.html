@@ -355,6 +355,8 @@
     <a href="#agenda" class="toc-link">📅 Agenda</a>
     <a href="#manual-booking" class="toc-link">✏️ Ag. Manual</a>
     <a href="#retro-booking" class="toc-link">⏮️ Ag. Retroativa</a>
+    <a href="#tatica" class="toc-link">⚡ Ag. Tática</a>
+    <a href="#recorrencia" class="toc-link">🔁 Recorrência</a>
     <a href="#bloquear" class="toc-link">🚫 Bloquear</a>
     <a href="#liberar" class="toc-link">✅ Liberar</a>
     <a href="#disponibilidade" class="toc-link">📅 Disponibilidade</a>
@@ -722,6 +724,80 @@
         </div>
       </section>
 
+
+      <!-- AGENDA TÁTICA -->
+      <section class="section" id="tatica">
+        <div class="section-header">
+          <div class="section-icon">⚡</div>
+          <div class="section-title">Agenda Tática</div>
+        </div>
+        <div class="section-body">
+          <p>A Agenda Tática é um agendamento <strong>soberano</strong> — feito exclusivamente pelo profissional, sem nenhuma validação de disponibilidade, horário de trabalho, bloqueios ou conflitos. Use quando precisar garantir o cadastro de um atendimento independentemente das configurações.</p>
+          <div class="sub">
+            <h4>Como acessar</h4>
+            <p>Menu lateral → <strong>⚡ Ag. Tática</strong>.</p>
+          </div>
+          <div class="sub">
+            <h4>O que ela ignora</h4>
+            <p>Horários de trabalho configurados, intervalos de almoço, datas e horários bloqueados, conflitos com outros agendamentos e restrições de cidade. É uma agenda soberana em relação a todos os parâmetros do sistema.</p>
+          </div>
+          <div class="sub">
+            <h4>O que ela respeita</h4>
+            <p>Apenas os campos obrigatórios: cidade, procedimento, data, horário de início e nome do cliente. O término é calculado automaticamente pela duração do procedimento. O valor é sugerido pelo procedimento selecionado.</p>
+          </div>
+          <div class="sub">
+            <h4>Comportamento após salvar</h4>
+            <p>O agendamento tático aparece normalmente na lista da agenda com os mesmos botões de ação. O sistema envia notificação push para o profissional e dispara o webhook para o Synapse Core.</p>
+          </div>
+          <div class="tip">
+            <span>⚡</span>
+            <p>Use a Agenda Tática para situações de urgência — atendimentos de última hora, encaixes emergenciais ou registros retroativos que precisam ser feitos sem restrição.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- RECORRÊNCIA -->
+      <section class="section" id="recorrencia">
+        <div class="section-header">
+          <div class="section-icon">🔁</div>
+          <div class="section-title">Recorrência de Agendamentos</div>
+        </div>
+        <div class="section-body">
+          <p>A recorrência permite agendar automaticamente uma série de atendimentos com a mesma frequência, horário e procedimento — ideal para acompanhamentos semanais, quinzenais ou mensais.</p>
+          <div class="sub">
+            <h4>Como criar uma recorrência</h4>
+            <p>Na <strong>Agenda Manual</strong> (Step 4 — Dados do cliente) ou no <strong>modal de edição</strong> de um agendamento existente, marque a opção <em>🔁 Agendar com recorrência</em>. Selecione a frequência e, opcionalmente, uma data de encerramento.</p>
+          </div>
+          <div class="sub">
+            <h4>Frequências disponíveis</h4>
+            <p>Semanal — mesmo dia da semana, toda semana (até 52 ocorrências). Quinzenal — a cada 14 dias (até 26 ocorrências). Mensal — mesmo dia do mês, todo mês (até 12 ocorrências).</p>
+          </div>
+          <div class="sub">
+            <h4>Prévia antes de confirmar</h4>
+            <p>Ao selecionar a frequência, o sistema exibe uma prévia das datas que serão agendadas. Isso permite verificar antes de confirmar se as datas fazem sentido.</p>
+          </div>
+          <div class="sub">
+            <h4>Data de encerramento</h4>
+            <p>Opcional. Se não informada, o sistema usa o número máximo de ocorrências conforme a frequência. Se informada, gera agendamentos até aquela data.</p>
+          </div>
+          <div class="sub">
+            <h4>Conflitos de horário</h4>
+            <p>Datas onde já existe agendamento no mesmo horário e cidade são automaticamente ignoradas. O sistema informa quantas datas foram ignoradas por conflito.</p>
+          </div>
+          <div class="sub">
+            <h4>Identificação visual</h4>
+            <p>Agendamentos que fazem parte de uma série recorrente exibem o badge <strong>🔁</strong> ao lado do nome do cliente na lista e nos cards mobile.</p>
+          </div>
+          <div class="sub">
+            <h4>Cancelar ou excluir agendamentos recorrentes</h4>
+            <p>Ao cancelar ou excluir um agendamento que faz parte de uma série, o sistema pergunta: <em>Cancelar apenas este</em> ou <em>Cancelar este e todos os próximos</em>. A segunda opção cancela/exclui toda a série a partir da data selecionada, preservando os agendamentos anteriores já realizados.</p>
+          </div>
+          <div class="tip">
+            <span>🔁</span>
+            <p>A recorrência é visível apenas para o profissional. O cliente agenda normalmente pelo sistema público, sem ver ou interagir com a lógica de séries.</p>
+          </div>
+        </div>
+      </section>
 
       <!-- BLOQUEAR DATAS -->
       <section class="section" id="bloquear">

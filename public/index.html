@@ -346,6 +346,9 @@ h1,h2,h3,h4{font-family:'Cormorant Garamond',serif}
 .tbl-head{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .tbl-ttl{font-family:'Cormorant Garamond',serif;font-size:19px;font-weight:600;color:var(--dark)}
 .tbl-filters{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+.recur-chip{display:flex;align-items:center;gap:6px;padding:9px 12px;border:1.5px solid var(--border);border-radius:var(--r-sm);font-size:12px;font-weight:600;cursor:pointer;background:var(--cream);transition:var(--tr);white-space:nowrap}
+.recur-chip:has(input:checked){border-color:var(--rose);background:var(--rose-light);color:var(--rose)}
+.recur-chip input[type=radio]{display:none}
 .fl-group{display:flex;flex-direction:column;gap:0}
 .fl-label{display:none;font-size:10px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px}
 .fl-group .fi,.fl-group .fs{width:100%}
@@ -1063,6 +1066,30 @@ tr.drag-over{border-top:2.5px solid var(--rose)!important}
                   <div class="fg"><label>Nome do cliente</label><input type="text" id="man-name" placeholder="Nome completo" style="width:100%"></div>
                   <div class="fg"><label>WhatsApp (com DDD)</label><input type="tel" id="man-phone" placeholder="(43) 99999-9999" style="width:100%"></div>
                   <div class="notice info" style="margin-top:4px">ℹ️ O cliente será informado por WhatsApp ou pessoalmente pela profissional.</div>
+
+                  <!-- Recorrência -->
+                  <div style="margin-top:16px;border:1.5px solid var(--border);border-radius:var(--r-md);overflow:hidden">
+                    <label style="display:flex;align-items:center;gap:10px;padding:13px 14px;cursor:pointer;background:var(--cream)">
+                      <input type="checkbox" id="man-recur-toggle" onchange="manToggleRecur()" style="width:16px;height:16px;accent-color:var(--rose);flex-shrink:0">
+                      <span style="font-size:13px;font-weight:700;color:var(--dark)">🔁 Agendar com recorrência</span>
+                    </label>
+                    <div id="man-recur-panel" style="display:none;padding:14px;border-top:1px solid var(--border)">
+                      <div class="fg" style="margin-bottom:12px">
+                        <label>Frequência</label>
+                        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:6px" id="man-recur-freq-group">
+                          <label class="recur-chip" id="rc-weekly"><input type="radio" name="man-recur-freq" value="weekly" onchange="manUpdateRecurPreview()"> Semanal</label>
+                          <label class="recur-chip" id="rc-biweekly"><input type="radio" name="man-recur-freq" value="biweekly" onchange="manUpdateRecurPreview()"> Quinzenal</label>
+                          <label class="recur-chip" id="rc-monthly"><input type="radio" name="man-recur-freq" value="monthly" onchange="manUpdateRecurPreview()"> Mensal</label>
+                        </div>
+                      </div>
+                      <div class="fg" style="margin-bottom:12px">
+                        <label>Data de encerramento <span style="font-weight:400;color:var(--text-light)">(opcional — vazio = sem fim)</span></label>
+                        <input type="date" id="man-recur-end" oninput="manUpdateRecurPreview()" style="width:100%">
+                      </div>
+                      <div id="man-recur-preview" style="font-size:12px;color:var(--rose);background:var(--rose-light);border-radius:var(--r-sm);padding:10px 12px;line-height:1.8;display:none"></div>
+                    </div>
+                  </div>
+
                   <div class="btn-actions" style="margin-top:18px">
                     <button class="btn btn-primary" id="man-save-btn" onclick="manSave()">✓ Confirmar Agendamento</button>
                   </div>
@@ -2959,7 +2986,7 @@ function renderAgendaPage(page) {
   tbody.innerHTML = paged.map(a=>`
       <tr>
         <td><div style="font-weight:700">${fmtDate(a.date)}</div><div style="font-size:11px;color:var(--text-light)">${String(a.st).slice(0,5)} – ${String(a.et).slice(0,5)}</div></td>
-        <td><div style="font-weight:700">${a.name}</div>${maskedPhone(a.phone)}</td>
+        <td><div style="font-weight:700">${a.name}${a.recurrence_group_id ? ' <span title="Recorrente" style="font-size:10px;background:var(--rose-light);color:var(--rose);border-radius:10px;padding:1px 6px;font-weight:700">🔁</span>' : ''}</div>${maskedPhone(a.phone)}</td>
         <td style="max-width:160px">${a.proc_name}</td>
         <td style="font-size:11px">${CITIES.find(c=>c.id===a.city_id)?.short||a.city_name}</td>
         <td style="color:var(--gold);font-weight:700">${a.price?maskedCurr(a.price):a.pt==='eval'?'Avaliação':'—'}</td>
@@ -2973,8 +3000,8 @@ function renderAgendaPage(page) {
         <td>
           <button class="act-btn" onclick="openEditModal('${a.id}')">Editar</button>
           ${a.status==='confirmed'||a.status==='realizado'
-            ? `<button class="act-btn danger" onclick="cancelAppt('${a.id}')">Cancelar</button>`
-            : `<button class="act-btn" onclick="openRestoreModal('${a.id}')" style="color:var(--gold);border-color:var(--gold)">↩ Restaurar</button><button class="act-btn danger" onclick="deleteAppt('${a.id}')" style="color:var(--error);border-color:var(--error);font-size:10px">🗑</button>`
+            ? `<button class="act-btn danger" onclick="confirmRecurAction('${a.id}','cancel',${a.recurrence_group_id||'null'})">Cancelar</button>`
+            : `<button class="act-btn" onclick="openRestoreModal('${a.id}')" style="color:var(--gold);border-color:var(--gold)">↩ Restaurar</button><button class="act-btn danger" onclick="confirmRecurAction('${a.id}','delete',${a.recurrence_group_id||'null'})" style="color:var(--error);border-color:var(--error);font-size:10px">🗑</button>`
           }
           <button class="act-btn" onclick="sendAgendaWA('${a.id}')" title="Enviar agendamento por WhatsApp">📅</button>
           ${(a.status==='confirmed'||a.status==='realizado')&&_getCourseProc(a.proc_id)?`<button class="act-btn" onclick="openCertModal('${a.id}')" title="Gerar certificado" style="color:var(--gold);border-color:var(--gold)">🎓</button>`:''}
@@ -2995,7 +3022,7 @@ function renderAgendaPage(page) {
           ${statusBadge(a.status)}
         </div>
         <div class="appt-card-body">
-          <div><span class="appt-card-lbl">Cliente</span><span class="appt-card-val">${a.name}</span></div>
+          <div><span class="appt-card-lbl">Cliente</span><span class="appt-card-val">${a.name}${a.recurrence_group_id ? ' 🔁' : ''}</span></div>
           <div><span class="appt-card-lbl">WhatsApp</span>${maskedPhoneCard(a.phone)}</div>
           <div><span class="appt-card-lbl">Procedimento</span><span class="appt-card-val" style="font-size:11.5px">${a.proc_name}</span></div>
           <div><span class="appt-card-lbl">Cidade</span><span class="appt-card-val" style="font-size:11.5px">${city}</span></div>
@@ -3004,8 +3031,8 @@ function renderAgendaPage(page) {
         <div class="appt-card-actions">
           <button class="act-btn" onclick="openEditModal('${a.id}')">Editar</button>
           ${a.status==='confirmed'||a.status==='realizado'
-            ? `<button class="act-btn danger" onclick="cancelAppt('${a.id}')" style="color:var(--warn);border-color:var(--warn)">Cancelar</button>`
-            : `<button class="act-btn" onclick="openRestoreModal('${a.id}')" style="color:var(--gold);border-color:var(--gold)">↩ Restaurar</button><button class="act-btn danger" onclick="deleteAppt('${a.id}')" style="color:var(--error);border-color:var(--error)">🗑</button>`
+            ? `<button class="act-btn danger" onclick="confirmRecurAction('${a.id}','cancel',${a.recurrence_group_id||'null'})" style="color:var(--warn);border-color:var(--warn)">Cancelar</button>`
+            : `<button class="act-btn" onclick="openRestoreModal('${a.id}')" style="color:var(--gold);border-color:var(--gold)">↩ Restaurar</button><button class="act-btn danger" onclick="confirmRecurAction('${a.id}','delete',${a.recurrence_group_id||'null'})" style="color:var(--error);border-color:var(--error)">🗑</button>`
           }
           <button class="act-btn" onclick="sendAgendaWA('${a.id}')" title="Enviar agendamento por WhatsApp">📅</button>
           ${(a.status==='confirmed'||a.status==='realizado')&&_getCourseProc(a.proc_id)?`<button class="act-btn" onclick="openCertModal('${a.id}')" style="color:var(--gold);border-color:var(--gold)">🎓 Certificado</button>`:''}
@@ -3062,6 +3089,122 @@ async function renderAgenda() {
     tbody.innerHTML=`<tr><td colspan="7" style="text-align:center;padding:28px;color:var(--error)">Erro: ${e.message}</td></tr>`;
     document.getElementById('appt-cards').innerHTML=`<div style="color:var(--error);padding:20px;font-size:13px">Erro: ${e.message}</div>`;
   }
+}
+
+// ── RECORRÊNCIA ──────────────────────────────────────────────────────────────
+function _recurDates(startDate, freq, endDate) {
+  const dates = [];
+  let cur = new Date(startDate + 'T12:00:00');
+  const end = endDate ? new Date(endDate + 'T23:59:59') : null;
+  const max = freq === 'weekly' ? 52 : freq === 'biweekly' ? 26 : 12;
+  for (let i = 0; i < max; i++) {
+    if (i > 0) {
+      if (freq === 'monthly') { cur = new Date(cur); cur.setMonth(cur.getMonth()+1); }
+      else { cur = new Date(cur.getTime() + (freq === 'biweekly' ? 14 : 7) * 86400000); }
+    }
+    if (end && cur > end) break;
+    const y = cur.getFullYear();
+    const m = String(cur.getMonth()+1).padStart(2,'0');
+    const d = String(cur.getDate()).padStart(2,'0');
+    dates.push(`${d}/${m}/${y}`);
+  }
+  return dates;
+}
+
+function _recurLabel(freq) {
+  return freq === 'weekly' ? 'Semanal' : freq === 'biweekly' ? 'Quinzenal' : 'Mensal';
+}
+
+// ── Manual: toggle e preview ──
+function manToggleRecur() {
+  const on = document.getElementById('man-recur-toggle')?.checked;
+  const panel = document.getElementById('man-recur-panel');
+  if (panel) panel.style.display = on ? 'block' : 'none';
+  if (on) {
+    const radios = document.querySelectorAll('input[name="man-recur-freq"]');
+    if (![...radios].some(r => r.checked) && radios[0]) radios[0].checked = true;
+    manUpdateRecurPreview();
+  }
+}
+
+function manUpdateRecurPreview() {
+  const freq = document.querySelector('input[name="man-recur-freq"]:checked')?.value;
+  const end  = document.getElementById('man-recur-end')?.value;
+  const date = _manState.date;
+  const prev = document.getElementById('man-recur-preview');
+  if (!freq || !date || !prev) return;
+  const dates = _recurDates(date, freq, end || null);
+  prev.style.display = 'block';
+  prev.innerHTML = `<strong>🔁 ${_recurLabel(freq)}</strong> — ${dates.length} agendamento(s):<br>${dates.slice(0,8).join('  ·  ')}${dates.length > 8 ? ' ...' : ''}`;
+}
+
+// ── Edição: toggle e preview ──
+function edToggleRecur() {
+  const on = document.getElementById('ed-recur-toggle')?.checked;
+  const panel = document.getElementById('ed-recur-panel');
+  if (panel) panel.style.display = on ? 'block' : 'none';
+  if (on) {
+    const radios = document.querySelectorAll('input[name="ed-recur-freq"]');
+    if (![...radios].some(r => r.checked) && radios[0]) radios[0].checked = true;
+    edUpdateRecurPreview();
+  }
+}
+
+function edUpdateRecurPreview() {
+  const freq = document.querySelector('input[name="ed-recur-freq"]:checked')?.value;
+  const end  = document.getElementById('ed-recur-end')?.value;
+  const date = document.getElementById('ed-date')?.value;
+  const prev = document.getElementById('ed-recur-preview');
+  if (!freq || !date || !prev) return;
+  const dates = _recurDates(date, freq, end || null);
+  prev.style.display = 'block';
+  prev.innerHTML = `<strong>🔁 ${_recurLabel(freq)}</strong> — ${dates.length} agendamento(s):<br>${dates.slice(0,8).join('  ·  ')}${dates.length > 8 ? ' ...' : ''}`;
+}
+
+// ── Modal de confirmação para cancelar/excluir série ──
+function confirmRecurAction(apptId, action, recurrenceGroupId) {
+  // action: 'cancel' | 'delete'
+  if (!recurrenceGroupId) {
+    // Sem série — age direto
+    if (action === 'cancel') cancelAppt(apptId, 'single');
+    else deleteAppt(apptId, 'single');
+    return;
+  }
+  const label = action === 'cancel' ? 'Cancelar' : 'Excluir';
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:14px;padding:24px;max-width:340px;width:100%;box-shadow:0 8px 40px rgba(0,0,0,.18)">
+      <div style="font-size:15px;font-weight:800;color:var(--dark);margin-bottom:10px">⚠️ Agendamento recorrente</div>
+      <p style="font-size:13px;color:var(--text-light);line-height:1.6;margin-bottom:20px">Este agendamento faz parte de uma série recorrente. O que deseja fazer?</p>
+      <div style="display:flex;flex-direction:column;gap:9px">
+        <button onclick="(()=>{this.closest('[style*=fixed]').remove();${action==='cancel'?`cancelAppt('${apptId}','single')`:`deleteAppt('${apptId}','single')`}})()" style="padding:12px;border:1.5px solid var(--border);border-radius:var(--r-sm);background:var(--cream);font-size:13px;font-weight:700;cursor:pointer;text-align:left">
+          ${label} apenas <strong>este</strong> agendamento
+        </button>
+        <button onclick="(()=>{this.closest('[style*=fixed]').remove();${action==='cancel'?`cancelAppt('${apptId}','forward')`:`deleteAppt('${apptId}','forward')`}})()" style="padding:12px;border:1.5px solid var(--error);border-radius:var(--r-sm);background:#FFF5F5;font-size:13px;font-weight:700;cursor:pointer;color:var(--error);text-align:left">
+          ${label} <strong>este e todos os próximos</strong>
+        </button>
+        <button onclick="this.closest('[style*=fixed]').remove()" style="padding:10px;border:none;background:none;font-size:13px;color:var(--text-light);cursor:pointer">Voltar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+async function cancelAppt(id, scope) {
+  try {
+    await PATCH('/api/appointments/' + id + '/cancel', { scope: scope || 'single' });
+    showToast(scope === 'forward' ? 'Série cancelada a partir deste' : 'Agendamento cancelado', 'ok');
+    renderAgenda();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+async function deleteAppt(id, scope) {
+  try {
+    const url = '/api/appointments/' + id + (scope === 'forward' ? '?scope=forward' : '');
+    await DELETE(url);
+    showToast(scope === 'forward' ? 'Série excluída a partir deste' : 'Agendamento excluído', 'ok');
+    renderAgenda();
+  } catch(e) { showToast(e.message, 'error'); }
 }
 
 // ── Filtro de nome — debounce + clear ────────────────────────────
@@ -3391,6 +3534,28 @@ async function openEditModal(apptId) {
       <label>Valor (R$) <small style="font-weight:400;color:var(--text-light)">— altera só este agendamento, não o cadastro do procedimento</small></label>
       <input type="number" id="ed-price" value="${currentPrice}" min="0" step="0.01" placeholder="0.00 (deixe vazio para sem valor)">
     </div>
+    <!-- Recorrência no modal de edição -->
+    <div style="margin-top:14px;border:1.5px solid var(--border);border-radius:var(--r-md);overflow:hidden">
+      <label style="display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;background:var(--cream)">
+        <input type="checkbox" id="ed-recur-toggle" onchange="edToggleRecur()" style="width:16px;height:16px;accent-color:var(--rose);flex-shrink:0">
+        <span style="font-size:13px;font-weight:700;color:var(--dark)">🔁 Criar recorrência a partir deste</span>
+      </label>
+      <div id="ed-recur-panel" style="display:none;padding:14px;border-top:1px solid var(--border)">
+        <div class="fg" style="margin-bottom:12px">
+          <label>Frequência</label>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:6px">
+            <label class="recur-chip"><input type="radio" name="ed-recur-freq" value="weekly" onchange="edUpdateRecurPreview()"> Semanal</label>
+            <label class="recur-chip"><input type="radio" name="ed-recur-freq" value="biweekly" onchange="edUpdateRecurPreview()"> Quinzenal</label>
+            <label class="recur-chip"><input type="radio" name="ed-recur-freq" value="monthly" onchange="edUpdateRecurPreview()"> Mensal</label>
+          </div>
+        </div>
+        <div class="fg" style="margin-bottom:12px">
+          <label>Data de encerramento <span style="font-weight:400;color:var(--text-light)">(opcional)</span></label>
+          <input type="date" id="ed-recur-end" oninput="edUpdateRecurPreview()" style="width:100%">
+        </div>
+        <div id="ed-recur-preview" style="font-size:12px;color:var(--rose);background:var(--rose-light);border-radius:var(--r-sm);padding:10px 12px;line-height:1.8;display:none"></div>
+      </div>
+    </div>
     <div style="display:flex;gap:9px;margin-top:8px">
       <button class="btn btn-primary" onclick="saveEdit('${apptId}')" style="flex:1">Salvar</button>
       <button class="btn btn-secondary" onclick="closeModal()" style="flex:1;width:auto">Cancelar</button>
@@ -3492,7 +3657,13 @@ async function saveEdit(apptId) {
     }
   }
 
+  // Verificar se recorrência foi ativada no modal
+  const edRecurOn   = document.getElementById('ed-recur-toggle')?.checked;
+  const edRecurFreq = document.querySelector('input[name="ed-recur-freq"]:checked')?.value;
+  const edRecurEnd  = document.getElementById('ed-recur-end')?.value || null;
+
   try {
+    // Salvar edição do agendamento atual
     await PUT(`/api/appointments/${apptId}`, {
       name, phone, date, st, et,
       cityId:   Number(cityId),
@@ -3502,7 +3673,21 @@ async function saveEdit(apptId) {
       price:    price !== '' ? Number(price) : null,
       procDur:  p?.dur || 60,
     });
-    showToast('Agendamento atualizado','ok');
+
+    // Se recorrência ativada → criar série a partir desta data
+    if (edRecurOn && edRecurFreq) {
+      const result = await POST('/api/appointments/recurrence', {
+        cityId: Number(cityId), cityName: cityObj?.name || '',
+        procId: Number(procId), procName: p?.name || '',
+        date, st, et, name, phone,
+        price: price !== '' ? Number(price) : null, pt: 'fixed',
+        frequency: edRecurFreq, endDate: edRecurEnd
+      });
+      showToast('🔁 Série criada: ' + result.created + ' agendamento(s)', 'ok');
+    } else {
+      showToast('Agendamento atualizado','ok');
+    }
+
     closeModal();
     renderAgenda();
   } catch(e) { showToast(e.message,'error'); }
@@ -6327,6 +6512,32 @@ async function manSave() {
   const phone = document.getElementById('man-phone').value.trim();
   if(!name || name.length < 2) { showToast('Informe o nome do cliente','error'); return; }
   if(phone.replace(/\D/g,'').length < 10) { showToast('Informe um WhatsApp válido','error'); return; }
+
+  // Recorrência ativa → usar endpoint específico
+  const recurOn   = document.getElementById('man-recur-toggle')?.checked;
+  const recurFreq = document.querySelector('input[name="man-recur-freq"]:checked')?.value;
+  const recurEnd  = document.getElementById('man-recur-end')?.value || null;
+  if (recurOn) {
+    if (!recurFreq) { showToast('Selecione a frequência da recorrência','error'); return; }
+    const btn2 = document.getElementById('man-save-btn');
+    if (btn2) { btn2.disabled = true; btn2.textContent = 'Criando série...'; }
+    try {
+      const result = await POST('/api/appointments/recurrence', {
+        cityId: _manState.city.id, cityName: _manState.city.name,
+        procId: _manState.proc.id, procName: _manState.proc.name,
+        date: _manState.date, st: _manState.slot,
+        et: minToTime(timeToMin(_manState.slot) + (_manState.proc.dur || 60)),
+        name, phone, price: _manState.proc.price || null, pt: 'fixed',
+        frequency: recurFreq, endDate: recurEnd
+      });
+      showToast('🔁 Série criada: ' + result.created + ' agendamento(s)', 'ok');
+      if (result.skipped && result.skipped.length > 0)
+        showToast('⚠️ ' + result.skipped.length + ' data(s) com conflito ignorada(s)', 'warn');
+      manReset();
+    } catch(e) { showToast(e.message, 'error'); }
+    finally { if (btn2) { btn2.disabled = false; btn2.textContent = '✓ Confirmar Agendamento'; } }
+    return;
+  }
 
   const btn = document.getElementById('man-save-btn');
   if (!btn || btn.disabled) return; // evita duplo clique
