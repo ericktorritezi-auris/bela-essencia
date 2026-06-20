@@ -3201,7 +3201,7 @@ async function cancelAppt(id, scope) {
 async function deleteAppt(id, scope) {
   try {
     const url = '/api/appointments/' + id + (scope === 'forward' ? '?scope=forward' : '');
-    await DELETE(url);
+    await DEL(url);
     showToast(scope === 'forward' ? 'Série excluída a partir deste' : 'Agendamento excluído', 'ok');
     renderAgenda();
   } catch(e) { showToast(e.message, 'error'); }
@@ -3683,6 +3683,10 @@ async function saveEdit(apptId) {
         price: price !== '' ? Number(price) : null, pt: 'fixed',
         frequency: edRecurFreq, endDate: edRecurEnd
       });
+      // Vincular o agendamento base à mesma série
+      if (result.groupId) {
+        await PATCH('/api/appointments/' + apptId + '/recurrence-group', { groupId: result.groupId }).catch(()=>{});
+      }
       showToast('🔁 Série criada: ' + result.created + ' agendamento(s)', 'ok');
     } else {
       showToast('Agendamento atualizado','ok');
