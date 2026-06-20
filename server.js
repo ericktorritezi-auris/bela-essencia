@@ -2230,6 +2230,19 @@ app.post('/api/appointments/recurrence', requireAdmin, async (req, res) => {
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
+// ── Vincular agendamento a grupo de recorrência ────────────────────────────────
+app.patch('/api/appointments/:id/recurrence-group', requireAdmin, async (req, res) => {
+  const { groupId } = req.body;
+  if (!groupId) return res.status(400).json({ error: 'groupId obrigatório' });
+  try {
+    await req.db(
+      `UPDATE appointments SET recurrence_group_id=$1 WHERE id=$2`,
+      [groupId, req.params.id]
+    );
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── Agenda Tática — sem validações de disponibilidade ────────────────────────
 app.post('/api/appointments/tatica', requireAdmin, async (req, res) => {
   const { cityId, cityName, procId, procName, date, st, et, name, phone, price, pt } = req.body;
