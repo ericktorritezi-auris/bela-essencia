@@ -3200,12 +3200,28 @@ function confirmRecurAction(apptId, action, recurrenceGroupId) {
     if (ctx.action === 'cancel') cancelAppt(ctx.apptId, 'single');
     else deleteAppt(ctx.apptId, 'single');
   };
-  document.getElementById('_rca_all').onclick = function() {
+  document.getElementById('_rca_all').onclick = async function() {
     console.log('[RCA_ALL] clicado — ctx=' + JSON.stringify(window._rca));
-    closeModal();
-    var ctx = window._rca || {};
-    if (ctx.action === 'cancel') cancelAppt(ctx.apptId, 'forward');
-    else deleteAppt(ctx.apptId, 'forward');
+    var apptId = window._rca && window._rca.apptId;
+    var action = window._rca && window._rca.action;
+    // Fechar modal diretamente sem chamar closeModal()
+    var mbg = document.getElementById('modal-bg');
+    if (mbg) mbg.classList.add('hidden');
+    console.log('[RCA_ALL] apptId=' + apptId + ' action=' + action);
+    try {
+      var url = '/api/appointments/' + apptId + (action === 'delete' ? '/delete-series' : '/cancel-series');
+      console.log('[RCA_ALL] fetch: PATCH ' + url);
+      var r = await fetch(url, { method:'PATCH', headers:{'Content-Type':'application/json'}, credentials:'include', body:'{}' });
+      var res = await r.json();
+      console.log('[RCA_ALL] resposta: ' + JSON.stringify(res));
+      alert('RESULTADO CANCEL-SERIES\nStatus: ' + r.status + '\nResposta: ' + JSON.stringify(res));
+      var dateEl = document.getElementById('fl-date');
+      if (dateEl) dateEl.value = '';
+      renderAgenda();
+    } catch(e) {
+      console.error('[RCA_ALL] ERRO: ' + e.message);
+      alert('ERRO: ' + e.message);
+    }
   };
   document.getElementById('_rca_back').onclick = closeModal;
 }
