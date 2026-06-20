@@ -3163,19 +3163,49 @@ function edUpdateRecurPreview() {
 
 // ── Modal de confirmação para cancelar/excluir série ──
 function confirmRecurAction(apptId, action, recurrenceGroupId) {
+  console.log('[RecurAction] apptId=' + apptId + ' action=' + action + ' groupId=' + recurrenceGroupId + ' type=' + typeof recurrenceGroupId);
   if (!recurrenceGroupId || recurrenceGroupId === 'null' || recurrenceGroupId === null) {
     if (action === 'cancel') cancelAppt(apptId, 'single');
     else deleteAppt(apptId, 'single');
     return;
   }
-  const verb = action === 'cancel' ? 'cancelar' : 'excluir';
-  const forward = window.confirm(
-    'Este agendamento faz parte de uma série recorrente.\n\n' +
-    'Clique OK para ' + verb + ' ESTE E TODOS OS PRÓXIMOS.\n' +
-    'Clique Cancelar para ' + verb + ' apenas ESTE.'
-  );
-  if (action === 'cancel') cancelAppt(apptId, forward ? 'forward' : 'single');
-  else deleteAppt(apptId, forward ? 'forward' : 'single');
+  // Guardar contexto
+  window._rca = { apptId: apptId, action: action };
+  const verb    = action === 'cancel' ? 'Cancelar' : 'Excluir';
+  const verbMin = action === 'cancel' ? 'cancelar' : 'excluir';
+  const cor     = action === 'cancel' ? 'var(--warn,#e67e22)' : 'var(--error,#e74c3c)';
+  // Usar o modal existente do sistema
+  document.getElementById('modal-card').innerHTML =
+    '<div style="padding:4px 0 12px">' +
+      '<div style="font-size:16px;font-weight:800;color:var(--dark);margin-bottom:8px">⚠️ Agendamento recorrente</div>' +
+      '<p style="font-size:13px;color:var(--text-light);line-height:1.65;margin-bottom:20px">' +
+        'Este agendamento faz parte de uma série recorrente.<br>O que deseja fazer?' +
+      '</p>' +
+      '<div style="display:flex;flex-direction:column;gap:10px">' +
+        '<button id="_rca_only" style="padding:13px 16px;border:2px solid var(--border);border-radius:10px;background:var(--cream);font-size:13px;font-weight:700;cursor:pointer;text-align:left;color:var(--dark)">' +
+          verb + ' <strong>apenas este</strong> agendamento' +
+        '</button>' +
+        '<button id="_rca_all" style="padding:13px 16px;border:2px solid ' + cor + ';border-radius:10px;background:#fff5f5;font-size:13px;font-weight:700;cursor:pointer;text-align:left;color:' + cor + '">' +
+          verb + ' <strong>este e todos os próximos</strong> da série' +
+        '</button>' +
+        '<button id="_rca_back" style="padding:10px;border:none;background:none;font-size:13px;color:var(--text-light);cursor:pointer;margin-top:2px">Voltar sem fazer nada</button>' +
+      '</div>' +
+    '</div>';
+  document.getElementById('modal-bg').classList.remove('hidden');
+  // Event listeners depois que o HTML está no DOM
+  document.getElementById('_rca_only').onclick = function() {
+    closeModal();
+    var ctx = window._rca || {};
+    if (ctx.action === 'cancel') cancelAppt(ctx.apptId, 'single');
+    else deleteAppt(ctx.apptId, 'single');
+  };
+  document.getElementById('_rca_all').onclick = function() {
+    closeModal();
+    var ctx = window._rca || {};
+    if (ctx.action === 'cancel') cancelAppt(ctx.apptId, 'forward');
+    else deleteAppt(ctx.apptId, 'forward');
+  };
+  document.getElementById('_rca_back').onclick = closeModal;
 }
 
 async function cancelAppt(id, scope) {
