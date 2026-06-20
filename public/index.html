@@ -3130,7 +3130,7 @@ function manToggleRecur() {
 function manUpdateRecurPreview() {
   const freq = document.querySelector('input[name="man-recur-freq"]:checked')?.value;
   const end  = document.getElementById('man-recur-end')?.value;
-  const date = _manState.date;
+  const date = MAN.date;
   const prev = document.getElementById('man-recur-preview');
   if (!freq || !date || !prev) return;
   const dates = _recurDates(date, freq, end || null);
@@ -6522,12 +6522,18 @@ async function manSave() {
     const btn2 = document.getElementById('man-save-btn');
     if (btn2) { btn2.disabled = true; btn2.textContent = 'Criando série...'; }
     try {
+      const _rc = CITIES.find(x => Number(x.id) === Number(MAN.cityId));
       const result = await POST('/api/appointments/recurrence', {
-        cityId: _manState.city.id, cityName: _manState.city.name,
-        procId: _manState.proc.id, procName: _manState.proc.name,
-        date: _manState.date, st: _manState.slot,
-        et: minToTime(timeToMin(_manState.slot) + (_manState.proc.dur || 60)),
-        name, phone, price: _manState.proc.price || null, pt: 'fixed',
+        cityId:   Number(MAN.cityId),
+        cityName: _rc ? _rc.name : '',
+        procId:   Number(MAN.procId),
+        procName: MAN.procData ? MAN.procData.name : '',
+        date:     MAN.date,
+        st:       MAN.time,
+        et:       m2t(t2m(MAN.time) + Number(MAN.procData ? MAN.procData.dur : 60)),
+        name, phone,
+        price:    MAN.procData && MAN.procData.price ? Number(MAN.procData.price) : null,
+        pt:       'fixed',
         frequency: recurFreq, endDate: recurEnd
       });
       showToast('🔁 Série criada: ' + result.created + ' agendamento(s)', 'ok');
