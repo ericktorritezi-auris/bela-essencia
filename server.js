@@ -2230,6 +2230,29 @@ app.post('/api/appointments/recurrence', requireAdmin, async (req, res) => {
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
+// ── Restaurar série inteira de agendamentos ─────────────────────────────────
+app.patch('/api/appointments/:id/restore-series', requireAdmin, async (req, res) => {
+  try {
+    const { rows: target } = await req.db(
+      `SELECT recurrence_group_id, date::text as date_str FROM appointments WHERE id=$1`,
+      [req.params.id]
+    );
+    if (!target.length) return res.status(404).json({ error: 'Agendamento não encontrado' });
+    const { recurrence_group_id, date_str } = target[0];
+    if (!recurrence_group_id) {
+      await req.db(`UPDATE appointments SET status='confirmed' WHERE id=$1`, [req.params.id]);
+      return res.json({ ok: true, restored: 1 });
+    }
+    // Restaura todos os cancelados da série a partir desta data
+    const { rowCount } = await req.db(
+      `UPDATE appointments SET status='confirmed'
+       WHERE recurrence_group_id=$1 AND date >= $2::date AND status='cancelled'`,
+      [recurrence_group_id, date_str]
+    );
+    res.json({ ok: true, restored: rowCount, group: recurrence_group_id, from: date_str });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
 // ── Vincular agendamento a grupo de recorrência ────────────────────────────────
 app.patch('/api/appointments/:id/recurrence-group', requireAdmin, async (req, res) => {
   const { groupId } = req.body;
