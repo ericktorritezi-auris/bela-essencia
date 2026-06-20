@@ -3181,8 +3181,12 @@ function confirmRecurAction(apptId, action, recurrenceGroupId) {
 async function cancelAppt(id, scope) {
   try {
     if (scope === 'forward') {
-      await PATCH('/api/appointments/' + id + '/cancel-series', {});
-      showToast('Série cancelada a partir deste', 'ok');
+      const res = await PATCH('/api/appointments/' + id + '/cancel-series', {});
+      const n = res && res.cancelled ? res.cancelled : '?';
+      // Limpar filtro de data para mostrar todos os agendamentos cancelados
+      const dateEl = document.getElementById('fl-date');
+      if (dateEl) dateEl.value = '';
+      showToast('✅ Série cancelada: ' + n + ' agendamento(s) afetado(s)', 'ok');
     } else {
       await PATCH('/api/appointments/' + id + '/cancel', {});
       showToast('Agendamento cancelado', 'ok');
@@ -3194,8 +3198,11 @@ async function cancelAppt(id, scope) {
 async function deleteAppt(id, scope) {
   try {
     if (scope === 'forward') {
-      await DEL('/api/appointments/' + id + '/delete-series');
-      showToast('Série excluída a partir deste', 'ok');
+      const res = await DEL('/api/appointments/' + id + '/delete-series');
+      const n = res && res.deleted ? res.deleted : '?';
+      const dateEl = document.getElementById('fl-date');
+      if (dateEl) dateEl.value = '';
+      showToast('✅ Série excluída: ' + n + ' agendamento(s) removido(s)', 'ok');
     } else {
       await DEL('/api/appointments/' + id);
       showToast('Agendamento excluído', 'ok');
