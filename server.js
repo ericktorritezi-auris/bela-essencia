@@ -1092,6 +1092,15 @@ async function initDB() {
       // Migração: webhook integração sistêmica (Synapse Core)
       try { await client.query(`ALTER TABLE tenant_configs ADD COLUMN IF NOT EXISTS webhook_url TEXT`); } catch {}
       try { await client.query(`ALTER TABLE tenant_configs ADD COLUMN IF NOT EXISTS webhook_secret VARCHAR(128)`); } catch {}
+      // Migração: recorrência de agendamentos
+      try { await client.query(`CREATE TABLE IF NOT EXISTS "${schema_name}".recurrence_groups (
+        id SERIAL PRIMARY KEY,
+        frequency VARCHAR(10) NOT NULL,
+        end_date DATE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`); } catch {}
+      try { await client.query(`ALTER TABLE "${schema_name}".appointments ADD COLUMN IF NOT EXISTS recurrence_group_id INTEGER`); } catch {}
+      try { await client.query(`ALTER TABLE "${schema_name}".appointments ADD COLUMN IF NOT EXISTS recurrence_index INTEGER`); } catch {}
     // Migração: cidades — adiciona uf e neighborhood em public e em todos os schemas de tenant
     await client.query(`ALTER TABLE cities ADD COLUMN IF NOT EXISTS uf VARCHAR(2)`);
     await client.query(`ALTER TABLE cities ADD COLUMN IF NOT EXISTS neighborhood VARCHAR(100)`);
@@ -2125,6 +2134,99 @@ app.get('/api/meu-contrato', requireAdmin, async (req, res) => {
 // ── Agendamento Retroativo (admin) ───────────────────────────────────────────
 // Permite lançar atendimentos já realizados sem restrição de horário de trabalho.
 // Única regra: não pode conflitar (OVERLAPS) com agendamentos existentes.
+// ── Recorrência de agendamentos (admin) ──────────────────────────────────────
+app.post('/api/appointments/recurrence', requireAdmin, async (req, res) => {
+  const { cityId, cityName, procId, procName, date, st, et, name, phone, price, pt,
+          frequency, endDate } = req.body;
+
+  if (!cityId || !procId || !date || !st || !et || !name || !frequency) {
+    return res.status(400).json({ error: 'Campos obrigatórios faltando.' });
+  }
+  if (!['weekly','biweekly','monthly'].includes(frequency)) {
+    return res.status(400).json({ error: 'Frequência inválida.' });
+  }
+
+  try {
+    // 1. Criar grupo de recorrência
+    const { rows: grpRows } = await req.db(
+      `INSERT INTO recurrence_groups (frequency, end_date) VALUES ($1,$2) RETURNING id`,
+      [frequency, endDate || null]
+    );
+    const groupId = grpRows[0].id;
+
+    // 2. Gerar datas da série
+    const dates = [];
+    let cur = new Date(date + 'T12:00:00');
+    const end = endDate ? new Date(endDate + 'T23:59:59') : null;
+    const maxOccurrences = frequency === 'weekly' ? 52 : frequency === 'biweekly' ? 26 : 12;
+    const stepDays = frequency === 'weekly' ? 7 : frequency === 'biweekly' ? 14 : 0;
+
+    for (let i = 0; i < maxOccurrences; i++) {
+      if (i > 0) {
+        if (frequency === 'monthly') {
+          cur = new Date(cur);
+          cur.setMonth(cur.getMonth() + 1);
+        } else {
+          cur = new Date(cur.getTime() + stepDays * 86400000);
+        }
+      }
+      if (end && cur > end) break;
+      const y = cur.getFullYear();
+      const m = String(cur.getMonth()+1).padStart(2,'0');
+      const d = String(cur.getDate()).padStart(2,'0');
+      dates.push(`${y}-${m}-${d}`);
+    }
+
+    // 3. Verificar disponibilidade e inserir cada agendamento
+    const created = [];
+    const skipped = [];
+    for (let idx = 0; idx < dates.length; idx++) {
+      const apptDate = dates[idx];
+      try {
+        // Verificar conflito simples (mesmo horário + cidade)
+        const { rows: conflict } = await req.db(
+          `SELECT id FROM appointments WHERE date=$1 AND city_id=$2 AND status!='cancelled'
+           AND st < $3 AND et > $4`,
+          [apptDate, cityId, et, st]
+        );
+        if (conflict.length > 0) {
+          skipped.push({ date: apptDate, reason: 'Conflito de horário' });
+          continue;
+        }
+        const id = Date.now().toString(36) + Math.random().toString(36).slice(2,7) + idx;
+        const { rows } = await req.db(
+          `INSERT INTO appointments
+             (id,city_id,city_name,proc_id,proc_name,date,st,et,name,phone,price,pt,
+              status,privacy_consent,recurrence_group_id,recurrence_index)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'confirmed',TRUE,$13,$14)
+           RETURNING *`,
+          [id, cityId, cityName, procId, procName, apptDate, st, et,
+           name, phone||'', price||null, pt||'fixed', groupId, idx]
+        );
+        created.push(rows[0]);
+      } catch(e) {
+        skipped.push({ date: apptDate, reason: e.message });
+      }
+    }
+
+    // 4. Push admin para o primeiro agendamento
+    if (created.length > 0) {
+      notifyAdminNewBooking({ ...created[0], _schemaName: req.schemaName })
+        .catch(e => console.error('[Push] recurrence:', e.message));
+      dispatchWebhook(req.schemaName, 'appointment.created', {
+        id: created[0].id, patient_name: created[0].name,
+        patient_phone: created[0].phone, procedure: created[0].proc_name,
+        date: created[0].date, time: st ? String(st).slice(0,5) : null,
+        city: created[0].city_name, status: 'confirmed',
+        price: price ? Number(price) : null,
+        recurrence: { frequency, total: created.length }
+      }).catch(e => console.error('[Webhook] recurrence:', e.message));
+    }
+
+    res.status(201).json({ groupId, created: created.length, skipped, appointments: created });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
 // ── Agenda Tática — sem validações de disponibilidade ────────────────────────
 app.post('/api/appointments/tatica', requireAdmin, async (req, res) => {
   const { cityId, cityName, procId, procName, date, st, et, name, phone, price, pt } = req.body;
@@ -2435,6 +2537,29 @@ app.patch('/api/appointments/:id/restore', requireAdmin, async (req, res) => {
 // Admin: cancelar agendamento
 app.patch('/api/appointments/:id/cancel', requireAdmin, async (req, res) => {
   try {
+    const { scope } = req.body; // 'single' (default) | 'forward'
+
+    if (scope === 'forward') {
+      // Cancelar este e todos os próximos da mesma série
+      const { rows: target } = await req.db(
+        'SELECT recurrence_group_id, date FROM appointments WHERE id=$1', [req.params.id]
+      );
+      if (!target.length) return res.status(404).json({ error: 'Agendamento não encontrado' });
+      const { recurrence_group_id, date } = target[0];
+      if (!recurrence_group_id) {
+        // Sem série — cancela apenas este
+        await req.db(`UPDATE appointments SET status='cancelled', updated_at=NOW() WHERE id=$1`, [req.params.id]);
+        return res.json({ ok: true, cancelled: 1 });
+      }
+      const { rowCount } = await req.db(
+        `UPDATE appointments SET status='cancelled', updated_at=NOW()
+         WHERE recurrence_group_id=$1 AND date >= $2 AND status != 'cancelled'`,
+        [recurrence_group_id, date]
+      );
+      return res.json({ ok: true, cancelled: rowCount });
+    }
+
+    // scope === 'single' (comportamento padrão)
     const { rows } = await req.db(
       `UPDATE appointments SET status='cancelled', updated_at=NOW() WHERE id=$1 RETURNING *`,
       [req.params.id]
@@ -2459,6 +2584,26 @@ app.patch('/api/appointments/:id/cancel', requireAdmin, async (req, res) => {
 // Admin: excluir agendamento definitivamente da base (hard delete)
 app.delete('/api/appointments/:id', requireAdmin, async (req, res) => {
   try {
+    const scope = req.query.scope || 'single'; // 'single' | 'forward'
+
+    if (scope === 'forward') {
+      const { rows: target } = await req.db(
+        'SELECT recurrence_group_id, date FROM appointments WHERE id=$1', [req.params.id]
+      );
+      if (!target.length) return res.status(404).json({ error: 'Agendamento não encontrado' });
+      const { recurrence_group_id, date } = target[0];
+      if (!recurrence_group_id) {
+        await req.db('DELETE FROM appointments WHERE id=$1', [req.params.id]);
+        return res.json({ ok: true, deleted: 1 });
+      }
+      const { rowCount } = await req.db(
+        `DELETE FROM appointments WHERE recurrence_group_id=$1 AND date >= $2`,
+        [recurrence_group_id, date]
+      );
+      return res.json({ ok: true, deleted: rowCount });
+    }
+
+    // scope === 'single'
     const { rowCount } = await req.db(
       'DELETE FROM appointments WHERE id=$1',
       [req.params.id]
