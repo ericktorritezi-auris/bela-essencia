@@ -2560,17 +2560,31 @@ app.patch('/api/appointments/:id/cancel-series', requireAdmin, async (req, res) 
     );
     if (!target.length) return res.status(404).json({ error: 'Agendamento não encontrado' });
     const { recurrence_group_id, date_str } = target[0];
+    console.log(`[CancelSeries] id=${req.params.id} group=${recurrence_group_id} date=${date_str}`);
     if (!recurrence_group_id) {
       await req.db(`UPDATE appointments SET status='cancelled' WHERE id=$1`, [req.params.id]);
-      return res.json({ ok: true, cancelled: 1 });
+      console.log(`[CancelSeries] sem grupo — cancelou só este`);
+      return res.json({ ok: true, cancelled: 1, debug: 'no_group' });
     }
+    // Contar quantos serão afetados antes de cancelar
+    const { rows: preview } = await req.db(
+      `SELECT id, date::text as d FROM appointments
+       WHERE recurrence_group_id=$1 AND date >= $2::date AND status != 'cancelled'
+       ORDER BY date`,
+      [recurrence_group_id, date_str]
+    );
+    console.log(`[CancelSeries] grupo=${recurrence_group_id} datas_afetadas=${preview.length}: ${preview.map(r=>r.d).join(', ')}`);
     const { rowCount } = await req.db(
       `UPDATE appointments SET status='cancelled'
        WHERE recurrence_group_id=$1 AND date >= $2::date AND status != 'cancelled'`,
       [recurrence_group_id, date_str]
     );
-    res.json({ ok: true, cancelled: rowCount });
-  } catch(err) { res.status(500).json({ error: err.message }); }
+    console.log(`[CancelSeries] rowCount=${rowCount}`);
+    res.json({ ok: true, cancelled: rowCount, group: recurrence_group_id, from: date_str, preview: preview.map(r=>r.d) });
+  } catch(err) {
+    console.error('[CancelSeries] ERRO:', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.patch('/api/appointments/:id/cancel', requireAdmin, async (req, res) => {
