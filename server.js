@@ -1092,15 +1092,7 @@ async function initDB() {
       // Migração: webhook integração sistêmica (Synapse Core)
       try { await client.query(`ALTER TABLE tenant_configs ADD COLUMN IF NOT EXISTS webhook_url TEXT`); } catch {}
       try { await client.query(`ALTER TABLE tenant_configs ADD COLUMN IF NOT EXISTS webhook_secret VARCHAR(128)`); } catch {}
-      // Migração: recorrência de agendamentos
-      try { await client.query(`CREATE TABLE IF NOT EXISTS "${schema_name}".recurrence_groups (
-        id SERIAL PRIMARY KEY,
-        frequency VARCHAR(10) NOT NULL,
-        end_date DATE,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      )`); } catch {}
-      try { await client.query(`ALTER TABLE "${schema_name}".appointments ADD COLUMN IF NOT EXISTS recurrence_group_id INTEGER`); } catch {}
-      try { await client.query(`ALTER TABLE "${schema_name}".appointments ADD COLUMN IF NOT EXISTS recurrence_index INTEGER`); } catch {}
+
     // Migração: cidades — adiciona uf e neighborhood em public e em todos os schemas de tenant
     await client.query(`ALTER TABLE cities ADD COLUMN IF NOT EXISTS uf VARCHAR(2)`);
     await client.query(`ALTER TABLE cities ADD COLUMN IF NOT EXISTS neighborhood VARCHAR(100)`);
@@ -1483,12 +1475,23 @@ async function initDB() {
 
     await client.query('COMMIT');
 
-    // ── Limpeza pós-COMMIT — usa pool (fora de qualquer transação) ─────────────
+    // ── Migrações e limpeza pós-COMMIT — usa pool (fora de qualquer transação) ──
     try {
       const { rows: tSchemas } = await pool.query(
         `SELECT schema_name FROM tenants WHERE schema_name IS NOT NULL AND active=TRUE`
       );
       for (const { schema_name: sn } of tSchemas) {
+        // Recorrência: criar tabela e colunas se não existirem
+        try {
+          await pool.query(`CREATE TABLE IF NOT EXISTS "${sn}".recurrence_groups (
+            id SERIAL PRIMARY KEY,
+            frequency VARCHAR(10) NOT NULL,
+            end_date DATE,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          )`);
+          await pool.query(`ALTER TABLE "${sn}".appointments ADD COLUMN IF NOT EXISTS recurrence_group_id INTEGER`);
+          await pool.query(`ALTER TABLE "${sn}".appointments ADD COLUMN IF NOT EXISTS recurrence_index INTEGER`);
+        } catch(e) { console.warn(`[Migration] recurrence ${sn}:`, e.message); }
         try {
           // 1. Remover work_configs ÓRFÃOS (city_id sem cidade correspondente)
           const { rows: orphans } = await pool.query(
