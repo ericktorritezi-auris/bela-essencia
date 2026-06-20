@@ -3194,12 +3194,14 @@ function confirmRecurAction(apptId, action, recurrenceGroupId) {
   document.getElementById('modal-bg').classList.remove('hidden');
   // Event listeners depois que o HTML está no DOM
   document.getElementById('_rca_only').onclick = function() {
+    console.log('[RCA_ONLY] clicado — ctx=' + JSON.stringify(window._rca));
     closeModal();
     var ctx = window._rca || {};
     if (ctx.action === 'cancel') cancelAppt(ctx.apptId, 'single');
     else deleteAppt(ctx.apptId, 'single');
   };
   document.getElementById('_rca_all').onclick = function() {
+    console.log('[RCA_ALL] clicado — ctx=' + JSON.stringify(window._rca));
     closeModal();
     var ctx = window._rca || {};
     if (ctx.action === 'cancel') cancelAppt(ctx.apptId, 'forward');
@@ -3209,6 +3211,7 @@ function confirmRecurAction(apptId, action, recurrenceGroupId) {
 }
 
 async function cancelAppt(id, scope) {
+  console.log('[cancelAppt] id=' + id + ' scope=' + scope);
   try {
     if (scope === 'forward') {
       const res = await PATCH('/api/appointments/' + id + '/cancel-series', {});
