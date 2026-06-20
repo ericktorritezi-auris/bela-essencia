@@ -3217,7 +3217,10 @@ async function cancelAppt(id, scope) {
       const res = await PATCH('/api/appointments/' + id + '/cancel-series', {});
       console.log('[cancelAppt] resposta servidor:', JSON.stringify(res));
       const n = res && res.cancelled ? res.cancelled : '?';
-      // Limpar filtro de data para mostrar todos os agendamentos cancelados
+      const prev = res && res.preview ? res.preview.join(', ') : 'sem preview';
+      const grp  = res && res.group ? res.group : '?';
+      const frm  = res && res.from  ? res.from  : '?';
+      alert('DIAGNÓSTICO CANCEL-SERIES\nGrupo: ' + grp + '\nDe: ' + frm + '\nCancelados: ' + n + '\nDatas: ' + prev);
       const dateEl = document.getElementById('fl-date');
       if (dateEl) dateEl.value = '';
       showToast('✅ Série cancelada: ' + n + ' agendamento(s) afetado(s)', 'ok');
