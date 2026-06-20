@@ -3180,17 +3180,26 @@ function confirmRecurAction(apptId, action, recurrenceGroupId) {
 
 async function cancelAppt(id, scope) {
   try {
-    await PATCH('/api/appointments/' + id + '/cancel', { scope: scope || 'single' });
-    showToast(scope === 'forward' ? 'Série cancelada a partir deste' : 'Agendamento cancelado', 'ok');
+    if (scope === 'forward') {
+      await PATCH('/api/appointments/' + id + '/cancel-series', {});
+      showToast('Série cancelada a partir deste', 'ok');
+    } else {
+      await PATCH('/api/appointments/' + id + '/cancel', {});
+      showToast('Agendamento cancelado', 'ok');
+    }
     renderAgenda();
   } catch(e) { showToast(e.message, 'error'); }
 }
 
 async function deleteAppt(id, scope) {
   try {
-    const url = '/api/appointments/' + id + (scope === 'forward' ? '?scope=forward' : '');
-    await DEL(url);
-    showToast(scope === 'forward' ? 'Série excluída a partir deste' : 'Agendamento excluído', 'ok');
+    if (scope === 'forward') {
+      await DEL('/api/appointments/' + id + '/delete-series');
+      showToast('Série excluída a partir deste', 'ok');
+    } else {
+      await DEL('/api/appointments/' + id);
+      showToast('Agendamento excluído', 'ok');
+    }
     renderAgenda();
   } catch(e) { showToast(e.message, 'error'); }
 }
