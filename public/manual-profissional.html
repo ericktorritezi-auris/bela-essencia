@@ -763,38 +763,90 @@
           <div class="section-title">Recorrência de Agendamentos</div>
         </div>
         <div class="section-body">
-          <p>A recorrência permite agendar automaticamente uma série de atendimentos com a mesma frequência, horário e procedimento — ideal para acompanhamentos semanais, quinzenais ou mensais.</p>
+          <p>A recorrência permite criar automaticamente uma série de atendimentos com o mesmo cliente, procedimento, horário e cidade — repetindo semanalmente, quinzenalmente ou mensalmente. É ideal para acompanhamentos terapêuticos, pacotes de sessões e qualquer atendimento periódico.</p>
+
+          <!-- CRIAR -->
           <div class="sub">
-            <h4>Como criar uma recorrência</h4>
-            <p>Na <strong>Agenda Manual</strong> (Step 4 — Dados do cliente) ou no <strong>modal de edição</strong> de um agendamento existente, marque a opção <em>🔁 Agendar com recorrência</em>. Selecione a frequência e, opcionalmente, uma data de encerramento.</p>
+            <h4>📌 Como criar uma série recorrente</h4>
+            <p>Há duas formas de criar uma recorrência:</p>
+            <div class="steps" style="margin-top:10px">
+              <div class="step">
+                <div class="step-num">1</div>
+                <div class="step-content"><strong>Via Agenda Manual</strong> — No Step 4 (Dados do cliente), marque a opção <em>🔁 Agendar com recorrência</em>. Escolha a frequência e, opcionalmente, uma data de encerramento. Clique em <em>Confirmar Agendamento</em>.</div>
+              </div>
+              <div class="step">
+                <div class="step-num">2</div>
+                <div class="step-content"><strong>Via Edição de agendamento</strong> — Abra o modal de edição de qualquer agendamento existente, marque <em>🔁 Criar recorrência a partir deste</em>, escolha a frequência e salve. Os agendamentos seguintes serão gerados a partir daquela data.</div>
+              </div>
+            </div>
           </div>
+
+          <!-- FREQUÊNCIAS -->
           <div class="sub">
-            <h4>Frequências disponíveis</h4>
-            <p>Semanal — mesmo dia da semana, toda semana (até 52 ocorrências). Quinzenal — a cada 14 dias (até 26 ocorrências). Mensal — mesmo dia do mês, todo mês (até 12 ocorrências).</p>
+            <h4>📅 Frequências disponíveis</h4>
+            <p><strong>Semanal</strong> — mesmo dia da semana, todas as semanas (até 52 sessões). <strong>Quinzenal</strong> — a cada 14 dias (até 26 sessões). <strong>Mensal</strong> — mesmo dia do mês, todo mês (até 12 sessões). Caso informe uma data de encerramento, a série é gerada somente até essa data, independente do limite máximo.</p>
           </div>
+
+          <!-- PRÉVIA -->
           <div class="sub">
-            <h4>Prévia antes de confirmar</h4>
-            <p>Ao selecionar a frequência, o sistema exibe uma prévia das datas que serão agendadas. Isso permite verificar antes de confirmar se as datas fazem sentido.</p>
+            <h4>👁️ Prévia antes de confirmar</h4>
+            <p>Ao selecionar a frequência e a data de encerramento, o sistema exibe uma prévia com todas as datas que serão agendadas. Confira as datas antes de confirmar para garantir que estão corretas.</p>
           </div>
+
+          <!-- CONFLITOS -->
           <div class="sub">
-            <h4>Data de encerramento</h4>
-            <p>Opcional. Se não informada, o sistema usa o número máximo de ocorrências conforme a frequência. Se informada, gera agendamentos até aquela data.</p>
+            <h4>⚠️ Conflitos de horário</h4>
+            <p>Se uma data da série já tiver um agendamento no mesmo horário e cidade, ela é automaticamente ignorada — os outros agendamentos da série são criados normalmente. O sistema informa ao final quantas datas foram puladas por conflito.</p>
           </div>
+
+          <!-- IDENTIFICAÇÃO -->
           <div class="sub">
-            <h4>Conflitos de horário</h4>
-            <p>Datas onde já existe agendamento no mesmo horário e cidade são automaticamente ignoradas. O sistema informa quantas datas foram ignoradas por conflito.</p>
+            <h4>🔁 Identificação visual na agenda</h4>
+            <p>Todo agendamento que faz parte de uma série exibe o badge <strong>🔁</strong> ao lado do nome do cliente na lista da agenda e nos cards do mobile. Isso indica que aquele atendimento pertence a uma recorrência ativa.</p>
           </div>
+
+          <!-- CANCELAR -->
           <div class="sub">
-            <h4>Identificação visual</h4>
-            <p>Agendamentos que fazem parte de uma série recorrente exibem o badge <strong>🔁</strong> ao lado do nome do cliente na lista e nos cards mobile.</p>
+            <h4>❌ Cancelar agendamentos da série</h4>
+            <p>Ao clicar em <strong>Cancelar</strong> em um agendamento recorrente, o sistema abre um painel com duas opções:</p>
+            <ul style="margin:8px 0 0 18px;line-height:2">
+              <li><strong>Cancelar apenas este</strong> — remove somente o agendamento selecionado da lista. Os demais da série permanecem confirmados.</li>
+              <li><strong>Cancelar este e todos os próximos</strong> — cancela o agendamento atual e todos os seguintes da mesma série a partir daquela data. Sessões já realizadas antes dessa data não são afetadas.</li>
+            </ul>
+            <p style="margin-top:8px">Após o cancelamento em série, o sistema exibe na agenda todos os agendamentos do período afetado para confirmação visual.</p>
           </div>
+
+          <!-- RESTAURAR -->
           <div class="sub">
-            <h4>Cancelar ou excluir agendamentos recorrentes</h4>
-            <p>Ao cancelar ou excluir um agendamento que faz parte de uma série, o sistema pergunta: <em>Cancelar apenas este</em> ou <em>Cancelar este e todos os próximos</em>. A segunda opção cancela/exclui toda a série a partir da data selecionada, preservando os agendamentos anteriores já realizados.</p>
+            <h4>↩️ Restaurar agendamentos cancelados da série</h4>
+            <p>Se cancelou por engano, é possível restaurar. Localize um agendamento cancelado da série e clique em <strong>↩ Restaurar</strong>. O sistema oferece duas opções:</p>
+            <ul style="margin:8px 0 0 18px;line-height:2">
+              <li><strong>Restaurar apenas este</strong> — reativa somente o agendamento selecionado, devolvendo o status <em>Confirmado</em>.</li>
+              <li><strong>Restaurar este e todos os próximos</strong> — reativa o agendamento atual e todos os seguintes da série que estiverem cancelados, a partir daquela data.</li>
+            </ul>
+          </div>
+
+          <!-- EXCLUIR -->
+          <div class="sub">
+            <h4>🗑️ Excluir agendamentos da série</h4>
+            <p>A exclusão remove permanentemente os registros da base de dados. Ao clicar em <strong>🗑</strong> em um agendamento recorrente, o sistema pergunta:</p>
+            <ul style="margin:8px 0 0 18px;line-height:2">
+              <li><strong>Excluir apenas este</strong> — remove somente aquele registro. Os demais da série continuam intactos.</li>
+              <li><strong>Excluir este e todos os próximos</strong> — remove permanentemente o agendamento atual e todos os seguintes da série a partir daquela data.</li>
+            </ul>
+            <div class="warn-box" style="margin-top:10px">
+              ⚠️ A exclusão é permanente e não pode ser desfeita. Use o cancelamento quando quiser manter o histórico do atendimento.
+            </div>
+          </div>
+
+          <!-- DICAS -->
+          <div class="tip">
+            <span>💡</span>
+            <p><strong>Dica:</strong> use <em>Cancelar</em> para manter o histórico e <em>Excluir</em> somente quando o registro não deve aparecer em nenhum relatório. A restauração só funciona em agendamentos cancelados — agendamentos excluídos não podem ser recuperados.</p>
           </div>
           <div class="tip">
             <span>🔁</span>
-            <p>A recorrência é visível apenas para o profissional. O cliente agenda normalmente pelo sistema público, sem ver ou interagir com a lógica de séries.</p>
+            <p>A recorrência é uma funcionalidade exclusiva do painel administrativo. O cliente agenda pelo sistema público de forma normal, sem visualizar nem interagir com a lógica de séries.</p>
           </div>
         </div>
       </section>
