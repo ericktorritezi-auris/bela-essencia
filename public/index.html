@@ -3205,11 +3205,18 @@ function confirmRecurAction(apptId, action, recurrenceGroupId, apptDate, apptNam
   var dateLabel = '';
   if (apptDate) {
     try {
-      var d = new Date(apptDate + 'T12:00:00');
-      var dias = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
-      var meses = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
-      dateLabel = dias[d.getDay()] + ', ' + d.getDate() + ' ' + meses[d.getMonth()] + ' ' + d.getFullYear();
-    } catch(e) { dateLabel = apptDate; }
+      // Extrair YYYY-MM-DD de qualquer formato (Date.toString, ISO, string pura)
+      var rawDate = String(apptDate);
+      var match = rawDate.match(/(\d{4})-(\d{2})-(\d{2})/);
+      if (match) {
+        var d = new Date(match[0] + 'T12:00:00');
+        var dias  = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+        var meses = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+        dateLabel = dias[d.getDay()] + ', ' + d.getDate() + ' ' + meses[d.getMonth()] + ' ' + d.getFullYear();
+      } else {
+        dateLabel = rawDate.slice(0,10);
+      }
+    } catch(e) { dateLabel = String(apptDate).slice(0,10); }
   }
   var timeLabel = apptSt ? apptSt.slice(0,5) : '';
   var nameLabel = apptName || '';
