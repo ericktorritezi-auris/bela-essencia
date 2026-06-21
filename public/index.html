@@ -834,6 +834,7 @@ tr.drag-over{border-top:2.5px solid var(--rose)!important}
           <div class="nav-item" id="nav-blocked" onclick="showSec('blocked')"><span class="nav-icon">🚫</span> Bloquear Datas</div>
           <div class="nav-item" id="nav-released" onclick="showSec('released')"><span class="nav-icon">✅</span> Liberar Datas</div>
           <div class="nav-item" id="nav-avail" onclick="showSec('avail')"><span class="nav-icon">📅</span> Disponibilidade</div>
+          <div class="nav-item" id="nav-report" onclick="showSec('report');initReport()"><span class="nav-icon">📊</span> Agendamentos</div>
           <div class="nav-item" id="nav-nps" onclick="showSec('nps')"><span class="nav-icon">⭐</span> NPS</div>
         </div>
         <div style="margin-top:2px">
@@ -1004,6 +1005,65 @@ tr.drag-over{border-top:2.5px solid var(--rose)!important}
               </div>
             </div>
             <div id="avail-result" style="font-size:13px;line-height:2"></div>
+          </div>
+
+          <!-- SEC: RELATÓRIO DE AGENDAMENTOS -->
+          <div id="sec-report" class="hidden">
+            <div class="tbl-head">
+              <div class="tbl-ttl">📊 Agendamentos</div>
+              <div class="tbl-sub" id="rpt-sub">Hoje em diante</div>
+            </div>
+
+            <!-- Filtros -->
+            <div style="padding:14px 18px 10px;background:var(--cream);border-bottom:1px solid var(--border-light)">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+                <div class="fl-group">
+                  <label class="fl-label">Mês</label>
+                  <input type="month" id="rpt-month" class="fl-select" oninput="rptFilter()" style="font-size:13px;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;background:#fff;font-family:inherit;width:100%">
+                </div>
+                <div class="fl-group">
+                  <label class="fl-label">Status</label>
+                  <select id="rpt-status" class="fl-select" onchange="rptFilter()">
+                    <option value="">Todos</option>
+                    <option value="confirmed">Confirmado</option>
+                    <option value="realizado">Realizado</option>
+                    <option value="cancelled">Cancelado</option>
+                  </select>
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+                <div class="fl-group">
+                  <label class="fl-label">Cidade</label>
+                  <select id="rpt-city" class="fl-select" onchange="rptFilter()">
+                    <option value="">Todas</option>
+                  </select>
+                </div>
+                <div class="fl-group">
+                  <label class="fl-label">Procedimento</label>
+                  <select id="rpt-proc" class="fl-select" onchange="rptFilter()">
+                    <option value="">Todos</option>
+                  </select>
+                </div>
+              </div>
+              <div style="position:relative">
+                <span style="position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--text-light);font-size:14px">🔍</span>
+                <input type="text" id="rpt-name" placeholder="Buscar nome do cliente..." oninput="rptFilterDebounce()" style="width:100%;padding:9px 10px 9px 32px;border:1.5px solid var(--border);border-radius:8px;background:#fff;font-family:inherit;font-size:13px">
+              </div>
+              <div style="display:flex;gap:8px;margin-top:8px">
+                <button class="btn btn-secondary" onclick="rptSetScope('future')" id="rpt-btn-future" style="font-size:12px;padding:6px 14px;border-radius:40px">📅 Próximos</button>
+                <button class="btn btn-secondary" onclick="rptSetScope('all')" id="rpt-btn-all" style="font-size:12px;padding:6px 14px;border-radius:40px">🗓 Todos</button>
+                <button class="btn btn-secondary" onclick="rptPrint()" style="font-size:12px;padding:6px 14px;border-radius:40px;margin-left:auto">🖨️ PDF</button>
+              </div>
+            </div>
+
+            <!-- Barra de resumo + paginação -->
+            <div style="padding:9px 18px;background:#fff;border-bottom:1px solid var(--border-light);display:flex;align-items:center;justify-content:space-between">
+              <div style="font-size:12px;color:var(--text-light)"><strong id="rpt-total" style="color:var(--dark)">0</strong> agendamentos</div>
+              <div style="display:flex;align-items:center;gap:4px" id="rpt-pgn"></div>
+            </div>
+
+            <!-- Cards -->
+            <div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px" id="rpt-cards"></div>
           </div>
 
           <!-- SEC: NPS DASHBOARD -->
@@ -1933,7 +1993,7 @@ tr.drag-over{border-top:2.5px solid var(--rose)!important}
 // ══════════════════════════════════════════════════
 // VERSÃO — altere APENAS aqui; atualiza todos os rodapés
 // ══════════════════════════════════════════════════
-const APP_VERSION  = '2.9.4';
+const APP_VERSION  = '2.9.5';
 const APP_COPY     = `Versão: ${APP_VERSION} | ${(window._tenantConfig?.business_name || 'Belle Planner')} © ${new Date().getFullYear()}`;
 
 function renderFooters() {
@@ -3368,6 +3428,196 @@ async function restoreSeries(id) {
     renderAgenda();
     showToast('✅ ' + n + ' agendamento(s) restaurado(s) na série', 'ok');
   } catch(e) { showToast(e.message, 'error'); }
+}
+
+// ── RELATÓRIO DE AGENDAMENTOS ────────────────────────────────────────────────
+var _rptScope   = 'future';
+var _rptPage    = 1;
+var _rptTotal   = 0;
+var _rptPages   = 1;
+var _rptDebounce= null;
+var _rptInited  = false;
+var RPT_PAGE    = 20;
+
+async function initReport() {
+  if (_rptInited) { rptFilter(); return; }
+  _rptInited = true;
+
+  // Popular selects de cidade e procedimento
+  try {
+    const cities = await GET('/api/cities/all');
+    const sel = document.getElementById('rpt-city');
+    cities.forEach(function(c) {
+      const o = document.createElement('option');
+      o.value = c.id; o.textContent = c.name;
+      sel.appendChild(o);
+    });
+  } catch(e) {}
+  try {
+    const procs = await getProcs();
+    const sel = document.getElementById('rpt-proc');
+    const seen = {};
+    procs.forEach(function(p) {
+      if (!seen[p.name]) {
+        seen[p.name] = 1;
+        const o = document.createElement('option');
+        o.value = p.name; o.textContent = p.name;
+        sel.appendChild(o);
+      }
+    });
+  } catch(e) {}
+
+  rptFilter();
+}
+
+function rptSetScope(s) {
+  _rptScope = s;
+  document.getElementById('rpt-btn-future').style.borderColor = s==='future' ? 'var(--rose)' : '';
+  document.getElementById('rpt-btn-future').style.color       = s==='future' ? 'var(--rose)' : '';
+  document.getElementById('rpt-btn-future').style.background  = s==='future' ? 'var(--rose-light)' : '';
+  document.getElementById('rpt-btn-all').style.borderColor    = s==='all' ? 'var(--rose)' : '';
+  document.getElementById('rpt-btn-all').style.color          = s==='all' ? 'var(--rose)' : '';
+  document.getElementById('rpt-btn-all').style.background     = s==='all' ? 'var(--rose-light)' : '';
+  rptFilter();
+}
+
+function rptFilterDebounce() {
+  clearTimeout(_rptDebounce);
+  _rptDebounce = setTimeout(rptFilter, 300);
+}
+
+async function rptFilter(page) {
+  _rptPage = page || 1;
+  const month  = document.getElementById('rpt-month').value;
+  const status = document.getElementById('rpt-status').value;
+  const city   = document.getElementById('rpt-city').value;
+  const proc   = document.getElementById('rpt-proc').value;
+  const name   = document.getElementById('rpt-name').value.trim();
+
+  const params = new URLSearchParams({ page: _rptPage, limit: RPT_PAGE });
+  if (month)  params.set('month', month);
+  else if (_rptScope === 'future') params.set('date_from', new Date().toISOString().slice(0,10));
+  if (status) params.set('status', status);
+  if (city)   params.set('city', city);
+  if (proc)   params.set('proc_name', proc);
+  if (name)   params.set('name', name);
+
+  // Atualiza subtitle
+  const sub = document.getElementById('rpt-sub');
+  if (sub) sub.textContent = _rptScope === 'future' && !month ? 'A partir de hoje' : month ? 'Mês: ' + month : 'Todos os períodos';
+
+  document.getElementById('rpt-cards').innerHTML = '<div style="text-align:center;padding:30px;color:var(--text-light)">Carregando...</div>';
+
+  try {
+    const data = await GET('/api/appointments/report?' + params.toString());
+    _rptTotal = data.total;
+    _rptPages = data.pages;
+    document.getElementById('rpt-total').textContent = data.total;
+    rptRenderCards(data.records);
+    rptRenderPgn(data.page, data.pages);
+  } catch(e) {
+    document.getElementById('rpt-cards').innerHTML = '<div style="text-align:center;padding:30px;color:var(--error)">Erro ao carregar: ' + e.message + '</div>';
+  }
+}
+
+function rptRenderCards(records) {
+  if (!records || !records.length) {
+    document.getElementById('rpt-cards').innerHTML = '<div style="text-align:center;padding:40px 20px;color:var(--text-light);font-size:13px">Nenhum agendamento encontrado para os filtros selecionados.</div>';
+    return;
+  }
+  const MS  = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+  const DS  = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+  function fmtD(d) {
+    const p = String(d).slice(0,10).split('-');
+    const dt = new Date(+p[0], +p[1]-1, +p[2]);
+    return DS[dt.getDay()] + ', ' + parseInt(p[2]) + ' ' + MS[+p[1]-1] + ' ' + p[0];
+  }
+  let html = ''; let lastDate = '';
+  records.forEach(function(r) {
+    const dl = fmtD(r.date);
+    if (dl !== lastDate) {
+      html += '<div style="font-size:10px;font-weight:800;color:var(--text-light);letter-spacing:.05em;text-transform:uppercase;display:flex;align-items:center;gap:8px;margin-bottom:-2px">' +
+        dl + '<div style="flex:1;height:1px;background:var(--border-light)"></div></div>';
+      lastDate = dl;
+    }
+    const bc = r.status==='confirmed' ? 'badge-confirmed' : r.status==='realizado' ? 'badge-realizado' : 'badge-cancel';
+    const bl = r.status==='confirmed' ? 'Confirmado'     : r.status==='realizado' ? 'Realizado'       : 'Cancelado';
+    const st = String(r.st||'').slice(0,5);
+    const recur = r.recurrence_group_id ? ' 🔁' : '';
+    const val = r.price ? 'R$ ' + Number(r.price).toLocaleString('pt-BR', {minimumFractionDigits:2}) : '—';
+    const paid = r.paid
+      ? '<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:var(--success-bg);color:var(--success)">✓ Pago</span>'
+      : '<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:var(--warn-bg);color:var(--warn)">Pendente</span>';
+    html += '<div style="background:#fff;border-radius:14px;border:1px solid var(--border-light);overflow:hidden">' +
+      '<div style="padding:12px 14px 9px;display:flex;justify-content:space-between;align-items:flex-start;gap:8px">' +
+        '<div>' +
+          '<div style="font-size:11px;color:var(--text-light);margin-bottom:3px">' + st + recur + '</div>' +
+          '<div style="font-size:14px;font-weight:800;color:var(--dark)">' + (r.name||'—') + '</div>' +
+        '</div>' +
+        '<div style="text-align:right;flex-shrink:0">' +
+          '<span class="badge ' + bc + '">' + bl + '</span>' +
+          '<div style="font-size:14px;font-weight:800;color:var(--dark);margin-top:5px">' + val + '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div style="padding:7px 14px 12px;border-top:1px solid var(--border-light);display:grid;grid-template-columns:1fr 1fr;gap:5px">' +
+        '<div><div style="font-size:10px;color:var(--text-light);font-weight:700;letter-spacing:.04em;text-transform:uppercase;margin-bottom:1px">Cidade</div><div style="font-size:12px;font-weight:600;color:var(--text)">' + (r.city_name||'—') + '</div></div>' +
+        '<div><div style="font-size:10px;color:var(--text-light);font-weight:700;letter-spacing:.04em;text-transform:uppercase;margin-bottom:1px">Pagamento</div><div style="font-size:12px;font-weight:600">' + paid + '</div></div>' +
+        '<div style="grid-column:1/-1;margin-top:4px"><div style="font-size:10px;color:var(--text-light);font-weight:700;letter-spacing:.04em;text-transform:uppercase;margin-bottom:1px">Procedimento</div><div style="font-size:12px;font-weight:600;color:var(--text)">' + (r.proc_name||'—') + '</div></div>' +
+      '</div>' +
+    '</div>';
+  });
+  document.getElementById('rpt-cards').innerHTML = html;
+}
+
+function rptRenderPgn(cur, total) {
+  const el = document.getElementById('rpt-pgn');
+  if (!el) return;
+  let h = '<button onclick="rptFilter(' + Math.max(1,cur-1) + ')" ' + (cur<=1?'disabled':'') +
+    ' style="width:28px;height:28px;border-radius:8px;border:1.5px solid var(--border);background:#fff;font-size:12px;font-weight:700;cursor:pointer;color:var(--text-light)">&#8592;</button>';
+  const start = Math.max(1, cur-1);
+  const end   = Math.min(total, start+2);
+  for (let p = start; p <= end; p++) {
+    const active = p===cur ? 'background:var(--rose);border-color:var(--rose);color:#fff' : 'background:#fff;color:var(--text-light)';
+    h += '<button onclick="rptFilter(' + p + ')" style="width:28px;height:28px;border-radius:8px;border:1.5px solid var(--border);font-size:12px;font-weight:700;cursor:pointer;' + active + '">' + p + '</button>';
+  }
+  h += '<button onclick="rptFilter(' + Math.min(total,cur+1) + ')" ' + (cur>=total?'disabled':'') +
+    ' style="width:28px;height:28px;border-radius:8px;border:1.5px solid var(--border);background:#fff;font-size:12px;font-weight:700;cursor:pointer;color:var(--text-light)">&#8594;</button>';
+  el.innerHTML = h;
+}
+
+function rptPrint() {
+  // Buscar todos os registros sem paginação para imprimir
+  const month  = document.getElementById('rpt-month').value;
+  const status = document.getElementById('rpt-status').value;
+  const city   = document.getElementById('rpt-city').value;
+  const proc   = document.getElementById('rpt-proc').value;
+  const name   = document.getElementById('rpt-name').value.trim();
+  const params = new URLSearchParams({ page:1, limit:1000 });
+  if (month)  params.set('month', month);
+  else if (_rptScope === 'future') params.set('date_from', new Date().toISOString().slice(0,10));
+  if (status) params.set('status', status);
+  if (city)   params.set('city', city);
+  if (proc)   params.set('proc_name', proc);
+  if (name)   params.set('name', name);
+
+  GET('/api/appointments/report?' + params.toString()).then(function(data) {
+    const MS  = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+    const DS  = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+    function fD(d) { const p=String(d).slice(0,10).split('-');const dt=new Date(+p[0],+p[1]-1,+p[2]);return DS[dt.getDay()]+', '+parseInt(p[2])+' '+MS[+p[1]-1]+' '+p[0]; }
+    const rows = data.records.map(function(r){
+      const st=r.status==='confirmed'?'Confirmado':r.status==='realizado'?'Realizado':'Cancelado';
+      const val=r.price?'R$ '+Number(r.price).toLocaleString('pt-BR',{minimumFractionDigits:2}):'—';
+      return '<tr><td>'+fD(r.date)+'</td><td>'+String(r.st||'').slice(0,5)+'</td><td>'+(r.name||'—')+'</td><td>'+(r.city_name||'—')+'</td><td>'+(r.proc_name||'—')+'</td><td>'+val+'</td><td>'+st+'</td><td>'+(r.paid?'Sim':'Não')+'</td></tr>';
+    }).join('');
+    const sub=document.getElementById('rpt-sub').textContent;
+    const w=window.open('','_blank');
+    w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Relatório de Agendamentos</title><style>body{font-family:Arial,sans-serif;font-size:12px;padding:20px}h1{font-size:16px;margin-bottom:4px}p{color:#666;margin-bottom:16px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:6px 8px;text-align:left}th{background:#f5f5f5;font-weight:700}tr:nth-child(even){background:#fafafa}@media print{button{display:none}}</style></head><body>');
+    w.document.write('<h1>Relatório de Agendamentos</h1><p>'+sub+' · '+data.total+' agendamento(s) · Belle Planner v2.9.5</p>');
+    w.document.write('<table><tr><th>Data</th><th>Hora</th><th>Cliente</th><th>Cidade</th><th>Procedimento</th><th>Valor</th><th>Status</th><th>Pago</th></tr>'+rows+'</table>');
+    w.document.write('<br><button onclick="window.print()">🖨️ Imprimir</button></body></html>');
+    w.document.close();
+    w.focus();
+  }).catch(function(e){ showToast('Erro ao gerar PDF: '+e.message,'error'); });
 }
 
 // ── Filtro de nome — debounce + clear ────────────────────────────
