@@ -1019,11 +1019,11 @@ tr.drag-over{border-top:2.5px solid var(--rose)!important}
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
                 <div class="fl-group">
                   <label class="fl-label">Mês</label>
-                  <input type="month" id="rpt-month" class="fl-select" oninput="rptFilter()" style="font-size:13px;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;background:#fff;font-family:inherit;width:100%">
+                  <input type="month" id="rpt-month" style="width:100%;background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:10px 12px;font-family:'Nunito',sans-serif;font-size:13px;color:var(--dark);outline:none" oninput="rptFilter()">
                 </div>
                 <div class="fl-group">
                   <label class="fl-label">Status</label>
-                  <select id="rpt-status" class="fl-select" onchange="rptFilter()">
+                  <select id="rpt-status" onchange="rptFilter()">
                     <option value="">Todos</option>
                     <option value="confirmed">Confirmado</option>
                     <option value="realizado">Realizado</option>
@@ -1034,23 +1034,23 @@ tr.drag-over{border-top:2.5px solid var(--rose)!important}
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
                 <div class="fl-group">
                   <label class="fl-label">Cidade</label>
-                  <select id="rpt-city" class="fl-select" onchange="rptFilter()">
+                  <select id="rpt-city" onchange="rptFilter()">
                     <option value="">Todas</option>
                   </select>
                 </div>
                 <div class="fl-group">
                   <label class="fl-label">Procedimento</label>
-                  <select id="rpt-proc" class="fl-select" onchange="rptFilter()">
+                  <select id="rpt-proc" onchange="rptFilter()">
                     <option value="">Todos</option>
                   </select>
                 </div>
               </div>
               <div style="position:relative">
                 <span style="position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--text-light);font-size:14px">🔍</span>
-                <input type="text" id="rpt-name" placeholder="Buscar nome do cliente..." oninput="rptFilterDebounce()" style="width:100%;padding:9px 10px 9px 32px;border:1.5px solid var(--border);border-radius:8px;background:#fff;font-family:inherit;font-size:13px">
+                <input type="text" id="rpt-name" placeholder="Buscar nome do cliente..." oninput="rptFilterDebounce()" style="width:100%;padding:10px 12px 10px 32px;background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);font-family:'Nunito',sans-serif;font-size:13px;color:var(--dark);outline:none">
               </div>
               <div style="display:flex;gap:8px;margin-top:8px">
-                <button class="btn btn-secondary" onclick="rptSetScope('future')" id="rpt-btn-future" style="font-size:12px;padding:6px 14px;border-radius:40px">📅 Próximos</button>
+                <button class="btn btn-secondary" onclick="rptSetScope('future')" id="rpt-btn-future" style="font-size:12px;padding:6px 14px;border-radius:40px;border:1.5px solid var(--rose);background:var(--rose-light);color:var(--rose)">📅 Próximos</button>
                 <button class="btn btn-secondary" onclick="rptSetScope('all')" id="rpt-btn-all" style="font-size:12px;padding:6px 14px;border-radius:40px">🗓 Todos</button>
                 <button class="btn btn-secondary" onclick="rptPrint()" style="font-size:12px;padding:6px 14px;border-radius:40px;margin-left:auto">🖨️ PDF</button>
               </div>
@@ -2776,10 +2776,10 @@ async function initAdmin() {
 const SEC_TITLES={
   agenda:'Agenda',manual:'Agenda Manual',retro:'Agenda Retroativa','tatica':'Agenda Tática',blocked:'Bloquear Datas','avail':'Disponibilidade',released:'Liberar Datas',nps:'NPS — Satisfação',
   revenue:'Receita',cockpit:'Cockpit Financeiro',receivables:'Contas a Receber',expenses:'Contas a Pagar','summary-fin':'Resumo Financeiro',promos:'Promoções',commem:'Datas Comemorativas',webpush:'Web Push',
-  cities:'Cidades',schedules:'Configuração de Horários',
+  cities:'Cidades',schedules:'Configuração de Horários',report:'Agendamentos',
   procs:'Procedimentos','cert-config':'Certificados',profile:'Perfil & Senha',lgpd:'Log LGPD',backup:'Backup'
 };
-const ALL_SECS = ['agenda','manual','retro','tatica','blocked','released','avail','nps','revenue','cockpit','receivables','expenses','summary-fin','promos','commem','webpush','cities','schedules','procs','cert-config','profile','lgpd','backup'];
+const ALL_SECS = ['agenda','manual','retro','tatica','blocked','released','avail','report','nps','revenue','cockpit','receivables','expenses','summary-fin','promos','commem','webpush','cities','schedules','procs','cert-config','profile','lgpd','backup'];
 
 function showSec(name){
   ALL_SECS.forEach(s=>{
