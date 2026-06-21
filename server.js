@@ -1748,7 +1748,7 @@ function requireAdmin(req, res, next) {
 app.get('/api/health', async (req, res) => {
   try {
     await req.db('SELECT 1');
-    res.json({ ok: true, version: '2.9.4', db: 'connected' });
+    res.json({ ok: true, version: '2.9.5', db: 'connected' });
   } catch {
     res.status(503).json({ ok: false, db: 'disconnected' });
   }
@@ -2444,6 +2444,43 @@ async function autoCompleteAppointments() {
 }
 
 // Admin: listar agendamentos com filtros
+// ── Relatório de Agendamentos ────────────────────────────────────────────────
+app.get('/api/appointments/report', requireAdmin, async (req, res) => {
+  await autoCompleteAppointments();
+  const { date_from, date_to, month, city, status, proc_name, name, page, limit } = req.query;
+  const PAGE   = Math.min(parseInt(limit)  || 20, 100);
+  const OFFSET = (Math.max(parseInt(page) || 1, 1) - 1) * PAGE;
+
+  let sql = 'SELECT * FROM appointments WHERE 1=1';
+  const params = [];
+
+  // Data de início (padrão = hoje)
+  const from = date_from || new Date().toISOString().slice(0,10);
+  if (!date_to && !month) {
+    sql += ` AND date >= $${params.push(from)}`;
+  }
+  if (date_from && date_to) {
+    sql += ` AND date >= $${params.push(date_from)} AND date <= $${params.push(date_to)}`;
+  }
+  if (month && /^\d{4}-\d{2}$/.test(month)) {
+    sql += ` AND to_char(date,'YYYY-MM') = $${params.push(month)}`;
+  }
+  if (city)      { sql += ` AND city_id = $${params.push(city)}`; }
+  if (status)    { sql += ` AND status = $${params.push(status)}`; }
+  if (proc_name) { sql += ` AND proc_name ILIKE $${params.push('%'+proc_name+'%')}`; }
+  if (name)      { sql += ` AND name ILIKE $${params.push('%'+name+'%')}`; }
+
+  sql += ' ORDER BY date ASC, st ASC';
+
+  try {
+    const { rows: all } = await req.db(sql, params);
+    const total   = all.length;
+    const pages   = Math.ceil(total / PAGE) || 1;
+    const records = all.slice(OFFSET, OFFSET + PAGE);
+    res.json({ total, pages, page: Math.max(parseInt(page)||1,1), records });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
 app.get('/api/appointments', requireAdmin, async (req, res) => {
   // Atualiza status antes de listar — marca passados como "realizado"
   await autoCompleteAppointments();
@@ -3606,7 +3643,7 @@ app.get('/api/backup/export', requireAdmin, async (req, res) => {
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.json({
       exportedAt: new Date().toISOString(),
-      version: '2.9.4',
+      version: '2.9.5',
       procedures:    procs.rows,
       appointments:  appts.rows,
       blocked_dates: blocked.rows,
