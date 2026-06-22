@@ -1008,22 +1008,25 @@ tr.drag-over{border-top:2.5px solid var(--rose)!important}
           </div>
 
           <!-- SEC: RELATÓRIO DE AGENDAMENTOS -->
-          <div id="sec-report" class="hidden">
+          <div id="sec-report" class="hidden" style="width:100%;overflow-x:hidden">
             <div class="tbl-head">
-              <div class="tbl-ttl">📊 Agendamentos</div>
-              <div class="tbl-sub" id="rpt-sub">Hoje em diante</div>
+              <div>
+                <div class="tbl-ttl">📊 Agendamentos</div>
+                <div class="tbl-sub" id="rpt-sub">Hoje em diante</div>
+              </div>
             </div>
 
-            <!-- Filtros -->
-            <div style="padding:14px 18px 10px;background:var(--cream);border-bottom:1px solid var(--border-light)">
+            <!-- Filtros mobile-first -->
+            <div style="padding:12px 14px 10px;background:var(--cream);border-bottom:1px solid var(--border-light)">
+              <!-- Linha 1: Mês + Status -->
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
-                <div class="fl-group">
-                  <label class="fl-label">Mês</label>
-                  <input type="month" id="rpt-month" style="width:100%;background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:10px 12px;font-family:'Nunito',sans-serif;font-size:13px;color:var(--dark);outline:none" oninput="rptFilter()">
+                <div>
+                  <div style="font-size:10px;font-weight:800;color:var(--text-light);letter-spacing:.05em;text-transform:uppercase;margin-bottom:4px">Mês</div>
+                  <input type="month" id="rpt-month" oninput="rptFilter()" style="width:100%;background:#fff;border:1.5px solid var(--border);border-radius:var(--r-sm);padding:9px 10px;font-family:'Nunito',sans-serif;font-size:13px;color:var(--dark);outline:none;-webkit-appearance:none">
                 </div>
-                <div class="fl-group">
-                  <label class="fl-label">Status</label>
-                  <select id="rpt-status" onchange="rptFilter()">
+                <div>
+                  <div style="font-size:10px;font-weight:800;color:var(--text-light);letter-spacing:.05em;text-transform:uppercase;margin-bottom:4px">Status</div>
+                  <select id="rpt-status" onchange="rptFilter()" style="width:100%;background:#fff;border:1.5px solid var(--border);border-radius:var(--r-sm);padding:9px 10px;font-family:'Nunito',sans-serif;font-size:13px;color:var(--dark)">
                     <option value="">Todos</option>
                     <option value="confirmed">Confirmado</option>
                     <option value="realizado">Realizado</option>
@@ -1031,39 +1034,48 @@ tr.drag-over{border-top:2.5px solid var(--rose)!important}
                   </select>
                 </div>
               </div>
+              <!-- Linha 2: Cidade + Procedimento -->
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
-                <div class="fl-group">
-                  <label class="fl-label">Cidade</label>
-                  <select id="rpt-city" onchange="rptFilter()">
+                <div>
+                  <div style="font-size:10px;font-weight:800;color:var(--text-light);letter-spacing:.05em;text-transform:uppercase;margin-bottom:4px">Cidade</div>
+                  <select id="rpt-city" onchange="rptFilter()" style="width:100%;background:#fff;border:1.5px solid var(--border);border-radius:var(--r-sm);padding:9px 10px;font-family:'Nunito',sans-serif;font-size:13px;color:var(--dark)">
                     <option value="">Todas</option>
                   </select>
                 </div>
-                <div class="fl-group">
-                  <label class="fl-label">Procedimento</label>
-                  <select id="rpt-proc" onchange="rptFilter()">
+                <div>
+                  <div style="font-size:10px;font-weight:800;color:var(--text-light);letter-spacing:.05em;text-transform:uppercase;margin-bottom:4px">Procedimento</div>
+                  <select id="rpt-proc" onchange="rptFilter()" style="width:100%;background:#fff;border:1.5px solid var(--border);border-radius:var(--r-sm);padding:9px 10px;font-family:'Nunito',sans-serif;font-size:13px;color:var(--dark)">
                     <option value="">Todos</option>
                   </select>
                 </div>
               </div>
-              <div style="position:relative">
-                <span style="position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--text-light);font-size:14px">🔍</span>
-                <input type="text" id="rpt-name" placeholder="Buscar nome do cliente..." oninput="rptFilterDebounce()" style="width:100%;padding:10px 12px 10px 32px;background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);font-family:'Nunito',sans-serif;font-size:13px;color:var(--dark);outline:none">
+              <!-- Linha 3: Busca por nome (largura total) -->
+              <div style="position:relative;margin-bottom:10px">
+                <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-light);pointer-events:none;font-size:13px">🔍</span>
+                <input type="text" id="rpt-name" placeholder="Buscar nome do cliente..." oninput="rptFilterDebounce()"
+                  style="width:100%;padding:9px 10px 9px 30px;background:#fff;border:1.5px solid var(--border);border-radius:var(--r-sm);font-family:'Nunito',sans-serif;font-size:13px;color:var(--dark);outline:none">
               </div>
-              <div style="display:flex;gap:8px;margin-top:8px">
-                <button class="btn btn-secondary" onclick="rptSetScope('future')" id="rpt-btn-future" style="font-size:12px;padding:6px 14px;border-radius:40px;border:1.5px solid var(--rose);background:var(--rose-light);color:var(--rose)">📅 Próximos</button>
-                <button class="btn btn-secondary" onclick="rptSetScope('all')" id="rpt-btn-all" style="font-size:12px;padding:6px 14px;border-radius:40px">🗓 Todos</button>
-                <button class="btn btn-secondary" onclick="rptPrint()" style="font-size:12px;padding:6px 14px;border-radius:40px;margin-left:auto">🖨️ PDF</button>
+              <!-- Linha 4: Toggles e PDF -->
+              <div style="display:flex;gap:6px;flex-wrap:nowrap;align-items:center">
+                <button onclick="rptSetScope('future')" id="rpt-btn-future"
+                  style="flex:1;font-family:'Nunito',sans-serif;font-size:12px;font-weight:700;padding:8px 0;border-radius:40px;border:1.5px solid var(--rose);background:var(--rose-light);color:var(--rose);cursor:pointer;white-space:nowrap">📅 Próximos</button>
+                <button onclick="rptSetScope('all')" id="rpt-btn-all"
+                  style="flex:1;font-family:'Nunito',sans-serif;font-size:12px;font-weight:700;padding:8px 0;border-radius:40px;border:1.5px solid var(--border);background:var(--cream);color:var(--text-light);cursor:pointer;white-space:nowrap">🗓 Todos</button>
+                <button onclick="rptPrint()"
+                  style="flex-shrink:0;font-family:'Nunito',sans-serif;font-size:12px;font-weight:700;padding:8px 12px;border-radius:40px;border:1.5px solid var(--border);background:#fff;color:var(--text-light);cursor:pointer">🖨️</button>
               </div>
             </div>
 
-            <!-- Barra de resumo + paginação -->
-            <div style="padding:9px 18px;background:#fff;border-bottom:1px solid var(--border-light);display:flex;align-items:center;justify-content:space-between">
-              <div style="font-size:12px;color:var(--text-light)"><strong id="rpt-total" style="color:var(--dark)">0</strong> agendamentos</div>
-              <div style="display:flex;align-items:center;gap:4px" id="rpt-pgn"></div>
+            <!-- Barra resumo + paginação -->
+            <div style="padding:8px 14px;background:#fff;border-bottom:1px solid var(--border-light);display:flex;align-items:center;justify-content:space-between;gap:8px">
+              <div style="font-size:12px;color:var(--text-light);flex-shrink:0">
+                <strong id="rpt-total" style="color:var(--dark)">0</strong> agendamentos
+              </div>
+              <div style="display:flex;align-items:center;gap:3px;flex-shrink:0" id="rpt-pgn"></div>
             </div>
 
             <!-- Cards -->
-            <div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px" id="rpt-cards"></div>
+            <div style="padding:12px 14px;display:flex;flex-direction:column;gap:9px" id="rpt-cards"></div>
           </div>
 
           <!-- SEC: NPS DASHBOARD -->
