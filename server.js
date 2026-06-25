@@ -1474,6 +1474,7 @@ async function initDB() {
       for (const { schema_name: sn } of tSchemas) {
         // Procedimentos promocionais
         try { await pool.query(`ALTER TABLE "${sn}".procedures ADD COLUMN IF NOT EXISTS is_promo BOOLEAN NOT NULL DEFAULT FALSE`); } catch {}
+        try { await pool.query(`ALTER TABLE "${sn}".procedures ADD COLUMN IF NOT EXISTS deleted BOOLEAN NOT NULL DEFAULT FALSE`); } catch {}
         try { await pool.query(`ALTER TABLE "${sn}".procedures ADD COLUMN IF NOT EXISTS promo_limit INTEGER`); } catch {}
         try { await pool.query(`ALTER TABLE "${sn}".procedures ADD COLUMN IF NOT EXISTS promo_end_date DATE`); } catch {}
         try { await pool.query(`ALTER TABLE "${sn}".procedures ADD COLUMN IF NOT EXISTS promo_used INTEGER NOT NULL DEFAULT 0`); } catch {}
@@ -1983,7 +1984,7 @@ app.get('/api/procedures', async (req, res) => {
 app.get('/api/procedures/admin-all', requireAdmin, async (req, res) => {
   try {
     const { rows } = await req.db(
-      'SELECT * FROM procedures ORDER BY active DESC, COALESCE(sort_order, id), id'
+      'SELECT * FROM procedures WHERE deleted IS NOT TRUE ORDER BY active DESC, is_promo DESC, COALESCE(sort_order, id), id'
     );
     res.json(rows);
   } catch (err) {
@@ -2056,7 +2057,7 @@ app.patch('/api/procedures/:id/cert-config', requireAdmin, async (req, res) => {
 app.delete('/api/procedures/:id', requireAdmin, async (req, res) => {
   try {
     // Soft delete – preserva histórico de agendamentos vinculados
-    await req.db('UPDATE procedures SET active=FALSE WHERE id=$1', [req.params.id]);
+    await req.db('UPDATE procedures SET active=FALSE, deleted=TRUE WHERE id=$1', [req.params.id]);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
