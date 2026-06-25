@@ -4698,8 +4698,8 @@ function openProcModal(id) {
     </div>
   `;
   if (id) {
-    getProcs().then(list=>{
-      const p=list.find(x=>x.id===id); if(!p) return;
+    GET('/api/procedures/admin-all').then(list=>{
+      const p=list.find(x=>Number(x.id)===Number(id)); if(!p) return;
       if (p.description) document.getElementById('proc-modal-desc').value = p.description;
       document.getElementById('proc-modal-name').value=p.name;
       document.getElementById('proc-modal-dur').value=p.dur;
