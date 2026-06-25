@@ -103,6 +103,11 @@ h1,h2,h3,h4{font-family:'Cormorant Garamond',serif}
 .city-card .ci{font-size:22px;flex-shrink:0}
 .proc-list{display:grid;gap:8px}
 .proc-item{background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:13px 15px;cursor:pointer;transition:var(--tr);display:grid;grid-template-columns:1fr auto;align-items:center;gap:8px}
+.proc-item-promo{border:2px solid var(--gold)!important;background:linear-gradient(135deg,#fff 70%,var(--gold-light))!important;position:relative;overflow:hidden;padding-top:11px}
+.proc-item-promo::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--rose),var(--gold),var(--rose));background-size:200% 100%;animation:promoShine 2.5s linear infinite}
+@keyframes promoShine{0%{background-position:100% 0}100%{background-position:-100% 0}}
+.promo-tag{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;padding:3px 9px;border-radius:20px;background:var(--gold);color:#fff;margin-bottom:6px}
+.promo-urgency{font-size:12px;font-weight:700;color:var(--gold-deep);margin-top:6px;line-height:1.4;padding:6px 10px;background:var(--gold-light);border-radius:var(--r-sm);border-left:3px solid var(--gold)}
 .proc-item:hover,.proc-item.sel{border-color:var(--rose);background:var(--rose-light)}
 .proc-saiba{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;color:var(--rose);background:var(--rose-light);border:1px solid var(--rose-mid);border-radius:20px;padding:3px 10px;cursor:pointer;margin-top:5px;transition:var(--tr);text-decoration:none}
 .proc-saiba:hover{background:var(--rose);color:white}
@@ -2005,7 +2010,7 @@ tr.drag-over{border-top:2.5px solid var(--rose)!important}
 // ══════════════════════════════════════════════════
 // VERSÃO — altere APENAS aqui; atualiza todos os rodapés
 // ══════════════════════════════════════════════════
-const APP_VERSION  = '2.9.5';
+const APP_VERSION  = '2.9.6';
 const APP_COPY     = `Versão: ${APP_VERSION} | ${(window._tenantConfig?.business_name || 'Belle Planner')} © ${new Date().getFullYear()}`;
 
 function renderFooters() {
@@ -2291,6 +2296,40 @@ async function renderProcs() {
       `;
     }
 
+    // Promos sempre primeiro
+    procs.sort(function(a, b) {
+      if (a.is_promo && !b.is_promo) return -1;
+      if (!a.is_promo && b.is_promo) return 1;
+      return 0;
+    });
+    function promoUrgencyMsg(p) {
+      var limit = p.promo_limit ? Number(p.promo_limit) : null;
+      var used  = p.promo_used  ? Number(p.promo_used)  : 0;
+      var remaining = limit ? limit - used : null;
+      var endDate = p.promo_end_date ? String(p.promo_end_date).slice(0,10) : null;
+      var MS = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+      function fmtEnd(d) { var pts=d.split('-'); return parseInt(pts[2])+' '+MS[+pts[1]-1]; }
+      var endLabel = endDate ? fmtEnd(endDate) : null;
+      var daysLeft = endDate ? Math.ceil((new Date(endDate+'T23:59:59') - new Date()) / 86400000) : null;
+      if (remaining !== null && endLabel) {
+        var pct = remaining / limit;
+        if (pct > 0.5) return '🔥 ' + remaining + ' vagas disponíveis até ' + endLabel + ' — garanta a sua!';
+        if (pct > 0.25) return '⚡ Restam apenas ' + remaining + ' vagas! Válido até ' + endLabel;
+        return '🚨 ÚLTIMAS ' + remaining + ' vagas até ' + endLabel + '! Não perca!';
+      }
+      if (remaining !== null) {
+        var pct2 = remaining / limit;
+        if (pct2 > 0.5) return '🔥 ' + remaining + ' vagas disponíveis — garanta a sua!';
+        if (pct2 > 0.25) return '⚡ Restam apenas ' + remaining + ' vagas!';
+        return '🚨 ÚLTIMAS ' + remaining + ' vagas! Corra!';
+      }
+      if (daysLeft !== null) {
+        if (daysLeft > 7) return '📅 Oferta especial válida até ' + endLabel;
+        if (daysLeft > 2) return '⚡ Aproveite! Válida até ' + endLabel;
+        return '🚨 Últimos dias! Encerra ' + endLabel;
+      }
+      return null;
+    }
     list.innerHTML = banner + procs.map(p => {
       let priceBadge = '';
       if (p.pt === 'none') {
@@ -2306,13 +2345,15 @@ async function renderProcs() {
         priceBadge = `<span class="badge-price">${fmtPrice(p)}</span>`;
       }
       return `
-        <div class="proc-item" onclick="selProc(${p.id})">
+        <div class="${p.is_promo ? 'proc-item proc-item-promo' : 'proc-item'}" onclick="selProc(${p.id})">
+          ${p.is_promo ? '<span class="promo-tag">🏷️ Promocional</span>' : ''}
           <div>
             <div class="pn">${p.name}</div>
             <div class="proc-meta">
               <span class="badge-dur">⏱ ${fmtDur(p.dur)}</span>
               ${priceBadge}
             </div>
+            ${p.is_promo ? '<div class="promo-urgency">' + (promoUrgencyMsg(p)||'') + '</div>' : ''}
             ${p.description ? '<span class="proc-saiba" onclick="event.stopPropagation();showProcDetail('+p.id+')">📋 Saiba mais</span>' : ''}
           </div>
           <div class="proc-arr">›</div>
@@ -3442,6 +3483,78 @@ async function restoreSeries(id) {
   } catch(e) { showToast(e.message, 'error'); }
 }
 
+// ── PROCEDIMENTO PROMOCIONAL — Barra de Progresso na Lista ─────────────────
+function promoProgressHTML(p, isMobile) {
+  const used  = Number(p.promo_used)  || 0;
+  const limit = p.promo_limit ? Number(p.promo_limit) : null;
+  const pct   = limit ? Math.round((used / limit) * 100) : null;
+  const end   = p.promo_end_date ? String(p.promo_end_date).slice(0,10) : null;
+  const MS    = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+  const fmtD  = function(d){ var pt=d.split('-'); return parseInt(pt[2])+' '+MS[+pt[1]-1]; };
+
+  // Cor da barra conforme % usada
+  var barColor = pct === null ? 'var(--gold)' : pct >= 75 ? 'var(--error)' : pct >= 50 ? 'var(--warn)' : 'var(--gold)';
+  var tagLabel = !p.active ? '⏸ Encerrado' : '🏷️ Promo';
+  var tagBg    = !p.active ? 'var(--border)' : 'var(--gold-light)';
+  var tagColor = !p.active ? 'var(--text-light)' : 'var(--gold-deep)';
+
+  if (isMobile) {
+    // Versão compacta para card mobile
+    var barHTML = limit ? (
+      '<div style="display:flex;align-items:center;gap:6px;margin-top:4px">'+
+        '<div style="flex:1;height:6px;background:var(--border);border-radius:40px;overflow:hidden">'+
+          '<div style="height:100%;width:'+Math.min(pct,100)+'%;background:'+barColor+';border-radius:40px"></div>'+
+        '</div>'+
+        '<span style="font-size:10px;font-weight:700;color:'+barColor+';white-space:nowrap">'+used+'/'+limit+'</span>'+
+      '</div>'
+    ) : '';
+    var endHTML = end ? '<span style="font-size:10px;color:var(--text-light);margin-left:4px">até '+fmtD(end)+'</span>' : '';
+    return '<div style="display:inline-flex;align-items:center;gap:6px">'+
+      '<span style="font-size:10px;font-weight:800;padding:2px 8px;border-radius:20px;background:'+tagBg+';color:'+tagColor+'">'+tagLabel+'</span>'+
+      endHTML+
+    '</div>'+barHTML;
+  }
+
+  // Versão completa para tabela desktop
+  var barHTML = limit ? (
+    '<div style="display:flex;align-items:center;gap:6px;margin-top:3px">'+
+      '<div style="flex:1;height:5px;background:var(--border);border-radius:40px;overflow:hidden;min-width:60px">'+
+        '<div style="height:100%;width:'+Math.min(pct,100)+'%;background:'+barColor+';border-radius:40px"></div>'+
+      '</div>'+
+      '<span style="font-size:10px;font-weight:700;color:'+barColor+';white-space:nowrap">'+used+(limit?'/'+limit:'')+'</span>'+
+    '</div>'
+  ) : '';
+  var endHTML = end ? ' <span style="font-size:10px;color:var(--text-light)">até '+fmtD(end)+'</span>' : '';
+  return '<span style="font-size:10px;font-weight:800;padding:2px 8px;border-radius:20px;background:'+tagBg+';color:'+tagColor+'">'+tagLabel+'</span>'+endHTML+barHTML;
+}
+
+// ── PROCEDIMENTO PROMOCIONAL — Reativação ───────────────────────────────────
+async function reactivatePromo(procId, currentEndDate) {
+  const today = new Date().toISOString().slice(0,10);
+  const needsNewDate = currentEndDate && currentEndDate < today;
+  if (needsNewDate) {
+    const newDate = prompt('A data de encerramento já passou. Informe nova data (AAAA-MM-DD):');
+    if (!newDate) return;
+    if (newDate <= today) { showToast('Data deve ser futura','error'); return; }
+    try {
+      await PATCH('/api/procedures/' + procId + '/reactivate-promo-with-date', { promo_end_date: newDate });
+      showToast('🏷️ Promoção reativada!','ok'); renderProcsAdmin();
+    } catch(e) { showToast(e.message,'error'); }
+    return;
+  }
+  try {
+    await PATCH('/api/procedures/' + procId + '/reactivate-promo', {});
+    showToast('🏷️ Promoção reativada!','ok'); renderProcsAdmin();
+  } catch(e) {
+    if (e.message && e.message.includes('data de encerramento')) {
+      const nd = prompt('A data já passou. Nova data (AAAA-MM-DD):');
+      if (!nd) return;
+      try { await PATCH('/api/procedures/'+procId+'/reactivate-promo-with-date',{promo_end_date:nd}); showToast('🏷️ Reativado!','ok'); renderProcsAdmin(); }
+      catch(e2) { showToast(e2.message,'error'); }
+    } else { showToast(e.message,'error'); }
+  }
+}
+
 // ── RELATÓRIO DE AGENDAMENTOS ────────────────────────────────────────────────
 var _rptScope   = 'future';
 var _rptPage    = 1;
@@ -4316,7 +4429,8 @@ async function renderProcsAdmin() {
   if (tbody) tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-light)">Carregando...</td></tr>';
 
   try {
-    const list = await getProcs();
+    // Admin: busca todos incluindo promos inativas
+    const list = await GET('/api/procedures/admin-all');
 
     if (!list || list.length === 0) {
       if (tbody) tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-light)">Nenhum procedimento cadastrado.</td></tr>';
@@ -4329,11 +4443,15 @@ async function renderProcsAdmin() {
       tbody.innerHTML = list.map(p => `
         <tr data-id="${p.id}" draggable="true">
           <td><span class="drag-handle" title="Arrastar para reordenar">⠿</span></td>
-          <td style="font-weight:700">${p.name}</td>
+          <td style="font-weight:700">
+            <div>${p.name}</div>
+            ${p.is_promo ? '<div style="margin-top:4px">' + promoProgressHTML(p, false) + '</div>' : ''}
+          </td>
           <td>${fmtDur(p.dur)}</td>
           <td style="color:var(--gold);font-weight:700">${_valuesVisible ? fmtPrice(p) : '<span class="val-mask">••••••</span>'}</td>
           <td>
             <button class="act-btn" onclick="openProcModal(${p.id})">Editar</button>
+            ${p.is_promo && !p.active ? '<button class="act-btn" data-pid="'+p.id+'" data-pend="'+String(p.promo_end_date||'').slice(0,10)+'" onclick="reactivatePromo(this.dataset.pid,this.dataset.pend)" style="color:var(--gold-deep);border-color:var(--gold)">↺ Reativar</button>' : ''}
             <button class="act-btn danger" onclick="deleteProc(${p.id})">Remover</button>
           </td>
         </tr>
@@ -4355,8 +4473,10 @@ async function renderProcsAdmin() {
               </div>
             </div>
           </div>
+          ${p.is_promo ? '<div style="margin-top:8px">' + promoProgressHTML(p, true) + '</div>' : ''}}
           <div class="proc-card-actions" style="margin-top:10px">
             <button class="act-btn" onclick="openProcModal(${p.id})">Editar</button>
+            ${p.is_promo && !p.active ? '<button class="act-btn" data-pid="'+p.id+'" data-pend="'+String(p.promo_end_date||'').slice(0,10)+'" onclick="reactivatePromo(this.dataset.pid,this.dataset.pend)" style="color:var(--gold-deep);border-color:var(--gold)">↺ Reativar</button>' : ''}
             <button class="act-btn danger" onclick="deleteProc(${p.id})" style="color:var(--error);border-color:var(--error)">Remover</button>
           </div>
         </div>
@@ -4463,6 +4583,11 @@ function toggleCourseFields() {
   const fields = document.getElementById('proc-course-fields');
   if (fields) fields.style.display = cb?.checked ? 'block' : 'none';
 }
+function togglePromoFields() {
+  const cb = document.getElementById('proc-modal-is-promo');
+  const fields = document.getElementById('proc-promo-fields');
+  if (fields) fields.style.display = cb?.checked ? 'flex' : 'none';
+}
 function addProcModule(value='') {
   const list = document.getElementById('proc-modules-list');
   if (!list) return;
@@ -4518,6 +4643,30 @@ function openProcModal(id) {
         <span style="font-weight:700;font-size:13px;color:var(--rose)">🎓 Este procedimento é um curso</span>
       </label>
     </div>
+    <div id="proc-promo-metrics" style="display:none;margin-top:14px;padding:14px 16px;background:var(--gold-light);border-radius:var(--r-md);border:1.5px solid var(--gold)"></div>
+
+    <div style="margin-top:10px;padding:12px 14px;background:var(--gold-light);border-radius:var(--r-sm);border:1px solid var(--gold)">
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:0">
+        <input type="checkbox" id="proc-modal-is-promo" onchange="togglePromoFields()"
+          style="width:18px;height:18px;accent-color:var(--gold);cursor:pointer;flex-shrink:0;appearance:auto;-webkit-appearance:checkbox">
+        <span style="font-weight:700;font-size:13px;color:var(--gold-deep)">🏷️ Este procedimento é promocional</span>
+      </label>
+    </div>
+    <div id="proc-promo-fields" style="display:none;margin-top:8px;padding:14px;background:#fff;border-radius:var(--r-sm);border:1.5px solid var(--gold);flex-direction:column;gap:12px">
+      <p style="font-size:12px;color:var(--text-light);line-height:1.5;margin-bottom:4px">Desativa ao atingir o limite <strong>ou</strong> a data — o que ocorrer primeiro. Ambos opcionais.</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="fg">
+          <label>Vagas <span style="font-weight:400;color:var(--text-light)">(opc.)</span></label>
+          <input type="number" id="proc-promo-limit" min="1" placeholder="Ex: 10"
+            style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:var(--r-sm);font-family:inherit;font-size:13px">
+        </div>
+        <div class="fg">
+          <label>Válido até <span style="font-weight:400;color:var(--text-light)">(opc.)</span></label>
+          <input type="date" id="proc-promo-end-date"
+            style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:var(--r-sm);font-family:inherit;font-size:13px">
+        </div>
+      </div>
+    </div>
     <div id="proc-course-fields" style="display:none">
       <div style="height:1px;background:var(--border);margin:14px 0"></div>
       <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:var(--text-light);margin-bottom:12px">Dados do Certificado</div>
@@ -4561,6 +4710,58 @@ function openProcModal(id) {
         const cb = document.getElementById('proc-modal-is-course');
         if (cb) { cb.checked = true; toggleCourseFields(); }
       }
+      if (p.is_promo) {
+        const cbp = document.getElementById('proc-modal-is-promo');
+        if (cbp) { cbp.checked = true; togglePromoFields(); }
+        const limEl = document.getElementById('proc-promo-limit');
+        if (limEl && p.promo_limit) limEl.value = p.promo_limit;
+        const endEl = document.getElementById('proc-promo-end-date');
+        if (endEl && p.promo_end_date) endEl.value = String(p.promo_end_date).slice(0,10);
+        // Card de métricas
+        const metricsEl = document.getElementById('proc-promo-metrics');
+        if (metricsEl) {
+          metricsEl.style.display = 'block';
+          const used  = Number(p.promo_used) || 0;
+          const limit = p.promo_limit ? Number(p.promo_limit) : null;
+          const pct   = limit ? Math.round((used/limit)*100) : null;
+          const endDate  = p.promo_end_date ? String(p.promo_end_date).slice(0,10) : null;
+          const daysLeft = endDate ? Math.ceil((new Date(endDate+'T23:59:59')-new Date())/86400000) : null;
+          const MS=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+          const fmtD = function(d){var pt=d.split('-');return parseInt(pt[2])+' '+MS[+pt[1]-1]+'/'+pt[0];};
+          var barHTML = '';
+          if (limit) {
+            var bw = Math.min(pct,100);
+            var bc = pct>=75?'var(--error)':pct>=50?'var(--warn)':'var(--gold)';
+            barHTML = '<div style="margin-top:10px">'+
+              '<div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700;color:var(--text-light);margin-bottom:4px">'+
+                '<span>'+used+' de '+limit+' vagas utilizadas</span><span>'+pct+'%</span>'+
+              '</div>'+
+              '<div style="height:8px;background:var(--border);border-radius:40px;overflow:hidden">'+
+                '<div style="height:100%;width:'+bw+'%;background:'+bc+';border-radius:40px"></div>'+
+              '</div>'+
+            '</div>';
+          }
+          var dateHTML = '';
+          if (endDate) {
+            var dl = daysLeft>0?daysLeft+' dia(s) restante(s)':'Encerrado';
+            var dc = daysLeft<=0?'var(--error)':daysLeft<=3?'var(--warn)':'var(--gold-deep)';
+            dateHTML = '<div style="font-size:12px;margin-top:8px;color:'+dc+';font-weight:700">📅 Válido até '+fmtD(endDate)+' · '+dl+'</div>';
+          }
+          metricsEl.innerHTML =
+            '<div style="font-size:13px;font-weight:800;color:var(--dark);margin-bottom:10px">📊 Desempenho da Promoção</div>'+
+            '<div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap">'+
+              '<div style="text-align:center">'+
+                '<div style="font-size:30px;font-weight:800;color:var(--gold)">'+used+'</div>'+
+                '<div style="font-size:10px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em">agendamentos</div>'+
+              '</div>'+
+              (limit?'<div style="text-align:center">'+
+                '<div style="font-size:30px;font-weight:800;color:var(--text)">'+(limit-used)+'</div>'+
+                '<div style="font-size:10px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em">vagas restantes</div>'+
+              '</div>':'')+
+            '</div>'+
+            barHTML+dateHTML;
+        }
+      }
       const _sn = (elId, val) => { const el=document.getElementById(elId); if(el&&val!=null) el.value=val; };
       _sn('proc-modal-cert-name', p.cert_name);
       _sn('proc-modal-cert-hours', p.cert_hours);
@@ -4594,12 +4795,16 @@ async function saveProc(id) {
   const cert_description = document.getElementById('proc-modal-cert-desc')?.value.trim()||null;
   const cert_layout_url  = document.getElementById('proc-modal-cert-layout')?.value.trim()||null;
   const cert_modules     = is_course ? JSON.stringify(getProcModules()) : null;
+  const is_promo       = document.getElementById('proc-modal-is-promo')?.checked || false;
+  const promo_limit    = is_promo ? (parseInt(document.getElementById('proc-promo-limit')?.value)||null) : null;
+  const promo_end_date = is_promo ? (document.getElementById('proc-promo-end-date')?.value||null) : null;
+  const promoData = { is_promo, promo_limit, promo_end_date };
   const courseData = { is_course, cert_name, cert_hours, cert_abbreviation,
                        cert_description, cert_modules, cert_layout_url };
   if(!name||!dur){showToast('Preencha nome e duração','error');return}
   try {
-    if(id) await PUT('/api/procedures/'+id,{name,dur,price,pt,description,...courseData});
-    else await POST('/api/procedures',{name,dur,price,pt,description,...courseData});
+    if(id) await PUT('/api/procedures/'+id,{name,dur,price,pt,description,...courseData,...promoData});
+    else await POST('/api/procedures',{name,dur,price,pt,description,...courseData,...promoData});
     clearProcsCache(); clearCitiesCache();
     showToast('Procedimento salvo','ok');
     closeModal(); renderProcsAdmin();

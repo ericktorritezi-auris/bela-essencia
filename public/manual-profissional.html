@@ -357,7 +357,9 @@
     <a href="#retro-booking" class="toc-link">⏮️ Ag. Retroativa</a>
     <a href="#tatica" class="toc-link">⚡ Ag. Tática</a>
     <a href="#recorrencia" class="toc-link">🔁 Recorrência</a>
+    <a href="#procedimento-promocional" class="toc-link">🏷️ Procedimento Promocional</a>
     <a href="#agendamentos" class="toc-link">📊 Agendamentos</a>
+    <a href="#procedimento-promocional" class="toc-link">🏷️ Procedimento Promocional</a>
     <a href="#bloquear" class="toc-link">🚫 Bloquear</a>
     <a href="#liberar" class="toc-link">✅ Liberar</a>
     <a href="#disponibilidade" class="toc-link">📅 Disponibilidade</a>
@@ -852,6 +854,37 @@
         </div>
       </section>
 
+      <!-- PROCEDIMENTO PROMOCIONAL -->
+      <section class="section" id="procedimento-promocional">
+        <div class="section-header">
+          <div class="section-icon">🏷️</div>
+          <div class="section-title">Procedimento Promocional</div>
+        </div>
+        <div class="section-body">
+          <p>Um procedimento promocional é um serviço com tempo de vida limitado — desativa automaticamente ao atingir o número de vagas <strong>ou</strong> a data de encerramento, o que ocorrer primeiro. Ideal para lançamentos, ofertas relâmpago e ações de marketing com urgência real.</p>
+          <div class="sub">
+            <h4>📌 Como criar</h4>
+            <p>Procedimentos → <em>+ Novo</em> ou edite um existente → marque <strong>🏷️ Este procedimento é promocional</strong>. Dois campos aparecem: <strong>Vagas disponíveis</strong> (opcional) e <strong>Válido até</strong> (opcional). Se preencher apenas vagas, encerra ao esgotá-las. Se preencher apenas data, encerra na data. Se preencher os dois, encerra no que acontecer primeiro.</p>
+          </div>
+          <div class="sub">
+            <h4>⚡ Desativação automática</h4>
+            <p>Cada agendamento feito incrementa o contador imediatamente. Ao atingir o limite, o procedimento é desativado na hora. Datas vencidas são verificadas diariamente à meia-noite. O procedimento desativado some da lista do cliente mas permanece visível no painel como inativo.</p>
+          </div>
+          <div class="sub">
+            <h4>↺ Reativar</h4>
+            <p>Na lista de Procedimentos, o item inativo exibe o botão <strong>↺ Reativar</strong>. Se tinha apenas vagas → reativa imediatamente com contador zerado. Se tinha data vencida → o sistema pede uma nova data válida antes de reativar. Para remover a promoção definitivamente → edite e desmarque a flag; vira item regular do catálogo.</p>
+          </div>
+          <div class="sub">
+            <h4>🎯 Exibição para o cliente</h4>
+            <p>Procedimentos promocionais aparecem sempre em <strong>primeiro</strong> na lista, com barra animada em gradiente e mensagem de urgência automática que muda conforme as vagas diminuem ou a data se aproxima: <em>"🔥 X vagas disponíveis até DD/MM"</em>, <em>"⚡ Restam apenas X vagas!"</em>, <em>"🚨 ÚLTIMAS X vagas! Não perca!"</em>.</p>
+          </div>
+          <div class="tip">
+            <span>🏷️</span>
+            <p>Anuncie a promoção nas redes com o número exato de vagas — o sistema conta, desativa e cria urgência automaticamente. Você foca no marketing.</p>
+          </div>
+        </div>
+      </section>
+
       <!-- RELATÓRIO DE AGENDAMENTOS -->
       <section class="section" id="agendamentos">
         <div class="section-header">
@@ -890,6 +923,62 @@
           <div class="tip">
             <span>📊</span>
             <p>Use esta seção para preparar relatórios mensais de atendimentos, conferir pendências de pagamento ou ter uma visão geral da agenda antes de uma reunião.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- PROCEDIMENTO PROMOCIONAL -->
+      <section class="section" id="procedimento-promocional">
+        <div class="section-header">
+          <div class="section-icon">🏷️</div>
+          <div class="section-title">Procedimento Promocional</div>
+        </div>
+        <div class="section-body">
+          <p>A funcionalidade de <strong>Procedimento Promocional</strong> permite criar itens com tempo ou vagas limitadas — ideais para lançamentos, promoções sazonais e ofertas especiais. O item aparece com destaque visual na tela do cliente e é desativado automaticamente quando atinge os critérios definidos.</p>
+
+          <div class="sub">
+            <h4>📌 Como criar um procedimento promocional</h4>
+            <p>Em <strong>Procedimentos → Novo</strong> (ou editar um existente), preencha os dados normais e marque a opção <em>🏷️ Este procedimento é promocional</em>. Dois campos adicionais aparecerão:</p>
+            <ul style="margin:8px 0 0 18px;line-height:2">
+              <li><strong>Vagas disponíveis</strong> — quantidade máxima de agendamentos permitidos (opcional)</li>
+              <li><strong>Válido até</strong> — data de encerramento da promoção (opcional)</li>
+            </ul>
+            <p style="margin-top:8px">Ambos os campos são opcionais e podem ser usados juntos ou separados.</p>
+          </div>
+
+          <div class="sub">
+            <h4>⚙️ Regras de desativação automática</h4>
+            <p>O procedimento é desativado automaticamente — e some da lista do cliente — quando:</p>
+            <ul style="margin:8px 0 0 18px;line-height:2">
+              <li>Atinge o número de vagas definido, <strong>ou</strong></li>
+              <li>Chega na data de encerramento</li>
+            </ul>
+            <p style="margin-top:6px">O que ocorrer primeiro. Se apenas um critério for definido, somente ele vale.</p>
+          </div>
+
+          <div class="sub">
+            <h4>✨ Destaque na tela do cliente</h4>
+            <p>Procedimentos promocionais ativos aparecem <strong>sempre em primeiro</strong> na lista do cliente, com borda animada, tag <em>🏷️ Promocional</em> e uma mensagem de urgência automática que vai mudando conforme as vagas diminuem ou a data se aproxima. Exemplos:</p>
+            <ul style="margin:8px 0 0 18px;line-height:2">
+              <li>Com vagas: <em>"🔥 8 vagas disponíveis — garanta a sua!"</em> → <em>"🚨 ÚLTIMAS 2 vagas! Corra!"</em></li>
+              <li>Com data: <em>"📅 Oferta especial válida até 30 jun"</em> → <em>"🚨 Últimos dias! Encerra 30 jun"</em></li>
+            </ul>
+            <p style="margin-top:6px">As mensagens usam as cores da sua agenda automaticamente.</p>
+          </div>
+
+          <div class="sub">
+            <h4>↺ Reativar um procedimento promocional encerrado</h4>
+            <p>Após ser desativado, o procedimento aparece na lista de procedimentos do painel com o botão <strong>↺ Reativar</strong>. Ao clicar:</p>
+            <ul style="margin:8px 0 0 18px;line-height:2">
+              <li>Se a promoção tinha apenas <strong>limite de vagas</strong>: reativa direto, contador zerado do início</li>
+              <li>Se tinha <strong>data de encerramento</strong> já passada: o sistema exige uma nova data válida antes de reativar</li>
+            </ul>
+            <p style="margin-top:6px">Também é possível desmarcar a flag promocional ao editar — o procedimento vira um item de catálogo normal.</p>
+          </div>
+
+          <div class="tip">
+            <span>🏷️</span>
+            <p>Use procedimentos promocionais para criar escassez e urgência: <em>"10 vagas para sessão de avaliação gratuita"</em>, <em>"Oferta de lançamento válida até 31/07"</em>. O sistema cuida do destaque e da desativação automática.</p>
           </div>
         </div>
       </section>
