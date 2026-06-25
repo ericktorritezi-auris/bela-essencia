@@ -1158,16 +1158,7 @@ async function initDB() {
       // Migração: pagamento do procedimento
       try { await client.query(`ALTER TABLE "${schema_name}".appointments ADD COLUMN IF NOT EXISTS paid BOOLEAN NOT NULL DEFAULT FALSE`); } catch {}
       try { await client.query(`ALTER TABLE "${schema_name}".appointments ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ`); } catch {}
-      // Migração de dados: agendamentos até hoje entram como pagos (dados históricos)
-      try {
-        await client.query(
-          `UPDATE "${schema_name}".appointments
-           SET paid = TRUE, paid_at = NOW()
-           WHERE date <= CURRENT_DATE
-             AND status IN ('confirmed','realizado')
-             AND paid = FALSE`
-        );
-      } catch {}
+      // [Migração paid — já aplicada em todos os tenants]
       // Migração: campos "Sobre o Profissional"
       try { await client.query(`ALTER TABLE tenant_configs ADD COLUMN IF NOT EXISTS prof_photo_url TEXT`); } catch {}
       try { await client.query(`ALTER TABLE tenant_configs ADD COLUMN IF NOT EXISTS prof_profession VARCHAR(200)`); } catch {}
@@ -1481,6 +1472,11 @@ async function initDB() {
         `SELECT schema_name FROM tenants WHERE schema_name IS NOT NULL AND active=TRUE`
       );
       for (const { schema_name: sn } of tSchemas) {
+        // Procedimentos promocionais
+        try { await pool.query(`ALTER TABLE "${sn}".procedures ADD COLUMN IF NOT EXISTS is_promo BOOLEAN NOT NULL DEFAULT FALSE`); } catch {}
+        try { await pool.query(`ALTER TABLE "${sn}".procedures ADD COLUMN IF NOT EXISTS promo_limit INTEGER`); } catch {}
+        try { await pool.query(`ALTER TABLE "${sn}".procedures ADD COLUMN IF NOT EXISTS promo_end_date DATE`); } catch {}
+        try { await pool.query(`ALTER TABLE "${sn}".procedures ADD COLUMN IF NOT EXISTS promo_used INTEGER NOT NULL DEFAULT 0`); } catch {}
         // Recorrência: criar tabela e colunas se não existirem
         try {
           await pool.query(`CREATE TABLE IF NOT EXISTS "${sn}".recurrence_groups (
@@ -1748,7 +1744,7 @@ function requireAdmin(req, res, next) {
 app.get('/api/health', async (req, res) => {
   try {
     await req.db('SELECT 1');
-    res.json({ ok: true, version: '2.9.5', db: 'connected' });
+    res.json({ ok: true, version: '2.9.6', db: 'connected' });
   } catch {
     res.status(503).json({ ok: false, db: 'disconnected' });
   }
@@ -1943,6 +1939,35 @@ app.patch('/api/procedures/reorder', requireAdmin, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ── Reativar procedimento promocional ────────────────────────────────────────
+app.patch('/api/procedures/:id/reactivate-promo', requireAdmin, async (req, res) => {
+  try {
+    const { rows: proc } = await req.db('SELECT * FROM procedures WHERE id=$1', [req.params.id]);
+    if (!proc.length) return res.status(404).json({ error: 'Não encontrado' });
+    const p = proc[0];
+    if (p.promo_end_date) {
+      const endDate = new Date(String(p.promo_end_date).slice(0,10) + 'T23:59:59');
+      if (endDate < new Date())
+        return res.status(400).json({ error: 'A data de encerramento já passou. Informe uma nova data.', needsDate: true });
+    }
+    const { rows } = await req.db('UPDATE procedures SET active=TRUE, promo_used=0 WHERE id=$1 RETURNING *', [req.params.id]);
+    res.json(rows[0]);
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+app.patch('/api/procedures/:id/reactivate-promo-with-date', requireAdmin, async (req, res) => {
+  const { promo_end_date } = req.body;
+  if (!promo_end_date) return res.status(400).json({ error: 'Nova data obrigatória' });
+  if (new Date(promo_end_date + 'T23:59:59') < new Date()) return res.status(400).json({ error: 'Data deve ser futura' });
+  try {
+    const { rows } = await req.db(
+      'UPDATE procedures SET active=TRUE, promo_used=0, promo_end_date=$1 WHERE id=$2 RETURNING *',
+      [promo_end_date, req.params.id]
+    );
+    res.json(rows[0]);
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
 app.get('/api/procedures', async (req, res) => {
   try {
     const { rows } = await req.db(
@@ -1954,20 +1979,35 @@ app.get('/api/procedures', async (req, res) => {
   }
 });
 
+// Admin: retorna TODOS os procedimentos incluindo inativos (para gerenciar promos)
+app.get('/api/procedures/admin-all', requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await req.db(
+      'SELECT * FROM procedures ORDER BY active DESC, COALESCE(sort_order, id), id'
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/procedures', requireAdmin, async (req, res) => {
   const { name, dur, price, pt, description,
           is_course, cert_name, cert_hours, cert_description,
-          cert_modules, cert_layout_url, cert_field_config, cert_abbreviation } = req.body;
+          cert_modules, cert_layout_url, cert_field_config, cert_abbreviation,
+          is_promo, promo_limit, promo_end_date } = req.body;
   if (!name || !dur) return res.status(400).json({ error: 'Nome e duração obrigatórios' });
   try {
     const { rows } = await req.db(
       `INSERT INTO procedures (name, dur, price, pt, description,
         is_course, cert_name, cert_hours, cert_description,
-        cert_modules, cert_layout_url, cert_field_config, cert_abbreviation)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+        cert_modules, cert_layout_url, cert_field_config, cert_abbreviation,
+        is_promo, promo_limit, promo_end_date, promo_used)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,0) RETURNING *`,
       [name, parseInt(dur), price||null, pt||'fixed', description||null,
        is_course||false, cert_name||null, cert_hours||null, cert_description||null,
-       cert_modules||null, cert_layout_url||null, cert_field_config||null, cert_abbreviation||null]
+       cert_modules||null, cert_layout_url||null, cert_field_config||null, cert_abbreviation||null,
+       is_promo||false, promo_limit||null, promo_end_date||null]
     );
     res.status(201).json(rows[0]);
   } catch (err) {
@@ -1978,16 +2018,19 @@ app.post('/api/procedures', requireAdmin, async (req, res) => {
 app.put('/api/procedures/:id', requireAdmin, async (req, res) => {
   const { name, dur, price, pt, description,
           is_course, cert_name, cert_hours, cert_description,
-          cert_modules, cert_layout_url, cert_field_config, cert_abbreviation } = req.body;
+          cert_modules, cert_layout_url, cert_field_config, cert_abbreviation,
+          is_promo, promo_limit, promo_end_date } = req.body;
   try {
     const { rows } = await req.db(
       `UPDATE procedures SET name=$1, dur=$2, price=$3, pt=$4, description=$5,
         is_course=$6, cert_name=$7, cert_hours=$8, cert_description=$9,
-        cert_modules=$10, cert_layout_url=$11, cert_field_config=$12, cert_abbreviation=$13
-       WHERE id=$14 RETURNING *`,
+        cert_modules=$10, cert_layout_url=$11, cert_field_config=$12, cert_abbreviation=$13,
+        is_promo=$14, promo_limit=$15, promo_end_date=$16
+       WHERE id=$17 RETURNING *`,
       [name, parseInt(dur), price||null, pt||'fixed', description||null,
        is_course||false, cert_name||null, cert_hours?parseInt(cert_hours):null, cert_description||null,
        cert_modules||null, cert_layout_url||null, cert_field_config||null, cert_abbreviation||null,
+       is_promo||false, promo_limit||null, promo_end_date||null,
        req.params.id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Procedimento não encontrado' });
@@ -2067,6 +2110,23 @@ app.post('/api/appointments', async (req, res) => {
       );
       return rows[0];
     });
+
+    // Hook promo: incrementar contador e verificar se atingiu limite/data
+    try {
+      const { rows: pRows } = await req.db(
+        'SELECT is_promo, promo_limit, promo_end_date, promo_used FROM procedures WHERE id=$1', [appt.proc_id]
+      );
+      if (pRows.length && pRows[0].is_promo) {
+        const newUsed = (Number(pRows[0].promo_used)||0) + 1;
+        await req.db('UPDATE procedures SET promo_used=$1 WHERE id=$2', [newUsed, appt.proc_id]);
+        const limitHit = pRows[0].promo_limit && newUsed >= Number(pRows[0].promo_limit);
+        const dateHit  = pRows[0].promo_end_date && new Date(String(pRows[0].promo_end_date).slice(0,10)+'T23:59:59') < new Date();
+        if (limitHit || dateHit) {
+          await req.db('UPDATE procedures SET active=FALSE WHERE id=$1', [appt.proc_id]);
+          console.log('[Promo] proc ' + appt.proc_id + ' desativado automaticamente');
+        }
+      }
+    } catch(e) { console.warn('[Promo] hook:', e.message); }
 
     // Notificação assíncrona — não bloqueia a resposta
     appt._schemaName = req.schemaName; // para isolamento de push por tenant
@@ -3643,7 +3703,7 @@ app.get('/api/backup/export', requireAdmin, async (req, res) => {
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.json({
       exportedAt: new Date().toISOString(),
-      version: '2.9.5',
+      version: '2.9.6',
       procedures:    procs.rows,
       appointments:  appts.rows,
       blocked_dates: blocked.rows,
@@ -5299,6 +5359,20 @@ async function sendTenantWelcomeEmail(tenant, { admin_user, admin_pass, business
   }
 }
 
+// ── Cron: desativar promos vencidos ──────────────────────────────────────────
+async function checkExpiredPromos() {
+  try {
+    const { rows: ts } = await pool.query("SELECT schema_name FROM tenants WHERE schema_name IS NOT NULL AND active=TRUE");
+    for (const { schema_name: sn } of ts) {
+      try {
+        const r1 = await pool.query(`UPDATE "${sn}".procedures SET active=FALSE WHERE is_promo=TRUE AND active=TRUE AND promo_end_date IS NOT NULL AND promo_end_date < CURRENT_DATE`);
+        const r2 = await pool.query(`UPDATE "${sn}".procedures SET active=FALSE WHERE is_promo=TRUE AND active=TRUE AND promo_limit IS NOT NULL AND promo_used >= promo_limit`);
+        if ((r1.rowCount+r2.rowCount)>0) console.log('[Promo] ' + (r1.rowCount+r2.rowCount) + ' desativado(s) em ' + sn);
+      } catch(e) { console.warn('[Promo] ' + sn + ':', e.message); }
+    }
+  } catch(e) { console.warn('[Promo]', e.message); }
+}
+
 // ── Cron: verifica vencimentos diariamente às 08h00 BRT (= 11h00 UTC) ────────
 // ══════════════════════════════════════════════════════════════════════════════
 // INTEGRAÇÃO SISTÊMICA — Webhook para Synapse Core
@@ -6426,6 +6500,7 @@ app.post('/api/admin/send-daily-email', requireAdmin, async (req, res) => {
 // ── Cron: snapshot à meia-noite BRT (03h00 UTC) ─────────────────────────────
 cron.schedule('0 3 * * *', async () => {
   console.log('[Cron] 00h00 BRT — gerando snapshots da agenda do dia...');
+  checkExpiredPromos().catch(e => console.warn('[Promo] cron:', e.message));
   try {
     const today = todayBrasilia();
     const { rows: tenants } = await pool.query(
