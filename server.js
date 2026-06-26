@@ -242,6 +242,12 @@ async function createTenantSchema(schemaName) {
         id SERIAL PRIMARY KEY, config_id INTEGER NOT NULL, break_start TIME NOT NULL,
         break_end TIME NOT NULL
       )`,
+      `CREATE TABLE IF NOT EXISTS proc_categories (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        sort_order INTEGER DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`,
       `CREATE TABLE IF NOT EXISTS appointments (
         id VARCHAR(30) PRIMARY KEY, city_id INTEGER NOT NULL, city_name VARCHAR(100) NOT NULL,
         proc_id INTEGER, proc_name VARCHAR(200) NOT NULL, date DATE NOT NULL,
@@ -1475,6 +1481,8 @@ async function initDB() {
         // Procedimentos promocionais
         try { await pool.query(`ALTER TABLE "${sn}".procedures ADD COLUMN IF NOT EXISTS is_promo BOOLEAN NOT NULL DEFAULT FALSE`); } catch {}
         try { await pool.query(`ALTER TABLE "${sn}".procedures ADD COLUMN IF NOT EXISTS deleted BOOLEAN NOT NULL DEFAULT FALSE`); } catch {}
+        try { await pool.query(`CREATE TABLE IF NOT EXISTS "${sn}".proc_categories (id SERIAL PRIMARY KEY, name VARCHAR(100) NOT NULL, sort_order INTEGER DEFAULT 0, created_at TIMESTAMPTZ DEFAULT NOW())`); } catch {}
+        try { await pool.query(`ALTER TABLE "${sn}".procedures ADD COLUMN IF NOT EXISTS category_id INTEGER REFERENCES "${sn}".proc_categories(id) ON DELETE SET NULL`); } catch {}
         try { await pool.query(`ALTER TABLE "${sn}".procedures ADD COLUMN IF NOT EXISTS promo_limit INTEGER`); } catch {}
         try { await pool.query(`ALTER TABLE "${sn}".procedures ADD COLUMN IF NOT EXISTS promo_end_date DATE`); } catch {}
         try { await pool.query(`ALTER TABLE "${sn}".procedures ADD COLUMN IF NOT EXISTS promo_used INTEGER NOT NULL DEFAULT 0`); } catch {}
@@ -1745,7 +1753,7 @@ function requireAdmin(req, res, next) {
 app.get('/api/health', async (req, res) => {
   try {
     await req.db('SELECT 1');
-    res.json({ ok: true, version: '2.9.6', db: 'connected' });
+    res.json({ ok: true, version: '2.9.7', db: 'connected' });
   } catch {
     res.status(503).json({ ok: false, db: 'disconnected' });
   }
@@ -1969,10 +1977,49 @@ app.patch('/api/procedures/:id/reactivate-promo-with-date', requireAdmin, async 
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
+// ── Categorias de Procedimentos ─────────────────────────────────────────────
+app.get('/api/proc-categories', requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await req.db(
+      'SELECT * FROM proc_categories ORDER BY sort_order, id'
+    );
+    res.json(rows);
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/proc-categories', requireAdmin, async (req, res) => {
+  const { name } = req.body;
+  if (!name || !name.trim()) return res.status(400).json({ error: 'Nome obrigatório' });
+  try {
+    const { rows } = await req.db(
+      'INSERT INTO proc_categories (name) VALUES ($1) RETURNING *',
+      [name.trim()]
+    );
+    res.status(201).json(rows[0]);
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/proc-categories/:id', requireAdmin, async (req, res) => {
+  try {
+    // Desvincular procedimentos desta categoria antes de remover
+    await req.db(
+      'UPDATE procedures SET category_id=NULL WHERE category_id=$1',
+      [req.params.id]
+    );
+    await req.db('DELETE FROM proc_categories WHERE id=$1', [req.params.id]);
+    res.json({ ok: true });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── GET /api/procedures — retorna com nome da categoria ──────────────────────
 app.get('/api/procedures', async (req, res) => {
   try {
     const { rows } = await req.db(
-      'SELECT * FROM procedures WHERE active = TRUE ORDER BY COALESCE(sort_order, id), id'
+      `SELECT p.*, pc.name AS category_name
+       FROM procedures p
+       LEFT JOIN proc_categories pc ON pc.id = p.category_id
+       WHERE p.active = TRUE
+       ORDER BY COALESCE(p.sort_order, p.id), p.id`
     );
     res.json(rows);
   } catch (err) {
@@ -1984,7 +2031,11 @@ app.get('/api/procedures', async (req, res) => {
 app.get('/api/procedures/admin-all', requireAdmin, async (req, res) => {
   try {
     const { rows } = await req.db(
-      'SELECT * FROM procedures WHERE deleted IS NOT TRUE ORDER BY active DESC, is_promo DESC, COALESCE(sort_order, id), id'
+      `SELECT p.*, pc.name AS category_name
+       FROM procedures p
+       LEFT JOIN proc_categories pc ON pc.id = p.category_id
+       WHERE p.deleted IS NOT TRUE
+       ORDER BY p.active DESC, p.is_promo DESC, COALESCE(p.sort_order, p.id), p.id`
     );
     res.json(rows);
   } catch (err) {
@@ -2020,18 +2071,18 @@ app.put('/api/procedures/:id', requireAdmin, async (req, res) => {
   const { name, dur, price, pt, description,
           is_course, cert_name, cert_hours, cert_description,
           cert_modules, cert_layout_url, cert_field_config, cert_abbreviation,
-          is_promo, promo_limit, promo_end_date } = req.body;
+          is_promo, promo_limit, promo_end_date, category_id } = req.body;
   try {
     const { rows } = await req.db(
       `UPDATE procedures SET name=$1, dur=$2, price=$3, pt=$4, description=$5,
         is_course=$6, cert_name=$7, cert_hours=$8, cert_description=$9,
         cert_modules=$10, cert_layout_url=$11, cert_field_config=$12, cert_abbreviation=$13,
-        is_promo=$14, promo_limit=$15, promo_end_date=$16
-       WHERE id=$17 RETURNING *`,
+        is_promo=$14, promo_limit=$15, promo_end_date=$16, category_id=$17
+       WHERE id=$18 RETURNING *`,
       [name, parseInt(dur), price||null, pt||'fixed', description||null,
        is_course||false, cert_name||null, cert_hours?parseInt(cert_hours):null, cert_description||null,
        cert_modules||null, cert_layout_url||null, cert_field_config||null, cert_abbreviation||null,
-       is_promo||false, promo_limit||null, promo_end_date||null,
+       is_promo||false, promo_limit||null, promo_end_date||null, category_id||null,
        req.params.id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Procedimento não encontrado' });
@@ -3704,7 +3755,7 @@ app.get('/api/backup/export', requireAdmin, async (req, res) => {
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.json({
       exportedAt: new Date().toISOString(),
-      version: '2.9.6',
+      version: '2.9.7',
       procedures:    procs.rows,
       appointments:  appts.rows,
       blocked_dates: blocked.rows,
