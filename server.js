@@ -2798,12 +2798,16 @@ app.get('/api/historico/cidades', requireAdmin, async (req, res) => {
          COUNT(*)::int AS total_sessoes,
          SUM(CASE WHEN price IS NOT NULL THEN price ELSE 0 END)::numeric AS total_valor,
          MAX(date)::text AS ultimo_uso
-       FROM appointments WHERE status IN ('confirmed','realizado') AND city_name IS NOT NULL
+       FROM appointments
+       WHERE status IN ('confirmed','realizado')
+         AND city_name IS NOT NULL AND TRIM(city_name) <> ''
        GROUP BY city_name ORDER BY total_sessoes DESC
        LIMIT $1 OFFSET $2`, [limit, off]
     );
     const { rows: ct } = await req.db(
-      `SELECT COUNT(DISTINCT city_name)::int AS total FROM appointments WHERE status IN ('confirmed','realizado') AND city_name IS NOT NULL`
+      `SELECT COUNT(DISTINCT city_name)::int AS total FROM appointments
+       WHERE status IN ('confirmed','realizado')
+         AND city_name IS NOT NULL AND TRIM(city_name) <> ''`
     );
     res.json({ records: rows, total: ct[0].total, page: +page, pages: Math.ceil(ct[0].total/+limit)||1 });
   } catch(err) { res.status(500).json({ error: err.message }); }
