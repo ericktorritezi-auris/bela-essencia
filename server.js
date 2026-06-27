@@ -1486,6 +1486,9 @@ async function initDB() {
         // Procedimentos promocionais
         try { await pool.query(`ALTER TABLE "${sn}".procedures ADD COLUMN IF NOT EXISTS is_promo BOOLEAN NOT NULL DEFAULT FALSE`); } catch {}
         try { await pool.query(`ALTER TABLE "${sn}".procedures ADD COLUMN IF NOT EXISTS deleted BOOLEAN NOT NULL DEFAULT FALSE`); } catch {}
+        try { await pool.query(`ALTER TABLE "${sn}".appointments ADD COLUMN IF NOT EXISTS internal_note TEXT`); } catch {}
+        try { await pool.query(`ALTER TABLE "${sn}".appointments ADD COLUMN IF NOT EXISTS reminder_token VARCHAR(64)`); } catch {}
+        try { await pool.query(`ALTER TABLE "${sn}".appointments ADD COLUMN IF NOT EXISTS reminder_status VARCHAR(20) DEFAULT 'pending'`); } catch {}
         try { await pool.query(`CREATE TABLE IF NOT EXISTS "${sn}".proc_categories (id SERIAL PRIMARY KEY, name VARCHAR(100) NOT NULL, sort_order INTEGER DEFAULT 0, created_at TIMESTAMPTZ DEFAULT NOW())`); } catch {}
         try { await pool.query(`ALTER TABLE "${sn}".procedures ADD COLUMN IF NOT EXISTS category_id INTEGER REFERENCES "${sn}".proc_categories(id) ON DELETE SET NULL`); } catch {}
         try { await pool.query(`CREATE TABLE IF NOT EXISTS "${sn}".proc_category_links (proc_id INTEGER NOT NULL, category_id INTEGER NOT NULL, PRIMARY KEY (proc_id, category_id))`); } catch {}
@@ -1768,7 +1771,7 @@ function requireAdmin(req, res, next) {
 app.get('/api/health', async (req, res) => {
   try {
     await req.db('SELECT 1');
-    res.json({ ok: true, version: '2.9.7', db: 'connected' });
+    res.json({ ok: true, version: '2.9.8', db: 'connected' });
   } catch {
     res.status(503).json({ ok: false, db: 'disconnected' });
   }
@@ -2596,6 +2599,190 @@ async function autoCompleteAppointments() {
 }
 
 // Admin: listar agendamentos com filtros
+// ── Nota interna por agendamento ─────────────────────────────────────────────
+app.patch('/api/appointments/:id/note', requireAdmin, async (req, res) => {
+  const { note } = req.body;
+  try {
+    const { rows } = await req.db(
+      'UPDATE appointments SET internal_note=$1 WHERE id=$2 RETURNING id, internal_note',
+      [note || null, req.params.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Não encontrado' });
+    res.json(rows[0]);
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Lembretes: agendamentos de amanhã ────────────────────────────────────────
+app.get('/api/appointments/reminders', requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await req.db(
+      `SELECT id, name, phone, proc_name, date::text, st, et,
+              status, reminder_status, reminder_token, internal_note
+       FROM appointments
+       WHERE date = CURRENT_DATE + INTERVAL '1 day'
+         AND status = 'confirmed'
+       ORDER BY st`
+    );
+    res.json(rows);
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Lembretes: marcar disparo enviado e gerar token ──────────────────────────
+app.patch('/api/appointments/:id/reminder-sent', requireAdmin, async (req, res) => {
+  const crypto = require('crypto');
+  const token = crypto.randomBytes(24).toString('hex');
+  try {
+    const { rows } = await req.db(
+      `UPDATE appointments SET reminder_status='sent', reminder_token=$1
+       WHERE id=$2 RETURNING id, reminder_status, reminder_token`,
+      [token, req.params.id]
+    );
+    res.json(rows[0]);
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Lembretes: atualização manual de status ───────────────────────────────────
+app.patch('/api/appointments/:id/reminder-status', requireAdmin, async (req, res) => {
+  const { status } = req.body;
+  if (!['sent','confirmed','cancelled','pending'].includes(status))
+    return res.status(400).json({ error: 'Status inválido' });
+  try {
+    const { rows } = await req.db(
+      'UPDATE appointments SET reminder_status=$1 WHERE id=$2 RETURNING id, reminder_status',
+      [status, req.params.id]
+    );
+    res.json(rows[0]);
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Confirmação/Cancelamento pelo cliente (rota pública) ──────────────────────
+app.get('/confirmar', async (req, res) => {
+  const { token } = req.query;
+  if (!token) return res.status(400).send(pageFeedback('❌', 'Link inválido', 'Este link não é válido.'));
+  try {
+    const { rows: tns } = await pool.query(
+      "SELECT schema_name FROM tenants WHERE active=TRUE AND schema_name IS NOT NULL"
+    ).catch(() => ({ rows: [] }));
+    for (const tn of tns) {
+      try {
+        const { rows } = await pool.query(
+          `UPDATE "${tn.schema_name}".appointments SET reminder_status='confirmed'
+           WHERE reminder_token=$1 AND reminder_status='sent' RETURNING id`,
+          [token]
+        );
+        if (rows.length) return res.send(pageFeedback('✅', 'Presença confirmada!', 'Sua presença foi confirmada. Até breve!'));
+      } catch {}
+    }
+    res.send(pageFeedback('⚠️', 'Link já utilizado', 'Este link já foi processado anteriormente.'));
+  } catch(err) { res.status(500).send(pageFeedback('❌', 'Erro', err.message)); }
+});
+
+app.get('/cancelar', async (req, res) => {
+  const { token } = req.query;
+  if (!token) return res.status(400).send(pageFeedback('❌', 'Link inválido', 'Este link não é válido.'));
+  try {
+    const { rows: tns } = await pool.query(
+      "SELECT schema_name FROM tenants WHERE active=TRUE AND schema_name IS NOT NULL"
+    ).catch(() => ({ rows: [] }));
+    for (const tn of tns) {
+      try {
+        const { rows } = await pool.query(
+          `UPDATE "${tn.schema_name}".appointments SET reminder_status='cancelled'
+           WHERE reminder_token=$1 AND reminder_status='sent' RETURNING id`,
+          [token]
+        );
+        if (rows.length) return res.send(pageFeedback('✅', 'Cancelamento registrado', 'Seu cancelamento foi registrado. O profissional será notificado.'));
+      } catch {}
+    }
+    res.send(pageFeedback('⚠️', 'Link já utilizado', 'Este link já foi processado anteriormente.'));
+  } catch(err) { res.status(500).send(pageFeedback('❌', 'Erro', err.message)); }
+});
+
+function pageFeedback(icon, title, msg) {
+  return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title>
+  <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',sans-serif;background:#FAF7F2;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px}
+  .card{background:#fff;border-radius:20px;padding:40px 32px;text-align:center;max-width:360px;box-shadow:0 4px 24px rgba(0,0,0,.08)}
+  .icon{font-size:52px;margin-bottom:16px}.title{font-size:22px;font-weight:700;color:#1A1214;margin-bottom:8px}.msg{font-size:14px;color:#8A6B76;line-height:1.6}</style></head>
+  <body><div class="card"><div class="icon">${icon}</div><div class="title">${title}</div><div class="msg">${msg}</div></div></body></html>`;
+}
+
+// ── Histórico de Atividades ───────────────────────────────────────────────────
+app.get('/api/historico/clientes', requireAdmin, async (req, res) => {
+  const { page = 1, limit = 20, q } = req.query;
+  const off = (Math.max(1, +page) - 1) * +limit;
+  try {
+    let where = "WHERE status IN ('confirmed','realizado')";
+    const params = [];
+    if (q) { params.push('%' + q + '%'); where += ` AND name ILIKE $${params.length}`; }
+    const { rows } = await req.db(
+      `SELECT name, phone,
+         COUNT(*)::int AS total_sessoes,
+         MAX(date)::text AS ultima_sessao,
+         SUM(CASE WHEN price IS NOT NULL THEN price ELSE 0 END)::numeric AS total_valor
+       FROM appointments ${where}
+       GROUP BY name, phone
+       ORDER BY ultima_sessao DESC
+       LIMIT $${params.length+1} OFFSET $${params.length+2}`,
+      [...params, limit, off]
+    );
+    const { rows: ct } = await req.db(
+      `SELECT COUNT(DISTINCT phone)::int AS total FROM appointments ${where}`, params
+    );
+    res.json({ records: rows, total: ct[0].total, page: +page, pages: Math.ceil(ct[0].total/+limit)||1 });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/historico/clientes/:phone', requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await req.db(
+      `SELECT id, proc_name, date::text, st, status, price, city_name
+       FROM appointments WHERE phone=$1 ORDER BY date DESC, st DESC LIMIT 100`,
+      [req.params.phone]
+    );
+    res.json(rows);
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/historico/procedimentos', requireAdmin, async (req, res) => {
+  const { page = 1, limit = 20 } = req.query;
+  const off = (Math.max(1, +page) - 1) * +limit;
+  try {
+    const { rows } = await req.db(
+      `SELECT proc_name,
+         COUNT(*)::int AS total_sessoes,
+         SUM(CASE WHEN price IS NOT NULL THEN price ELSE 0 END)::numeric AS total_valor,
+         MAX(date)::text AS ultimo_uso
+       FROM appointments WHERE status IN ('confirmed','realizado')
+       GROUP BY proc_name ORDER BY total_sessoes DESC
+       LIMIT $1 OFFSET $2`, [limit, off]
+    );
+    const { rows: ct } = await req.db(
+      `SELECT COUNT(DISTINCT proc_name)::int AS total FROM appointments WHERE status IN ('confirmed','realizado')`
+    );
+    res.json({ records: rows, total: ct[0].total, page: +page, pages: Math.ceil(ct[0].total/+limit)||1 });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/historico/cidades', requireAdmin, async (req, res) => {
+  const { page = 1, limit = 20 } = req.query;
+  const off = (Math.max(1, +page) - 1) * +limit;
+  try {
+    const { rows } = await req.db(
+      `SELECT city_name,
+         COUNT(*)::int AS total_sessoes,
+         SUM(CASE WHEN price IS NOT NULL THEN price ELSE 0 END)::numeric AS total_valor,
+         MAX(date)::text AS ultimo_uso
+       FROM appointments WHERE status IN ('confirmed','realizado') AND city_name IS NOT NULL
+       GROUP BY city_name ORDER BY total_sessoes DESC
+       LIMIT $1 OFFSET $2`, [limit, off]
+    );
+    const { rows: ct } = await req.db(
+      `SELECT COUNT(DISTINCT city_name)::int AS total FROM appointments WHERE status IN ('confirmed','realizado') AND city_name IS NOT NULL`
+    );
+    res.json({ records: rows, total: ct[0].total, page: +page, pages: Math.ceil(ct[0].total/+limit)||1 });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
 // ── Relatório de Agendamentos ────────────────────────────────────────────────
 app.get('/api/appointments/report', requireAdmin, async (req, res) => {
   await autoCompleteAppointments();
@@ -3795,7 +3982,7 @@ app.get('/api/backup/export', requireAdmin, async (req, res) => {
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.json({
       exportedAt: new Date().toISOString(),
-      version: '2.9.7',
+      version: '2.9.8',
       procedures:    procs.rows,
       appointments:  appts.rows,
       blocked_dates: blocked.rows,
