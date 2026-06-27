@@ -3731,6 +3731,7 @@ async function expandHist(dataStr) {
   det.scrollIntoView({ behavior:'smooth', block:'nearest' });
   try {
     var rows;
+    if (!data.key) { det.innerHTML = '<div style="color:var(--error);font-size:13px;padding:12px">Sem dados para exibir.</div>'; return; }
     if (data.tab === 'clientes') {
       rows = await GET('/api/historico/clientes/' + encodeURIComponent(data.key));
     } else if (data.tab === 'procedimentos') {
@@ -3738,6 +3739,7 @@ async function expandHist(dataStr) {
     } else {
       rows = await GET('/api/historico/cidades/' + encodeURIComponent(data.key));
     }
+    if (!Array.isArray(rows)) rows = [];
     var MS = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
     function fmtD2(d) { if(!d) return '—'; var p=String(d).slice(0,10).split('-'); return parseInt(p[2])+' '+MS[+p[1]-1]+'/'+p[0]; }
     var html = '<div style="background:#fff;border-radius:var(--r-md);border:1.5px solid var(--rose);margin-top:8px;overflow:hidden">' +
