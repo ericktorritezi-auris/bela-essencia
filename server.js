@@ -2732,6 +2732,32 @@ app.get('/api/historico/clientes', requireAdmin, async (req, res) => {
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
+app.get('/api/historico/procedimentos/:proc', requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await req.db(
+      `SELECT id, name, proc_name, date::text, st, status, price, city_name
+       FROM appointments
+       WHERE proc_name ILIKE $1
+       ORDER BY date DESC, st DESC LIMIT 100`,
+      [req.params.proc]
+    );
+    res.json(rows);
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/historico/cidades/:city', requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await req.db(
+      `SELECT id, name, proc_name, date::text, st, status, price, city_name
+       FROM appointments
+       WHERE city_name ILIKE $1
+       ORDER BY date DESC, st DESC LIMIT 100`,
+      [req.params.city]
+    );
+    res.json(rows);
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
 app.get('/api/historico/clientes/:phone', requireAdmin, async (req, res) => {
   try {
     const { rows } = await req.db(
