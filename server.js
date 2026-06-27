@@ -2111,12 +2111,12 @@ app.put('/api/procedures/:id', requireAdmin, async (req, res) => {
       `UPDATE procedures SET name=$1, dur=$2, price=$3, pt=$4, description=$5,
         is_course=$6, cert_name=$7, cert_hours=$8, cert_description=$9,
         cert_modules=$10, cert_layout_url=$11, cert_field_config=$12, cert_abbreviation=$13,
-        is_promo=$14, promo_limit=$15, promo_end_date=$16, category_id=$17
-       WHERE id=$18 RETURNING *`,
+        is_promo=$14, promo_limit=$15, promo_end_date=$16
+       WHERE id=$17 RETURNING *`,
       [name, parseInt(dur), price||null, pt||'fixed', description||null,
        is_course||false, cert_name||null, cert_hours?parseInt(cert_hours):null, cert_description||null,
        cert_modules||null, cert_layout_url||null, cert_field_config||null, cert_abbreviation||null,
-       is_promo||false, promo_limit||null, promo_end_date||null, category_id||null,
+       is_promo||false, promo_limit||null, promo_end_date||null,
        req.params.id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Procedimento não encontrado' });
