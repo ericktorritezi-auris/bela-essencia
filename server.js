@@ -2817,7 +2817,7 @@ app.get('/api/historico/cidades', requireAdmin, async (req, res) => {
 app.get('/api/appointments/report', requireAdmin, async (req, res) => {
   await autoCompleteAppointments();
   const { date_from, date_to, month, city, status, proc_name, name, page, limit } = req.query;
-  const PAGE   = Math.min(parseInt(limit)  || 20, 100);
+  const PAGE   = Math.min(parseInt(limit)  || 20, 5000);
   const OFFSET = (Math.max(parseInt(page) || 1, 1) - 1) * PAGE;
 
   let sql = 'SELECT * FROM appointments WHERE 1=1';
