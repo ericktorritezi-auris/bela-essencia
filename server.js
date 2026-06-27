@@ -2011,6 +2011,19 @@ app.delete('/api/proc-categories/:id', requireAdmin, async (req, res) => {
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
+// ── Reordenar categorias ─────────────────────────────────────────────────────
+app.patch('/api/proc-categories/reorder', requireAdmin, async (req, res) => {
+  const { order } = req.body;
+  if (!Array.isArray(order) || !order.length)
+    return res.status(400).json({ error: 'order deve ser um array de ids' });
+  try {
+    for (let i = 0; i < order.length; i++) {
+      await req.db('UPDATE proc_categories SET sort_order=$1 WHERE id=$2', [i + 1, order[i]]);
+    }
+    res.json({ ok: true });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
 // ── GET /api/procedures — retorna com nome da categoria ──────────────────────
 app.get('/api/procedures', async (req, res) => {
   try {
