@@ -358,9 +358,17 @@
     <a href="#tatica" class="toc-link">⚡ Ag. Tática</a>
     <a href="#recorrencia" class="toc-link">🔁 Recorrência</a>
     <a href="#categorias-procedimentos" class="toc-link">🏷️ Categorias</a>
+    <a href="#historico-atividades" class="toc-link">📈 Histórico de Atividades</a>
+    <a href="#lembretes" class="toc-link">🔔 Lembretes</a>
+    <a href="#nota-interna" class="toc-link">📝 Nota Interna</a>
+    <a href="#link-procedimento" class="toc-link">🔗 Link por Procedimento</a>
     <a href="#procedimento-promocional" class="toc-link">🏷️ Procedimento Promocional</a>
     <a href="#agendamentos" class="toc-link">📊 Agendamentos</a>
     <a href="#categorias-procedimentos" class="toc-link">🏷️ Categorias</a>
+    <a href="#historico-atividades" class="toc-link">📈 Histórico de Atividades</a>
+    <a href="#lembretes" class="toc-link">🔔 Lembretes</a>
+    <a href="#nota-interna" class="toc-link">📝 Nota Interna</a>
+    <a href="#link-procedimento" class="toc-link">🔗 Link por Procedimento</a>
     <a href="#procedimento-promocional" class="toc-link">🏷️ Procedimento Promocional</a>
     <a href="#bloquear" class="toc-link">🚫 Bloquear</a>
     <a href="#liberar" class="toc-link">✅ Liberar</a>
@@ -1053,6 +1061,102 @@
           <div class="tip">
             <span>🏷️</span>
             <p>Use procedimentos promocionais para criar escassez e urgência: <em>"10 vagas para sessão de avaliação gratuita"</em>, <em>"Oferta de lançamento válida até 31/07"</em>. O sistema cuida do destaque e da desativação automática.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- HISTÓRICO DE ATIVIDADES -->
+      <section class="section" id="historico-atividades">
+        <div class="section-header">
+          <div class="section-icon">📈</div>
+          <div class="section-title">Histórico de Atividades</div>
+        </div>
+        <div class="section-body">
+          <p>O <strong>Histórico de Atividades</strong> reúne numa única tela o registro completo de atendimentos, organizado por três perspectivas: cliente, procedimento e cidade.</p>
+          <div class="sub">
+            <h4>📌 Como acessar</h4>
+            <p>Menu lateral → <strong>📈 Histórico</strong>. Ao abrir, exibe automaticamente o histórico por cliente.</p>
+          </div>
+          <div class="sub">
+            <h4>📊 As três abas</h4>
+            <p><strong>👤 Clientes</strong> — lista todos os clientes com total de sessões, última visita e valor total. Use o campo de busca para filtrar por nome. <strong>💆 Procedimentos</strong> — lista cada procedimento com total de sessões e valor gerado. <strong>📍 Cidades</strong> — lista cada cidade/local de atendimento com totais.</p>
+          </div>
+          <div class="sub">
+            <h4>🔍 Ver detalhes</h4>
+            <p>Clique em qualquer item da lista para expandir e ver todos os agendamentos individuais daquele cliente, procedimento ou cidade em ordem cronológica.</p>
+          </div>
+          <div class="tip">
+            <span>📈</span>
+            <p>O Histórico exibe apenas agendamentos com status <em>Confirmado</em> ou <em>Realizado</em>. Cancelados não são contabilizados nos totais.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- LEMBRETES -->
+      <section class="section" id="lembretes">
+        <div class="section-header">
+          <div class="section-icon">🔔</div>
+          <div class="section-title">Lembretes</div>
+        </div>
+        <div class="section-body">
+          <p>A seção <strong>Lembretes</strong> exibe automaticamente todos os agendamentos confirmados para o dia seguinte, facilitando o envio de lembretes via WhatsApp para os clientes.</p>
+          <div class="sub">
+            <h4>📲 Como enviar um lembrete</h4>
+            <p>Clique em <strong>📲 Enviar WhatsApp</strong> no card do agendamento. O WhatsApp abrirá com uma mensagem pré-formatada contendo dois links: um para o cliente confirmar a presença e outro para cancelar. Basta clicar em Enviar.</p>
+          </div>
+          <div class="sub">
+            <h4>✅ Resposta do cliente</h4>
+            <p>Quando o cliente clica no link de confirmar ou cancelar, o status no card é atualizado automaticamente: <em>✅ Cliente confirmou</em> ou <em>❌ Cliente optou por cancelar</em>. Cards confirmados somem da lista. Cards cancelados exibem o botão <strong>Cancelar na agenda</strong> — ao clicar, o agendamento é cancelado diretamente.</p>
+          </div>
+          <div class="sub">
+            <h4>✏️ Atualização manual</h4>
+            <p>Se o cliente respondeu por texto no WhatsApp (sem clicar no link), use os botões <strong>✅ Confirmado</strong> ou <strong>❌ Cancelado</strong> para atualizar o status manualmente.</p>
+          </div>
+          <div class="tip">
+            <span>🔔</span>
+            <p>A lista mostra apenas agendamentos do dia seguinte com status <em>Confirmado</em>. Atualize clicando em <em>↻ Atualizar</em> a qualquer momento.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- NOTA INTERNA -->
+      <section class="section" id="nota-interna">
+        <div class="section-header">
+          <div class="section-icon">📝</div>
+          <div class="section-title">Nota Interna por Agendamento</div>
+        </div>
+        <div class="section-body">
+          <p>Cada agendamento pode ter uma <strong>nota interna</strong> — uma observação privada visível apenas para o profissional. O cliente nunca tem acesso a essas informações.</p>
+          <div class="sub">
+            <h4>📌 Como adicionar uma nota</h4>
+            <p>Na lista da agenda, clique no ícone <strong>📝</strong> ao lado do botão Editar. Um modal abrirá com um campo de texto livre. Escreva a observação e clique em <em>Salvar</em>. O ícone ficará dourado quando houver nota cadastrada.</p>
+          </div>
+          <div class="tip">
+            <span>📝</span>
+            <p>Use notas para registrar observações clínicas, pendências de pagamento, temas para a próxima sessão ou qualquer informação relevante que você queira consultar futuramente.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- LINK POR PROCEDIMENTO -->
+      <section class="section" id="link-procedimento">
+        <div class="section-header">
+          <div class="section-icon">🔗</div>
+          <div class="section-title">Link Direto por Procedimento</div>
+        </div>
+        <div class="section-body">
+          <p>Cada procedimento tem um <strong>link direto</strong> que, ao ser acessado pelo cliente, abre a agenda já com aquele procedimento pré-selecionado — pulando a etapa de seleção.</p>
+          <div class="sub">
+            <h4>📌 Como obter o link</h4>
+            <p>Em <strong>Procedimentos</strong>, clique no ícone <strong>🔗</strong> ao lado do procedimento desejado. O link é copiado automaticamente para a área de transferência. Use-o em campanhas de marketing, bio do Instagram, WhatsApp ou onde quiser.</p>
+          </div>
+          <div class="sub">
+            <h4>📱 Experiência do cliente</h4>
+            <p>Ao acessar o link, o cliente vai direto para a seleção de cidade (ou data, se o tenant tiver apenas uma cidade). O processo de agendamento continua normalmente a partir daí.</p>
+          </div>
+          <div class="tip">
+            <span>🔗</span>
+            <p>Para tenants com um único local de atendimento, o link pula cidade e data direto — o cliente chega à etapa de horário com apenas um clique.</p>
           </div>
         </div>
       </section>

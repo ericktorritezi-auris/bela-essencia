@@ -852,6 +852,8 @@ tr.drag-over{border-top:2.5px solid var(--rose)!important}
           <div class="nav-item" id="nav-released" onclick="showSec('released')"><span class="nav-icon">✅</span> Liberar Datas</div>
           <div class="nav-item" id="nav-avail" onclick="showSec('avail')"><span class="nav-icon">📅</span> Disponibilidade</div>
           <div class="nav-item" id="nav-report" onclick="showSec('report');initReport()"><span class="nav-icon">📊</span> Agendamentos</div>
+          <div class="nav-item" id="nav-historico" onclick="showSec('historico');initHistorico()"><span class="nav-icon">📈</span> Histórico</div>
+          <div class="nav-item" id="nav-lembretes" onclick="showSec('lembretes');initLembretes()"><span class="nav-icon">🔔</span> Lembretes</div>
           <div class="nav-item" id="nav-nps" onclick="showSec('nps')"><span class="nav-icon">⭐</span> NPS</div>
         </div>
         <div style="margin-top:2px">
@@ -1093,6 +1095,42 @@ tr.drag-over{border-top:2.5px solid var(--rose)!important}
 
             <!-- Cards -->
             <div style="padding:12px 14px;display:flex;flex-direction:column;gap:9px" id="rpt-cards"></div>
+          </div>
+
+          <!-- SEC: HISTÓRICO DE ATIVIDADES -->
+          <div id="sec-historico" class="hidden">
+            <div class="tbl-head">
+              <div class="tbl-ttl">📈 Histórico de Atividades</div>
+            </div>
+            <div style="display:flex;gap:0;border-bottom:1px solid var(--border-light);background:#fff">
+              <button id="htab-cli" onclick="setHistTab('clientes')" style="flex:1;padding:12px 8px;font-family:inherit;font-size:12px;font-weight:700;border:none;cursor:pointer;border-bottom:3px solid var(--rose);color:var(--rose);background:#fff">👤 Clientes</button>
+              <button id="htab-proc" onclick="setHistTab('procedimentos')" style="flex:1;padding:12px 8px;font-family:inherit;font-size:12px;font-weight:700;border:none;cursor:pointer;border-bottom:3px solid transparent;color:var(--text-light);background:#fff">💆 Procedimentos</button>
+              <button id="htab-city" onclick="setHistTab('cidades')" style="flex:1;padding:12px 8px;font-family:inherit;font-size:12px;font-weight:700;border:none;cursor:pointer;border-bottom:3px solid transparent;color:var(--text-light);background:#fff">📍 Cidades</button>
+            </div>
+            <div id="hist-search-wrap" style="padding:10px 16px;background:var(--cream);border-bottom:1px solid var(--border-light)">
+              <input type="text" id="hist-search" placeholder="Buscar cliente..." oninput="histSearchDebounce()"
+                style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:var(--r-sm);font-family:inherit;font-size:13px;background:#fff;outline:none">
+            </div>
+            <div style="padding:8px 16px;background:#fff;border-bottom:1px solid var(--border-light);display:flex;align-items:center;justify-content:space-between">
+              <div style="font-size:12px;color:var(--text-light)"><strong id="hist-total" style="color:var(--dark)">0</strong> registros</div>
+              <div id="hist-pgn" style="display:flex;align-items:center;gap:3px"></div>
+            </div>
+            <div id="hist-list" style="padding:12px 16px;display:flex;flex-direction:column;gap:8px"></div>
+            <div id="hist-detail" style="display:none;padding:0 16px 16px"></div>
+          </div>
+
+          <!-- SEC: LEMBRETES -->
+          <div id="sec-lembretes" class="hidden">
+            <div class="tbl-head">
+              <div>
+                <div class="tbl-ttl">🔔 Lembretes</div>
+                <div class="tbl-sub">Agendamentos de amanhã</div>
+              </div>
+              <button class="btn btn-secondary" onclick="initLembretes()" style="width:auto;padding:8px 14px;font-size:12px">↻ Atualizar</button>
+            </div>
+            <div id="lem-list" style="padding:12px 16px;display:flex;flex-direction:column;gap:10px">
+              <div style="text-align:center;padding:32px;color:var(--text-light);font-size:13px">Carregando...</div>
+            </div>
           </div>
 
           <!-- SEC: NPS DASHBOARD -->
@@ -2022,7 +2060,7 @@ tr.drag-over{border-top:2.5px solid var(--rose)!important}
 // ══════════════════════════════════════════════════
 // VERSÃO — altere APENAS aqui; atualiza todos os rodapés
 // ══════════════════════════════════════════════════
-const APP_VERSION  = '2.9.7';
+const APP_VERSION  = '2.9.8';
 const APP_COPY     = `Versão: ${APP_VERSION} | ${(window._tenantConfig?.business_name || 'Belle Planner')} © ${new Date().getFullYear()}`;
 
 function renderFooters() {
@@ -2414,6 +2452,8 @@ async function renderProcs() {
     }
 
     list.innerHTML = html;
+    window._procListReady = true;
+    setTimeout(checkProcFromURL, 100);
   } catch(e) {
     list.innerHTML = `<div class="notice err">Erro ao carregar procedimentos. Tente novamente.</div>`;
   }
@@ -2883,10 +2923,10 @@ async function initAdmin() {
 const SEC_TITLES={
   agenda:'Agenda',manual:'Agenda Manual',retro:'Agenda Retroativa','tatica':'Agenda Tática',blocked:'Bloquear Datas','avail':'Disponibilidade',released:'Liberar Datas',nps:'NPS — Satisfação',
   revenue:'Receita',cockpit:'Cockpit Financeiro',receivables:'Contas a Receber',expenses:'Contas a Pagar','summary-fin':'Resumo Financeiro',promos:'Promoções',commem:'Datas Comemorativas',webpush:'Web Push',
-  cities:'Cidades',schedules:'Configuração de Horários',report:'Agendamentos',
+  cities:'Cidades',schedules:'Configuração de Horários',report:'Agendamentos',historico:'Histórico de Atividades',lembretes:'Lembretes',
   procs:'Procedimentos','cert-config':'Certificados',profile:'Perfil & Senha',lgpd:'Log LGPD',backup:'Backup'
 };
-const ALL_SECS = ['agenda','manual','retro','tatica','blocked','released','avail','report','nps','revenue','cockpit','receivables','expenses','summary-fin','promos','commem','webpush','cities','schedules','procs','cert-config','profile','lgpd','backup'];
+const ALL_SECS = ['agenda','manual','retro','tatica','blocked','released','avail','report','historico','lembretes','nps','revenue','cockpit','receivables','expenses','summary-fin','promos','commem','webpush','cities','schedules','procs','cert-config','profile','lgpd','backup'];
 
 function showSec(name){
   ALL_SECS.forEach(s=>{
@@ -3167,6 +3207,7 @@ function renderAgendaPage(page) {
         </td>
         <td>
           <button class="act-btn" onclick="openEditModal('${a.id}')">Editar</button>
+          <button class="act-btn" onclick="openNoteModal('${a.id}')" title="Nota interna" style="${a.internal_note ? 'color:var(--gold);border-color:var(--gold)' : ''}">📝</button>
           ${a.status==='confirmed'||a.status==='realizado'
             ? `<button class="act-btn danger" onclick="confirmRecurAction('${a.id}','cancel',${a.recurrence_group_id||'null'},'${a.date||''}','${(a.name||'')}','${a.st||''}')">Cancelar</button>`
             : `<button class="act-btn" onclick="openRestoreModal('${a.id}')" style="color:var(--gold);border-color:var(--gold)">↩ Restaurar</button>${a.recurrence_group_id ? `<button class="act-btn" onclick="restoreSeries('${a.id}')" style="color:var(--rose);border-color:var(--rose);font-size:10px">🔁 Restaurar Série</button>` : ''}<button class="act-btn danger" onclick="confirmRecurAction('${a.id}','delete',${a.recurrence_group_id||'null'},'${a.date||''}','${(a.name||'')}','${a.st||''}')" style="color:var(--error);border-color:var(--error);font-size:10px">🗑</button>`
@@ -3198,6 +3239,7 @@ function renderAgendaPage(page) {
         </div>
         <div class="appt-card-actions">
           <button class="act-btn" onclick="openEditModal('${a.id}')">Editar</button>
+          <button class="act-btn" onclick="openNoteModal('${a.id}')" title="Nota interna" style="${a.internal_note ? 'color:var(--gold);border-color:var(--gold)' : ''}">📝</button>
           ${a.status==='confirmed'||a.status==='realizado'
             ? `<button class="act-btn danger" onclick="confirmRecurAction('${a.id}','cancel',${a.recurrence_group_id||'null'},'${a.date||''}','${(a.name||'')}','${a.st||''}')" style="color:var(--warn);border-color:var(--warn)">Cancelar</button>`
             : `<button class="act-btn" onclick="openRestoreModal('${a.id}')" style="color:var(--gold);border-color:var(--gold)">↩ Restaurar</button>${a.recurrence_group_id ? `<button class="act-btn" onclick="restoreSeries('${a.id}')" style="color:var(--rose);border-color:var(--rose);font-size:10px">🔁 Restaurar Série</button>` : ''}<button class="act-btn danger" onclick="confirmRecurAction('${a.id}','delete',${a.recurrence_group_id||'null'},'${a.date||''}','${(a.name||'')}','${a.st||''}')" style="color:var(--error);border-color:var(--error)">🗑</button>`
@@ -3536,6 +3578,276 @@ async function restoreSeries(id) {
     showToast('✅ ' + n + ' agendamento(s) restaurado(s) na série', 'ok');
   } catch(e) { showToast(e.message, 'error'); }
 }
+
+// ── NOTA INTERNA POR AGENDAMENTO
+async function openNoteModal(apptId) {
+  var currentNote = '';
+  try {
+    var allAppts = await GET('/api/appointments');
+    var found = allAppts.find(function(a){ return String(a.id)===String(apptId); });
+    if (found) currentNote = found.internal_note || '';
+  } catch(e) {}
+  document.getElementById('modal-card').innerHTML =
+    '<div style="font-family:Nunito,sans-serif">' +
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">' +
+      '<div style="font-family:Cormorant Garamond,serif;font-size:20px;font-weight:600;color:var(--dark)">📝 Nota Interna</div>' +
+      '<button onclick="closeModal()" style="background:none;border:none;font-size:18px;cursor:pointer;color:var(--text-light)">✕</button>' +
+    '</div>' +
+    '<p style="font-size:12px;color:var(--text-light);margin-bottom:12px">Visível apenas para você. O cliente não tem acesso a esta nota.</p>' +
+    '<textarea id="note-txt" rows="5" placeholder="Escreva sua observação aqui..." style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:var(--r-sm);font-family:Nunito,sans-serif;font-size:13px;resize:vertical;outline:none">' +
+      (currentNote||'') +
+    '</textarea>' +
+    '<div style="display:flex;gap:8px;margin-top:14px">' +
+      '<button class="btn btn-primary" onclick="saveNote(\'' + apptId + '\')" style="flex:1">Salvar</button>' +
+      '<button class="btn btn-secondary" onclick="closeModal()" style="flex:1">Cancelar</button>' +
+    '</div>' +
+    '</div>';
+  document.getElementById('modal-bg').classList.remove('hidden');
+}
+
+async function saveNote(apptId) {
+  var note = document.getElementById('note-txt') ? document.getElementById('note-txt').value.trim() : '';
+  try {
+    await PATCH('/api/appointments/' + apptId + '/note', { note: note });
+    showToast('Nota salva', 'ok');
+    closeModal();
+    renderAgenda();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+// ── LINK POR PROCEDIMENTO
+function copyProcLink(procId) {
+  var base = window.location.origin;
+  var link = base + '/?proc=' + procId;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(link).then(function(){
+      showToast('🔗 Link copiado!', 'ok');
+    }).catch(function(){ fallbackCopy(link); });
+  } else { fallbackCopy(link); }
+}
+function fallbackCopy(text) {
+  var ta = document.createElement('textarea');
+  ta.value = text;
+  document.body.appendChild(ta);
+  ta.select();
+  document.execCommand('copy');
+  document.body.removeChild(ta);
+  showToast('🔗 Link copiado!', 'ok');
+}
+
+// ── PRÉ-SELEÇÃO DE PROC VIA URL
+function checkProcFromURL() {
+  try {
+    var params = new URLSearchParams(window.location.search);
+    var procId = params.get('proc');
+    if (procId) { selProc(parseInt(procId)).catch(function(){}); }
+  } catch(e) {}
+}
+
+// ── HISTÓRICO DE ATIVIDADES
+var _histTab = 'clientes', _histPage = 1, _histDebounce = null;
+
+async function initHistorico() {
+  _histTab = 'clientes'; _histPage = 1;
+  setHistTab('clientes');
+}
+
+function setHistTab(tab) {
+  _histTab = tab; _histPage = 1;
+  var tabMap = { clientes:'cli', procedimentos:'proc', cidades:'city' };
+  Object.keys(tabMap).forEach(function(t) {
+    var btn = document.getElementById('htab-' + tabMap[t]);
+    if (!btn) return;
+    btn.style.borderBottom = t===tab ? '3px solid var(--rose)' : '3px solid transparent';
+    btn.style.color = t===tab ? 'var(--rose)' : 'var(--text-light)';
+  });
+  var sw = document.getElementById('hist-search-wrap');
+  if (sw) sw.style.display = tab==='clientes' ? '' : 'none';
+  var det = document.getElementById('hist-detail');
+  if (det) det.style.display = 'none';
+  loadHistorico();
+}
+
+function histSearchDebounce() {
+  clearTimeout(_histDebounce);
+  _histDebounce = setTimeout(function(){ _histPage=1; loadHistorico(); }, 350);
+}
+
+async function loadHistorico(page) {
+  if (page) _histPage = page;
+  var q = document.getElementById('hist-search') ? document.getElementById('hist-search').value.trim() : '';
+  var list = document.getElementById('hist-list');
+  var pgn  = document.getElementById('hist-pgn');
+  if (list) list.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text-light)">Carregando...</div>';
+  try {
+    var params = new URLSearchParams({ page: _histPage, limit: 20 });
+    if (_histTab === 'clientes' && q) params.set('q', q);
+    var data = await GET('/api/historico/' + _histTab + '?' + params.toString());
+    document.getElementById('hist-total').textContent = data.total;
+    var pPrev = Math.max(1,_histPage-1), pNext = Math.min(data.pages,_histPage+1);
+    var phtml = '<button onclick="loadHistorico(' + pPrev + ')" ' + (_histPage<=1?'disabled':'') +
+      ' style="width:28px;height:28px;border-radius:8px;border:1.5px solid var(--border);background:#fff;font-size:12px;cursor:pointer;color:var(--text-light)">&#8592;</button>' +
+      '<span style="font-size:12px;color:var(--text-light);padding:0 4px">' + _histPage + '/' + data.pages + '</span>' +
+      '<button onclick="loadHistorico(' + pNext + ')" ' + (_histPage>=data.pages?'disabled':'') +
+      ' style="width:28px;height:28px;border-radius:8px;border:1.5px solid var(--border);background:#fff;font-size:12px;cursor:pointer;color:var(--text-light)">&#8594;</button>';
+    if (pgn) pgn.innerHTML = phtml;
+    if (!data.records.length) {
+      if (list) list.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text-light);font-size:13px">Nenhum registro encontrado.</div>';
+      return;
+    }
+    var MS = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+    function fmtD(d) { if(!d) return '—'; var p=d.split('-'); return parseInt(p[2])+' '+MS[+p[1]-1]+'/'+p[0]; }
+    function fmtV(v) { return v ? 'R$ '+Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2}) : '—'; }
+    var html = '';
+    data.records.forEach(function(r) {
+      var label = _histTab==='clientes' ? (r.name||r.phone) : _histTab==='procedimentos' ? r.proc_name : r.city_name;
+      var key   = _histTab==='clientes' ? r.phone : _histTab==='procedimentos' ? r.proc_name : r.city_name;
+      var sub   = r.total_sessoes + ' sessão(ões) · último: ' + fmtD(r.ultima_sessao||r.ultimo_uso);
+      var valor = fmtV(r.total_valor);
+      var dataEnc = encodeURIComponent(JSON.stringify({tab:_histTab,key:key,label:label}));
+      html += '<div onclick="expandHist(\'' + dataEnc + '\')" ' +
+        'style="background:#fff;border-radius:var(--r-md);border:1px solid var(--border-light);padding:13px 16px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px">' +
+        '<div>' +
+          '<div style="font-size:14px;font-weight:700;color:var(--dark);margin-bottom:3px">' + label + '</div>' +
+          '<div style="font-size:12px;color:var(--text-light)">' + sub + '</div>' +
+        '</div>' +
+        '<div style="text-align:right;flex-shrink:0">' +
+          '<div style="font-size:13px;font-weight:700;color:var(--gold)">' + valor + '</div>' +
+          '<div style="font-size:11px;color:var(--text-light)">▼</div>' +
+        '</div>' +
+      '</div>';
+    });
+    if (list) list.innerHTML = html;
+  } catch(e) {
+    if (list) list.innerHTML = '<div style="text-align:center;padding:24px;color:var(--error);font-size:13px">Erro: ' + e.message + '</div>';
+  }
+}
+
+async function expandHist(dataStr) {
+  var data = JSON.parse(decodeURIComponent(dataStr));
+  var det = document.getElementById('hist-detail');
+  det.style.display = 'block';
+  det.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-light)">Carregando...</div>';
+  det.scrollIntoView({ behavior:'smooth', block:'nearest' });
+  try {
+    var rows;
+    if (data.tab === 'clientes') {
+      rows = await GET('/api/historico/clientes/' + encodeURIComponent(data.key));
+    } else {
+      var field = data.tab === 'procedimentos' ? 'proc_name' : 'city';
+      var d = await GET('/api/appointments/report?' + field + '=' + encodeURIComponent(data.key) + '&limit=50');
+      rows = d.records || [];
+    }
+    var MS = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+    function fmtD2(d) { if(!d) return '—'; var p=String(d).slice(0,10).split('-'); return parseInt(p[2])+' '+MS[+p[1]-1]+'/'+p[0]; }
+    var html = '<div style="background:#fff;border-radius:var(--r-md);border:1.5px solid var(--rose);margin-top:8px;overflow:hidden">' +
+      '<div style="padding:12px 16px;background:var(--rose-light);display:flex;justify-content:space-between;align-items:center">' +
+        '<div style="font-size:13px;font-weight:800;color:var(--rose)">' + data.label + '</div>' +
+        '<button onclick="document.getElementById(\'hist-detail\').style.display=\'none\'" style="background:none;border:none;cursor:pointer;color:var(--rose);font-size:16px">✕</button>' +
+      '</div>';
+    rows.forEach(function(r) {
+      var smap = {confirmed:'Confirmado',realizado:'Realizado',cancelled:'Cancelado'};
+      var scol = {confirmed:'#1A56DB',realizado:'#2D7D52',cancelled:'#C4564A'};
+      var s = r.status||'';
+      html += '<div style="padding:10px 16px;border-top:1px solid var(--border-light);display:flex;justify-content:space-between;align-items:center">' +
+        '<div>' +
+          '<div style="font-size:13px;font-weight:700;color:var(--dark)">' + (r.name||r.proc_name||r.city_name||'—') + '</div>' +
+          '<div style="font-size:11px;color:var(--text-light)">' + (r.proc_name||r.city_name||'') + (r.st?' · '+String(r.st).slice(0,5):'') + '</div>' +
+        '</div>' +
+        '<div style="text-align:right">' +
+          '<div style="font-size:11px;font-weight:700;color:' + (scol[s]||'var(--text-light)') + '">' + (smap[s]||s) + '</div>' +
+          '<div style="font-size:11px;color:var(--text-light)">' + fmtD2(r.date) + '</div>' +
+        '</div>' +
+      '</div>';
+    });
+    html += '</div>';
+    det.innerHTML = html;
+  } catch(e) {
+    det.innerHTML = '<div style="color:var(--error);font-size:13px;padding:12px">Erro: ' + e.message + '</div>';
+  }
+}
+
+// ── LEMBRETES
+async function initLembretes() {
+  var list = document.getElementById('lem-list');
+  if (list) list.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text-light)">Carregando...</div>';
+  try {
+    var appts = await GET('/api/appointments/reminders');
+    if (!appts.length) {
+      if (list) list.innerHTML = '<div style="text-align:center;padding:40px 20px;color:var(--text-light);font-size:13px">Nenhum agendamento confirmado para amanhã.</div>';
+      return;
+    }
+    var tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate()+1);
+    var MS2 = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+    var DS2 = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+    var dLabel = DS2[tomorrow.getDay()] + ', ' + tomorrow.getDate() + ' ' + MS2[tomorrow.getMonth()];
+    var html = '<div style="font-size:11px;font-weight:800;color:var(--text-light);letter-spacing:.05em;text-transform:uppercase;margin-bottom:8px">' + dLabel + '</div>';
+    appts.forEach(function(a) {
+      var st = a.reminder_status || 'pending';
+      var sent = st==='sent', conf=st==='confirmed', canc=st==='cancelled';
+      var sColor = conf ? '#2D7D52' : canc ? '#C4564A' : sent ? 'var(--gold)' : 'var(--text-light)';
+      var sTxt   = conf ? '✅ Cliente confirmou' : canc ? '❌ Cliente optou por cancelar' : sent ? '📤 Aguardando resposta' : '⏳ Não enviado';
+      var pid = String(a.id), pph = String(a.phone||''), pnm = String(a.name||''), ppr = String(a.proc_name||''), pst = String(a.st||''), pet = String(a.et||'');
+      html += '<div id="lem-card-' + pid + '" style="background:#fff;border-radius:var(--r-md);border:1px solid var(--border-light);overflow:hidden">' +
+        '<div style="padding:12px 14px 10px;display:flex;justify-content:space-between;align-items:flex-start;gap:8px">' +
+          '<div>' +
+            '<div style="font-size:14px;font-weight:800;color:var(--dark)">' + pnm + '</div>' +
+            '<div style="font-size:12px;color:var(--text-light)">' + ppr + ' · ' + pst.slice(0,5) + '</div>' +
+          '</div>' +
+          '<div style="font-size:11px;font-weight:700;color:' + sColor + ';text-align:right;flex-shrink:0">' + sTxt + '</div>' +
+        '</div>' +
+        '<div style="padding:8px 14px 12px;border-top:1px solid var(--border-light);display:flex;gap:6px;flex-wrap:wrap">' +
+          (!sent&&!conf&&!canc ? '<button onclick="sendReminder(\'' + pid + '\',\'' + pph + '\',\'' + pnm + '\',\'' + ppr + '\',\'' + pst + '\',\'' + pet + '\')" class="btn btn-primary" style="font-size:12px;padding:7px 12px">📲 Enviar WhatsApp</button>' : '') +
+          (sent ? '<button onclick="sendReminder(\'' + pid + '\',\'' + pph + '\',\'' + pnm + '\',\'' + ppr + '\',\'' + pst + '\',\'' + pet + '\')" class="btn btn-secondary" style="font-size:12px;padding:7px 12px">📲 Reenviar</button>' : '') +
+          (canc ? '<button onclick="cancelFromReminder(\'' + pid + '\')" class="btn btn-secondary" style="font-size:12px;padding:7px 12px;color:var(--error);border-color:var(--error)">❌ Cancelar na agenda</button>' : '') +
+          (!conf&&!canc ? '<button onclick="setReminderStatus(\'' + pid + '\',\'confirmed\')" class="btn btn-secondary" style="font-size:12px;padding:7px 12px">✅ Confirmado</button>' : '') +
+          (!conf&&!canc ? '<button onclick="setReminderStatus(\'' + pid + '\',\'cancelled\')" class="btn btn-secondary" style="font-size:12px;padding:7px 12px">❌ Cancelado</button>' : '') +
+        '</div>' +
+      '</div>';
+    });
+    if (list) list.innerHTML = html;
+  } catch(e) {
+    if (list) list.innerHTML = '<div style="text-align:center;padding:24px;color:var(--error);font-size:13px">Erro: ' + e.message + '</div>';
+  }
+}
+
+async function sendReminder(apptId, phone, name, proc, st, et) {
+  try {
+    var res = await PATCH('/api/appointments/' + apptId + '/reminder-sent', {});
+    var token = res.reminder_token;
+    var base = window.location.origin;
+    var confirmUrl  = base + '/confirmar?token=' + token;
+    var cancelarUrl = base + '/cancelar?token=' + token;
+    var stFmt = (st||'').slice(0,5);
+    var tomorrow2 = new Date(); tomorrow2.setDate(tomorrow2.getDate()+1);
+    var MS3 = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+    var DS3 = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+    var dLabel2 = DS3[tomorrow2.getDay()] + ', ' + tomorrow2.getDate() + ' de ' + MS3[tomorrow2.getMonth()];
+    var msg = 'Olá ' + name + '! 😊 Lembrando sua sessão de *' + proc + '* amanhã, *' + dLabel2 + '* às *' + stFmt + '*.\n\n' +
+      '✅ Confirmar: ' + confirmUrl + '\n' +
+      '❌ Cancelar: ' + cancelarUrl + '\n\n' +
+      'Aguardamos você! 🙏';
+    var wa = 'https://wa.me/55' + phone.replace(/\D/g,'') + '?text=' + encodeURIComponent(msg);
+    window.open(wa, '_blank');
+    initLembretes();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+async function setReminderStatus(apptId, status) {
+  try {
+    await PATCH('/api/appointments/' + apptId + '/reminder-status', { status: status });
+    initLembretes();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+async function cancelFromReminder(apptId) {
+  try {
+    await PATCH('/api/appointments/' + apptId + '/cancel', {});
+    showToast('Agendamento cancelado', 'ok');
+    initLembretes();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
 
 // ── CATEGORIAS DE PROCEDIMENTOS ─────────────────────────────────────────────
 var _catsCache = null;
@@ -4685,6 +4997,7 @@ async function renderProcsAdmin() {
           <td>
             <button class="act-btn" onclick="openProcModal(${p.id})">Editar</button>
             ${p.is_promo && !p.active ? '<button class="act-btn" data-pid="'+p.id+'" data-pend="'+String(p.promo_end_date||'').slice(0,10)+'" onclick="reactivatePromo(this.dataset.pid,this.dataset.pend)" style="color:var(--gold-deep);border-color:var(--gold)">↺ Reativar</button>' : ''}
+            <button class="act-btn" onclick="copyProcLink(${p.id})" title="Copiar link">🔗</button>
             <button class="act-btn danger" onclick="deleteProc(${p.id})">Remover</button>
           </td>
         </tr>
@@ -4711,6 +5024,7 @@ async function renderProcsAdmin() {
           <div class="proc-card-actions" style="margin-top:10px">
             <button class="act-btn" onclick="openProcModal(${p.id})">Editar</button>
             ${p.is_promo && !p.active ? '<button class="act-btn" data-pid="'+p.id+'" data-pend="'+String(p.promo_end_date||'').slice(0,10)+'" onclick="reactivatePromo(this.dataset.pid,this.dataset.pend)" style="color:var(--gold-deep);border-color:var(--gold)">↺ Reativar</button>' : ''}
+            <button class="act-btn" onclick="copyProcLink(${p.id})" title="Copiar link">🔗</button>
             <button class="act-btn danger" onclick="deleteProc(${p.id})" style="color:var(--error);border-color:var(--error)">Remover</button>
           </div>
         </div>
