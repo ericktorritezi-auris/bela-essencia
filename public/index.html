@@ -3290,7 +3290,7 @@ async function renderAgenda() {
     // Filtro de nome client-side — aplicado sobre o array completo
     const _fn = (document.getElementById('fl-name')?.value||'').trim().toLowerCase();
     _agendaAllData = _fn
-      ? list.filter(a => (a.name && a.name.toLowerCase().includes(_fn)) || (a.phone && a.phone.includes(_fn)))
+      ? list.filter(a => (a.name && a.name.toLowerCase().includes(_fn)) || (a.phone && a.phone.includes(_fn)) || (a.proc_name && a.proc_name.toLowerCase().includes(_fn)))
       : list;
     _agendaPage    = 1;
     renderAgendaPage(1);
