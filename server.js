@@ -2823,14 +2823,18 @@ app.get('/api/appointments/report', requireAdmin, async (req, res) => {
   let sql = 'SELECT * FROM appointments WHERE 1=1';
   const params = [];
 
-  // Data de início (padrão = hoje)
-  const from = date_from || new Date().toISOString().slice(0,10);
-  if (!date_to && !month) {
-    sql += ` AND date >= $${params.push(from)}`;
-  }
-  if (date_from && date_to) {
+  // Filtro de data: só aplica quando explicitamente enviado
+  if (date_from === 'today') {
+    // Modo "Próximos" — de hoje em diante
+    sql += ` AND date >= $${params.push(new Date().toISOString().slice(0,10))}`;
+  } else if (date_from && date_to) {
+    // Intervalo explícito
     sql += ` AND date >= $${params.push(date_from)} AND date <= $${params.push(date_to)}`;
+  } else if (date_from && date_from !== 'all') {
+    // date_from avulso (sem date_to)
+    sql += ` AND date >= $${params.push(date_from)}`;
   }
+  // Se date_from = 'all' ou não veio nada → sem filtro de data (modo "Todos")
   if (month && /^\d{4}-\d{2}$/.test(month)) {
     sql += ` AND to_char(date,'YYYY-MM') = $${params.push(month)}`;
   }
