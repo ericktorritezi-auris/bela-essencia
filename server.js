@@ -248,6 +248,11 @@ async function createTenantSchema(schemaName) {
         sort_order INTEGER DEFAULT 0,
         created_at TIMESTAMPTZ DEFAULT NOW()
       )`,
+      `CREATE TABLE IF NOT EXISTS proc_category_links (
+        proc_id INTEGER NOT NULL,
+        category_id INTEGER NOT NULL,
+        PRIMARY KEY (proc_id, category_id)
+      )`,
       `CREATE TABLE IF NOT EXISTS appointments (
         id VARCHAR(30) PRIMARY KEY, city_id INTEGER NOT NULL, city_name VARCHAR(100) NOT NULL,
         proc_id INTEGER, proc_name VARCHAR(200) NOT NULL, date DATE NOT NULL,
@@ -1483,6 +1488,16 @@ async function initDB() {
         try { await pool.query(`ALTER TABLE "${sn}".procedures ADD COLUMN IF NOT EXISTS deleted BOOLEAN NOT NULL DEFAULT FALSE`); } catch {}
         try { await pool.query(`CREATE TABLE IF NOT EXISTS "${sn}".proc_categories (id SERIAL PRIMARY KEY, name VARCHAR(100) NOT NULL, sort_order INTEGER DEFAULT 0, created_at TIMESTAMPTZ DEFAULT NOW())`); } catch {}
         try { await pool.query(`ALTER TABLE "${sn}".procedures ADD COLUMN IF NOT EXISTS category_id INTEGER REFERENCES "${sn}".proc_categories(id) ON DELETE SET NULL`); } catch {}
+        try { await pool.query(`CREATE TABLE IF NOT EXISTS "${sn}".proc_category_links (proc_id INTEGER NOT NULL, category_id INTEGER NOT NULL, PRIMARY KEY (proc_id, category_id))`); } catch {}
+        // Migrar category_id existente para a tabela de links
+        try {
+          await pool.query(`
+            INSERT INTO "${sn}".proc_category_links (proc_id, category_id)
+            SELECT id, category_id FROM "${sn}".procedures
+            WHERE category_id IS NOT NULL
+            ON CONFLICT DO NOTHING
+          `);
+        } catch {}
         try { await pool.query(`ALTER TABLE "${sn}".procedures ADD COLUMN IF NOT EXISTS promo_limit INTEGER`); } catch {}
         try { await pool.query(`ALTER TABLE "${sn}".procedures ADD COLUMN IF NOT EXISTS promo_end_date DATE`); } catch {}
         try { await pool.query(`ALTER TABLE "${sn}".procedures ADD COLUMN IF NOT EXISTS promo_used INTEGER NOT NULL DEFAULT 0`); } catch {}
@@ -2001,11 +2016,9 @@ app.post('/api/proc-categories', requireAdmin, async (req, res) => {
 
 app.delete('/api/proc-categories/:id', requireAdmin, async (req, res) => {
   try {
-    // Desvincular procedimentos desta categoria antes de remover
-    await req.db(
-      'UPDATE procedures SET category_id=NULL WHERE category_id=$1',
-      [req.params.id]
-    );
+    // Remover da tabela de links e do campo legado
+    await req.db('DELETE FROM proc_category_links WHERE category_id=$1', [req.params.id]);
+    await req.db('UPDATE procedures SET category_id=NULL WHERE category_id=$1', [req.params.id]);
     await req.db('DELETE FROM proc_categories WHERE id=$1', [req.params.id]);
     res.json({ ok: true });
   } catch(err) { res.status(500).json({ error: err.message }); }
@@ -2028,11 +2041,15 @@ app.patch('/api/proc-categories/reorder', requireAdmin, async (req, res) => {
 app.get('/api/procedures', async (req, res) => {
   try {
     const { rows } = await req.db(
-      `SELECT p.*, pc.name AS category_name, pc.sort_order AS category_sort_order
+      `SELECT p.*,
+         (SELECT json_agg(json_build_object('id', pc.id, 'name', pc.name, 'sort_order', pc.sort_order)
+                          ORDER BY pc.sort_order)
+          FROM proc_category_links pcl
+          JOIN proc_categories pc ON pc.id = pcl.category_id
+          WHERE pcl.proc_id = p.id) AS categories
        FROM procedures p
-       LEFT JOIN proc_categories pc ON pc.id = p.category_id
        WHERE p.active = TRUE
-       ORDER BY COALESCE(pc.sort_order, 9999), COALESCE(p.sort_order, p.id), p.id`
+       ORDER BY COALESCE(p.sort_order, p.id), p.id`
     );
     res.json(rows);
   } catch (err) {
@@ -2044,9 +2061,13 @@ app.get('/api/procedures', async (req, res) => {
 app.get('/api/procedures/admin-all', requireAdmin, async (req, res) => {
   try {
     const { rows } = await req.db(
-      `SELECT p.*, pc.name AS category_name
+      `SELECT p.*,
+         (SELECT json_agg(json_build_object('id', pc.id, 'name', pc.name, 'sort_order', pc.sort_order)
+                          ORDER BY pc.sort_order)
+          FROM proc_category_links pcl
+          JOIN proc_categories pc ON pc.id = pcl.category_id
+          WHERE pcl.proc_id = p.id) AS categories
        FROM procedures p
-       LEFT JOIN proc_categories pc ON pc.id = p.category_id
        WHERE p.deleted IS NOT TRUE
        ORDER BY p.active DESC, p.is_promo DESC, COALESCE(p.sort_order, p.id), p.id`
     );
@@ -2099,6 +2120,12 @@ app.put('/api/procedures/:id', requireAdmin, async (req, res) => {
        req.params.id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Procedimento não encontrado' });
+    // Atualizar vínculos de categoria
+    const catIds2 = Array.isArray(category_id) ? category_id : (category_id ? [category_id] : []);
+    await req.db('DELETE FROM proc_category_links WHERE proc_id=$1', [req.params.id]);
+    for (const cid of catIds2) {
+      try { await req.db('INSERT INTO proc_category_links (proc_id,category_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [req.params.id, cid]); } catch {}
+    }
     res.json(rows[0]);
   } catch (err) {
     res.status(500).json({ error: err.message });
