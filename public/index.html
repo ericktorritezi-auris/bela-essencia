@@ -2385,8 +2385,12 @@ async function renderProcs() {
     // 1. Promos sempre no topo
     promoProcs.forEach(function(p) { html += buildProcItem(p); });
 
-    // 2. Accordion por categoria
-    Object.keys(catMap).forEach(function(catId) {
+    // 2. Accordion por categoria — ordenado por category_sort_order
+    const catOrder = catProcs
+      .filter(function(p, i, arr) { return arr.findIndex(function(x){ return x.category_id === p.category_id; }) === i; })
+      .sort(function(a, b) { return (a.category_sort_order||9999) - (b.category_sort_order||9999); })
+      .map(function(p) { return p.category_id; });
+    catOrder.forEach(function(catId) {
       const cat = catMap[catId];
       const uid = 'acc-' + catId;
       html += '<div class="acc-cat-hd" onclick="toggleAccCat(\'' + uid + '\')">' +
