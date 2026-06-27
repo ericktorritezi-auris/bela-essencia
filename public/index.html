@@ -4267,8 +4267,13 @@ function rptPrint() {
   const proc   = document.getElementById('rpt-proc').value;
   const name   = document.getElementById('rpt-name').value.trim();
   const params = new URLSearchParams({ page:1, limit:1000 });
-  if (month)  params.set('month', month);
-  else if (_rptScope === 'future') params.set('date_from', new Date().toISOString().slice(0,10));
+  if (month) {
+    params.set('month', month);
+  } else if (_rptScope === 'future') {
+    params.set('date_from', 'today');
+  } else {
+    params.set('date_from', 'all');
+  }
   if (status) params.set('status', status);
   if (city)   params.set('city', city);
   if (proc)   params.set('proc_name', proc);
