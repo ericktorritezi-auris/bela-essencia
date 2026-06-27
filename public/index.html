@@ -3564,11 +3564,13 @@ async function openCatModal() {
   if (!cats.length) {
     listHTML = '<div style="text-align:center;padding:20px;color:var(--text-light);font-size:13px">Nenhuma categoria cadastrada ainda.</div>';
   } else {
-    listHTML = '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">' +
+    listHTML = '<div id="cat-drag-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">' +
       cats.map(function(c) {
-        return '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--cream);border-radius:var(--r-sm);border:1px solid var(--border-light)">' +
-          '<div style="font-size:13px;font-weight:700;color:var(--dark)">' + c.name + '</div>' +
-          '<button onclick="delCat(' + c.id + ')" style="font-size:11px;font-weight:700;color:var(--error);background:none;border:none;cursor:pointer;font-family:inherit">Remover</button>' +
+        return '<div class="cat-drag-row" data-id="' + c.id + '" draggable="true" ' +
+          'style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--cream);border-radius:var(--r-sm);border:1px solid var(--border-light);cursor:default">' +
+          '<span class="drag-handle" title="Arrastar para reordenar" style="cursor:grab;color:var(--text-light);font-size:16px;user-select:none;-webkit-user-select:none;flex-shrink:0">⠿</span>' +
+          '<div style="font-size:13px;font-weight:700;color:var(--dark);flex:1">' + c.name + '</div>' +
+          '<button onclick="delCat(' + c.id + ')" style="font-size:11px;font-weight:700;color:var(--error);background:none;border:none;cursor:pointer;font-family:inherit;flex-shrink:0">Remover</button>' +
         '</div>';
       }).join('') +
     '</div>';
@@ -3594,6 +3596,86 @@ async function openCatModal() {
   // Adicionar Enter listener no input de nova categoria
   var inp2 = document.getElementById('new-cat-name');
   if (inp2) inp2.addEventListener('keydown', function(e){ if(e.key==='Enter') saveCat(); });
+  // Inicializar drag-and-drop das categorias
+  var catList = document.getElementById('cat-drag-list');
+  if (catList) initCatDrag(catList);
+}
+
+async function saveCatOrder(container) {
+  const ids = [...container.querySelectorAll('.cat-drag-row[data-id]')]
+    .map(function(el){ return Number(el.dataset.id); })
+    .filter(Boolean);
+  if (!ids.length) return;
+  try {
+    await PATCH('/api/proc-categories/reorder', { order: ids });
+    _catsCache = null; // invalida cache
+  } catch(e) { showToast('Erro ao salvar ordem: ' + e.message, 'error'); }
+}
+
+function initCatDrag(wrap) {
+  var dragged = null;
+  wrap.querySelectorAll('.cat-drag-row[data-id]').forEach(function(row) {
+    // Desktop drag
+    row.addEventListener('dragstart', function(e) {
+      dragged = row;
+      setTimeout(function(){ row.style.opacity = '0.4'; }, 0);
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    row.addEventListener('dragend', function() {
+      row.style.opacity = '';
+      wrap.querySelectorAll('.cat-drag-row').forEach(function(r){ r.classList.remove('drag-over'); });
+      saveCatOrder(wrap);
+    });
+    row.addEventListener('dragover', function(e) {
+      e.preventDefault();
+      wrap.querySelectorAll('.cat-drag-row').forEach(function(r){ r.classList.remove('drag-over'); });
+      if (row !== dragged) row.classList.add('drag-over');
+    });
+    row.addEventListener('drop', function(e) {
+      e.preventDefault();
+      if (dragged && row !== dragged) {
+        var rows = [...wrap.querySelectorAll('.cat-drag-row[data-id]')];
+        var di = rows.indexOf(dragged), ti = rows.indexOf(row);
+        if (di < ti) wrap.insertBefore(dragged, row.nextSibling);
+        else wrap.insertBefore(dragged, row);
+      }
+    });
+    // Mobile touch
+    var handle = row.querySelector('.drag-handle');
+    if (!handle) return;
+    handle.addEventListener('touchstart', function(e) {
+      dragged = row;
+      row.style.opacity = '0.5';
+      e.preventDefault();
+    }, { passive: false });
+    handle.addEventListener('touchmove', function(e) {
+      if (!dragged) return;
+      e.preventDefault();
+      var y = e.touches[0].clientY;
+      var rows2 = [...wrap.querySelectorAll('.cat-drag-row[data-id]')];
+      wrap.querySelectorAll('.cat-drag-row').forEach(function(c){ c.classList.remove('drag-over'); });
+      var target = rows2.find(function(c) {
+        if (c === dragged) return false;
+        var r = c.getBoundingClientRect();
+        return y >= r.top && y <= r.bottom;
+      });
+      if (target) target.classList.add('drag-over');
+    }, { passive: false });
+    handle.addEventListener('touchend', function() {
+      if (!dragged) return;
+      dragged.style.opacity = '';
+      var over = wrap.querySelector('.cat-drag-row.drag-over');
+      if (over && over !== dragged) {
+        var rows3 = [...wrap.querySelectorAll('.cat-drag-row[data-id]')];
+        var di2 = rows3.indexOf(dragged), ti2 = rows3.indexOf(over);
+        if (di2 < ti2) wrap.insertBefore(dragged, over.nextSibling);
+        else wrap.insertBefore(dragged, over);
+      }
+      wrap.querySelectorAll('.cat-drag-row').forEach(function(c){ c.classList.remove('drag-over'); });
+      saveCatOrder(wrap);
+      dragged = null;
+    });
+  });
 }
 
 async function saveCat() {
