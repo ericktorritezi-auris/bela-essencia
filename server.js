@@ -2028,11 +2028,11 @@ app.patch('/api/proc-categories/reorder', requireAdmin, async (req, res) => {
 app.get('/api/procedures', async (req, res) => {
   try {
     const { rows } = await req.db(
-      `SELECT p.*, pc.name AS category_name
+      `SELECT p.*, pc.name AS category_name, pc.sort_order AS category_sort_order
        FROM procedures p
        LEFT JOIN proc_categories pc ON pc.id = p.category_id
        WHERE p.active = TRUE
-       ORDER BY COALESCE(p.sort_order, p.id), p.id`
+       ORDER BY COALESCE(pc.sort_order, 9999), COALESCE(p.sort_order, p.id), p.id`
     );
     res.json(rows);
   } catch (err) {
