@@ -4164,8 +4164,13 @@ async function rptFilter(page) {
   const name   = document.getElementById('rpt-name').value.trim();
 
   const params = new URLSearchParams({ page: _rptPage, limit: RPT_PAGE });
-  if (month)  params.set('month', month);
-  else if (_rptScope === 'future') params.set('date_from', new Date().toISOString().slice(0,10));
+  if (month) {
+    params.set('month', month);
+  } else if (_rptScope === 'future') {
+    params.set('date_from', 'today');
+  } else {
+    params.set('date_from', 'all');
+  }
   if (status) params.set('status', status);
   if (city)   params.set('city', city);
   if (proc)   params.set('proc_name', proc);
@@ -4173,7 +4178,7 @@ async function rptFilter(page) {
 
   // Atualiza subtitle
   const sub = document.getElementById('rpt-sub');
-  if (sub) sub.textContent = _rptScope === 'future' && !month ? 'A partir de hoje' : month ? 'Mês: ' + month : 'Todos os períodos';
+  if (sub) sub.textContent = month ? 'Mês: ' + month : _rptScope === 'future' ? 'A partir de hoje' : 'Todos os períodos — desde o início';
 
   document.getElementById('rpt-cards').innerHTML = '<div style="text-align:center;padding:30px;color:var(--text-light)">Carregando...</div>';
 
