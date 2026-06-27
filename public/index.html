@@ -3733,10 +3733,10 @@ async function expandHist(dataStr) {
     var rows;
     if (data.tab === 'clientes') {
       rows = await GET('/api/historico/clientes/' + encodeURIComponent(data.key));
+    } else if (data.tab === 'procedimentos') {
+      rows = await GET('/api/historico/procedimentos/' + encodeURIComponent(data.key));
     } else {
-      var field = data.tab === 'procedimentos' ? 'proc_name' : 'city';
-      var d = await GET('/api/appointments/report?' + field + '=' + encodeURIComponent(data.key) + '&limit=50');
-      rows = d.records || [];
+      rows = await GET('/api/historico/cidades/' + encodeURIComponent(data.key));
     }
     var MS = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
     function fmtD2(d) { if(!d) return '—'; var p=String(d).slice(0,10).split('-'); return parseInt(p[2])+' '+MS[+p[1]-1]+'/'+p[0]; }
