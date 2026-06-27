@@ -2344,15 +2344,17 @@ async function renderProcs() {
     }
     // Separar promos (sempre primeiro), categorizados e sem categoria
     const promoProcs = procs.filter(p => p.is_promo);
-    const catProcs   = procs.filter(p => !p.is_promo && p.category_id);
-    const looseProcs = procs.filter(p => !p.is_promo && !p.category_id);
+    const catProcs   = procs.filter(p => !p.is_promo && p.categories && p.categories.length);
+    const looseProcs = procs.filter(p => !p.is_promo && (!p.categories || !p.categories.length));
 
-    // Agrupar por categoria
+    // Agrupar por categoria (proc pode aparecer em múltiplas)
     const catMap = {};
     catProcs.forEach(function(p) {
-      const key = p.category_id;
-      if (!catMap[key]) catMap[key] = { name: p.category_name || 'Sem nome', procs: [] };
-      catMap[key].procs.push(p);
+      (p.categories || []).forEach(function(cat) {
+        const key = cat.id;
+        if (!catMap[key]) catMap[key] = { name: cat.name, sort_order: cat.sort_order, procs: [] };
+        catMap[key].procs.push(p);
+      });
     });
 
     function buildProcItem(p) {
@@ -2386,10 +2388,8 @@ async function renderProcs() {
     promoProcs.forEach(function(p) { html += buildProcItem(p); });
 
     // 2. Accordion por categoria — ordenado por category_sort_order
-    const catOrder = catProcs
-      .filter(function(p, i, arr) { return arr.findIndex(function(x){ return x.category_id === p.category_id; }) === i; })
-      .sort(function(a, b) { return (a.category_sort_order||9999) - (b.category_sort_order||9999); })
-      .map(function(p) { return p.category_id; });
+    const catOrder = Object.keys(catMap)
+      .sort(function(a, b) { return (catMap[a].sort_order||9999) - (catMap[b].sort_order||9999); });
     catOrder.forEach(function(catId) {
       const cat = catMap[catId];
       const uid = 'acc-' + catId;
@@ -3548,18 +3548,27 @@ async function getCats(force) {
   } catch(e) { return []; }
 }
 
-async function populateCatSelect(selectedId) {
-  const sel = document.getElementById('proc-modal-category');
-  if (!sel) return;
+async function populateCatSelect(selectedIds) {
+  const wrap = document.getElementById('proc-modal-categories');
+  if (!wrap) return;
   const cats = await getCats();
-  sel.innerHTML = '<option value="">— Sem categoria —</option>';
-  cats.forEach(function(c) {
-    const opt = document.createElement('option');
-    opt.value = c.id;
-    opt.textContent = c.name;
-    if (selectedId && Number(c.id) === Number(selectedId)) opt.selected = true;
-    sel.appendChild(opt);
-  });
+  if (!cats.length) {
+    wrap.innerHTML = '<span style="font-size:12px;color:var(--text-light)">Nenhuma categoria cadastrada.</span>';
+    return;
+  }
+  // selectedIds pode ser array de ids ou null
+  const selSet = new Set(
+    Array.isArray(selectedIds) ? selectedIds.map(Number) :
+    (selectedIds ? [Number(selectedIds)] : [])
+  );
+  wrap.innerHTML = cats.map(function(c) {
+    const checked = selSet.has(Number(c.id)) ? 'checked' : '';
+    return '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600;color:var(--dark)">' +
+      '<input type="checkbox" value="' + c.id + '" ' + checked + ' ' +
+        'style="width:16px;height:16px;accent-color:var(--rose);cursor:pointer;flex-shrink:0;appearance:auto;-webkit-appearance:checkbox"> ' +
+      c.name +
+    '</label>';
+  }).join('');
 }
 
 async function openCatModal() {
@@ -4668,7 +4677,9 @@ async function renderProcsAdmin() {
             <div>${p.name}</div>
             ${p.is_promo ? '<div style="margin-top:4px">' + promoProgressHTML(p, false) + '</div>' : ''}
           </td>
-          <td>${p.category_name ? '<span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:20px;background:var(--rose-light);color:var(--rose)">' + p.category_name + '</span>' : '<span style="font-size:11px;color:var(--text-light);font-style:italic">—</span>'}</td>
+          <td>${p.categories && p.categories.length
+  ? p.categories.map(function(c){ return '<span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:20px;background:var(--rose-light);color:var(--rose);margin-right:3px">' + c.name + '</span>'; }).join('')
+  : '<span style="font-size:11px;color:var(--text-light);font-style:italic">—</span>'}</td>
           <td>${fmtDur(p.dur)}</td>
           <td style="color:var(--gold);font-weight:700">${_valuesVisible ? fmtPrice(p) : '<span class="val-mask">••••••</span>'}</td>
           <td>
@@ -4696,7 +4707,7 @@ async function renderProcsAdmin() {
             </div>
           </div>
           ${p.is_promo ? '<div style="margin-top:8px">' + promoProgressHTML(p, true) + '</div>' : ''}
-          ${p.category_name && !p.is_promo ? '<div style="margin-top:6px"><span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:20px;background:var(--rose-light);color:var(--rose)">' + p.category_name + '</span></div>' : ''}
+          ${p.categories && p.categories.length && !p.is_promo ? '<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px">' + p.categories.map(function(c){ return '<span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:20px;background:var(--rose-light);color:var(--rose)">' + c.name + '</span>'; }).join('') + '</div>' : ''}
           <div class="proc-card-actions" style="margin-top:10px">
             <button class="act-btn" onclick="openProcModal(${p.id})">Editar</button>
             ${p.is_promo && !p.active ? '<button class="act-btn" data-pid="'+p.id+'" data-pend="'+String(p.promo_end_date||'').slice(0,10)+'" onclick="reactivatePromo(this.dataset.pid,this.dataset.pend)" style="color:var(--gold-deep);border-color:var(--gold)">↺ Reativar</button>' : ''}
@@ -4862,10 +4873,10 @@ function openProcModal(id) {
       <input type="number" id="proc-modal-price" min="0" step="0.01" placeholder="0.00">
     </div>
     <div class="fg">
-      <label>Categoria <small style="font-weight:400;color:var(--text-light)">(opcional)</small></label>
-      <select id="proc-modal-category" style="width:100%;background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);padding:10px 12px;font-family:'Nunito',sans-serif;font-size:13px;color:var(--dark)">
-        <option value="">— Sem categoria —</option>
-      </select>
+      <label>Categorias <small style="font-weight:400;color:var(--text-light)">(opcional — pode selecionar mais de uma)</small></label>
+      <div id="proc-modal-categories" style="display:flex;flex-direction:column;gap:6px;padding:10px 12px;background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);min-height:42px">
+        <span style="font-size:12px;color:var(--text-light)">Carregando categorias...</span>
+      </div>
     </div>
     <div class="fg">
       <label>Descrição <small style="font-weight:400;color:var(--text-light)">(opcional — aparece como "Saiba mais" para o cliente)</small></label>
@@ -4947,8 +4958,9 @@ function openProcModal(id) {
         const cb = document.getElementById('proc-modal-is-course');
         if (cb) { cb.checked = true; toggleCourseFields(); }
       }
-      // Preencher categoria
-      populateCatSelect(p.category_id);
+      // Preencher categorias (múltiplas)
+      const selCatIds = p.categories ? p.categories.map(function(c){ return c.id; }) : (p.category_id ? [p.category_id] : []);
+      populateCatSelect(selCatIds);
 
       if (p.is_promo) {
         const cbp = document.getElementById('proc-modal-is-promo');
@@ -5041,7 +5053,10 @@ async function saveProc(id) {
   const promo_limit    = is_promo ? (parseInt(document.getElementById('proc-promo-limit')?.value)||null) : null;
   const promo_end_date = is_promo ? (document.getElementById('proc-promo-end-date')?.value||null) : null;
   const promoData = { is_promo, promo_limit, promo_end_date };
-  const category_id    = parseInt(document.getElementById('proc-modal-category')?.value) || null;
+  const catWrap = document.getElementById('proc-modal-categories');
+  const category_id = catWrap
+    ? [...catWrap.querySelectorAll('input[type=checkbox]:checked')].map(function(cb){ return parseInt(cb.value); }).filter(Boolean)
+    : [];
   const courseData = { is_course, cert_name, cert_hours, cert_abbreviation,
                        cert_description, cert_modules, cert_layout_url };
   if(!name||!dur){showToast('Preencha nome e duração','error');return}
