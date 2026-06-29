@@ -2670,7 +2670,28 @@ app.get('/confirmar', async (req, res) => {
            WHERE reminder_token=$1 AND reminder_status='sent' RETURNING id`,
           [token]
         );
-        if (rows.length) return res.send(pageFeedback('✅', 'Presença confirmada!', 'Sua presença foi confirmada. Até breve!'));
+        if (rows.length) {
+          // Push para o profissional
+          try {
+            const appt = rows[0];
+            const { rows: tns2 } = await pool.query(
+              `SELECT id FROM tenants WHERE schema_name=$1 LIMIT 1`, [tn.schema_name]
+            ).catch(() => ({ rows: [] }));
+            const tenantId = tns2[0]?.id || null;
+            const { rows: apptData } = await pool.query(
+              `SELECT name, proc_name, st FROM "${tn.schema_name}".appointments WHERE id=$1`, [appt.id]
+            ).catch(() => ({ rows: [] }));
+            if (apptData[0]) {
+              const subs = await getSubsByRole('admin', tenantId);
+              await sendPush(subs,
+                '✅ Presença confirmada!',
+                `${apptData[0].name} confirmou a agenda de amanhã · ${String(apptData[0].proc_name)} às ${String(apptData[0].st).slice(0,5)}`,
+                { url: '/#admin', type: 'reminder_confirmed' }
+              );
+            }
+          } catch(pe) {}
+          return res.send(pageFeedback('✅', 'Presença confirmada!', 'Sua presença foi confirmada. Até breve!'));
+        }
       } catch {}
     }
     res.send(pageFeedback('⚠️', 'Link já utilizado', 'Este link já foi processado anteriormente.'));
@@ -2691,7 +2712,28 @@ app.get('/cancelar', async (req, res) => {
            WHERE reminder_token=$1 AND reminder_status='sent' RETURNING id`,
           [token]
         );
-        if (rows.length) return res.send(pageFeedback('✅', 'Cancelamento registrado', 'Seu cancelamento foi registrado. O profissional será notificado.'));
+        if (rows.length) {
+          // Push para o profissional
+          try {
+            const appt = rows[0];
+            const { rows: tns2 } = await pool.query(
+              `SELECT id FROM tenants WHERE schema_name=$1 LIMIT 1`, [tn.schema_name]
+            ).catch(() => ({ rows: [] }));
+            const tenantId = tns2[0]?.id || null;
+            const { rows: apptData } = await pool.query(
+              `SELECT name, proc_name, st FROM "${tn.schema_name}".appointments WHERE id=$1`, [appt.id]
+            ).catch(() => ({ rows: [] }));
+            if (apptData[0]) {
+              const subs = await getSubsByRole('admin', tenantId);
+              await sendPush(subs,
+                '❌ Agendamento cancelado',
+                `${apptData[0].name} cancelou a agenda de amanhã · ${String(apptData[0].proc_name)} às ${String(apptData[0].st).slice(0,5)}`,
+                { url: '/#admin', type: 'reminder_cancelled' }
+              );
+            }
+          } catch(pe) {}
+          return res.send(pageFeedback('✅', 'Cancelamento registrado', 'Seu cancelamento foi registrado. O profissional será notificado.'));
+        }
       } catch {}
     }
     res.send(pageFeedback('⚠️', 'Link já utilizado', 'Este link já foi processado anteriormente.'));
