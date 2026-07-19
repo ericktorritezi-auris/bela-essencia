@@ -6609,10 +6609,13 @@ app.post('/api/push/broadcast', requireAdmin, async (req, res) => {
   const { title, body } = req.body;
   if (!title || !body) return res.status(400).json({ error: 'Título e mensagem obrigatórios' });
   try {
-    const { rows: allSubs } = await req.db(
-      'SELECT endpoint, p256dh, auth FROM push_subscriptions'
+    const tenantId = req.tenant?.id || null;
+    if (!tenantId) return res.status(400).json({ error: 'Tenant não identificado' });
+    const { rows: allSubs } = await pool.query(
+      'SELECT endpoint, p256dh, auth FROM public.push_subscriptions WHERE tenant_id=$1',
+      [tenantId]
     );
-    console.log(`[Push/broadcast] Disparando para ${allSubs.length} subscribers...`);
+    console.log(`[Push/broadcast] Disparando para ${allSubs.length} subscribers do tenant ${tenantId}...`);
     // Não await — dispara async e responde imediatamente
     sendPush(allSubs, title, body, { type: 'broadcast' })
       .catch(e => console.error('[Push/broadcast] Erro:', e.message));
@@ -6620,11 +6623,15 @@ app.post('/api/push/broadcast', requireAdmin, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Contar subscribers ativos
+// Contar subscribers ativos — filtrado por tenant
 app.get('/api/push/subscribers/count', requireAdmin, async (req, res) => {
   try {
-    const { rows } = await req.db(
-      `SELECT role, COUNT(*) as cnt FROM push_subscriptions GROUP BY role`
+    const tenantId = req.tenant?.id || null;
+    if (!tenantId) return res.status(400).json({ error: 'Tenant não identificado' });
+    const { rows } = await pool.query(
+      `SELECT role, COUNT(*) as cnt FROM public.push_subscriptions
+       WHERE tenant_id=$1 GROUP BY role`,
+      [tenantId]
     );
     const result = { total: 0, admin: 0, client: 0 };
     rows.forEach(r => { result[r.role] = parseInt(r.cnt); result.total += parseInt(r.cnt); });
