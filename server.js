@@ -829,6 +829,10 @@ async function initDB() {
         updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `);
+    // Migration: campo para senha temporária de boas-vindas
+    try {
+      await client.query(`ALTER TABLE tenant_onboarding ADD COLUMN IF NOT EXISTS admin_pass_plain TEXT`);
+    } catch {}
 
     // Reparo startup: garante que todos os tenants têm admin_profile populado
     const { rows: allTenants } = await client.query(
@@ -4688,6 +4692,14 @@ app.post('/master/api/tenants', requireMaster, async (req, res) => {
        logo_url||null, whatsapp_number||'', resend_from_email||'',
        admin_user||'admin', passHash]
     );
+    // Salvar senha plain temporária para o e-mail de boas-vindas
+    await pool.query(
+      `INSERT INTO tenant_onboarding (tenant_id, admin_pass_plain)
+       VALUES ($1, $2)
+       ON CONFLICT (tenant_id) DO UPDATE SET admin_pass_plain = $2`,
+      [tenant.id, finalPass || null]
+    );
+
     // Registra pagamento de setup
     if (setup_amount) {
       await client.query(
@@ -5150,6 +5162,37 @@ app.put('/master/api/tenants/:id/onboarding', requireMaster, async (req, res) =>
             console.error('[Onboarding] Erro ao enviar email implantação:', e.message)
           );
         }
+
+        // Disparar e-mail de boas-vindas com login e senha
+        try {
+          const { rows: obRows } = await pool.query(
+            `SELECT o.admin_pass_plain, tc.admin_user, tc.business_name,
+                    t.owner_email, t.owner_name, t.domain_custom, t.subdomain, t.id
+             FROM tenant_onboarding o
+             JOIN tenants t ON t.id = o.tenant_id
+             LEFT JOIN tenant_configs tc ON tc.tenant_id = t.id
+             WHERE o.tenant_id = $1`, [req.params.id]
+          );
+          if (obRows.length && obRows[0].owner_email) {
+            const ob = obRows[0];
+            await sendTenantWelcomeEmail(
+              { ...ob, primary_color: '#9b4d6a' },
+              {
+                admin_user:    ob.admin_user || 'admin',
+                admin_pass:    ob.admin_pass_plain || null,
+                business_name: ob.business_name || 'Belle Planner',
+              }
+            );
+            // Apagar a senha plain após o envio
+            await pool.query(
+              `UPDATE tenant_onboarding SET admin_pass_plain = NULL WHERE tenant_id = $1`,
+              [req.params.id]
+            );
+          }
+        } catch(we) {
+          console.error('[Onboarding] Erro ao enviar e-mail de boas-vindas:', we.message);
+        }
+
         // Seta trial de 7 dias para pagar a implantação
         const trialEnd = new Date();
         trialEnd.setDate(trialEnd.getDate() + 7);
@@ -5526,6 +5569,7 @@ app.put('/master/api/tenants/:id/reset-password', requireMaster, async (req, res
 // ── Re-enviar e-mail de boas-vindas ──────────────────────────────────────────
 app.post('/master/api/tenants/:id/resend-welcome', requireMaster, async (req, res) => {
   try {
+    const { admin_pass } = req.body; // Senha informada manualmente pelo master
     const { rows } = await pool.query(
       `SELECT t.*, tc.business_name, tc.admin_user, tc.primary_color
        FROM tenants t LEFT JOIN tenant_configs tc ON tc.tenant_id=t.id
@@ -5537,7 +5581,7 @@ app.post('/master/api/tenants/:id/resend-welcome', requireMaster, async (req, re
 
     await sendTenantWelcomeEmail(t, {
       admin_user:    t.admin_user || 'admin',
-      admin_pass:    null, // senha não exibida no reenvio
+      admin_pass:    admin_pass || null, // Senha fornecida manualmente no reenvio
       business_name: t.business_name || t.name,
     });
     await logAction(t.id, 'welcome_email_resent', `E-mail reenviado para ${t.owner_email}`);
@@ -5664,7 +5708,10 @@ async function sendTenantWelcomeEmail(tenant, { admin_user, admin_pass, business
         <table style="width:100%;border-collapse:collapse">
           <tr><td style="padding:8px 0;color:#8a6070;font-size:13px;width:120px">🌐 Endereço</td><td style="padding:8px 0;font-size:13px"><a href="${adminUrl}" style="color:${primaryColor}">${adminUrl}</a></td></tr>
           <tr><td style="padding:8px 0;color:#8a6070;font-size:13px">👤 Login</td><td style="padding:8px 0;font-size:13px;font-weight:700">${admin_user}</td></tr>
-          <tr><td style="padding:8px 0;color:#8a6070;font-size:13px">🔑 Senha</td><td style="padding:8px 0;font-size:13px;font-weight:700;color:${primaryColor}">${admin_pass}</td></tr>
+          ${admin_pass
+            ? `<tr><td style="padding:8px 0;color:#8a6070;font-size:13px">🔑 Senha</td><td style="padding:8px 0;font-size:13px;font-weight:700;color:${primaryColor}">${admin_pass}</td></tr>`
+            : `<tr><td style="padding:8px 0;color:#8a6070;font-size:13px">🔑 Senha</td><td style="padding:8px 0;font-size:13px;color:#8a6070">Entre em contato conosco para redefinir sua senha.</td></tr>`
+          }
         </table>
         <p style="margin-top:14px;font-size:12px;color:#8a6070;background:#fdf5f8;padding:10px;border-radius:6px">
           ℹ️ Para acessar o painel administrativo, abra o endereço acima e clique em <strong>"Área administrativa"</strong> no rodapé da página.
