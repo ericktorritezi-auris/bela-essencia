@@ -744,6 +744,7 @@ async function initDB() {
         contract_status VARCHAR(20)   NOT NULL DEFAULT 'accepted', -- 'pending' | 'accepted'
         contract_token  VARCHAR(64)   UNIQUE,
         schema_name     VARCHAR(50)   UNIQUE NOT NULL,
+        send_cc_master  BOOLEAN       NOT NULL DEFAULT FALSE,
         created_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW()
       );
     `);
@@ -832,6 +833,16 @@ async function initDB() {
     // Migration: campo para senha temporária de boas-vindas
     try {
       await client.query(`ALTER TABLE tenant_onboarding ADD COLUMN IF NOT EXISTS admin_pass_plain TEXT`);
+    } catch {}
+    // Migration: CC master por tenant
+    try {
+      await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS send_cc_master BOOLEAN NOT NULL DEFAULT FALSE`);
+      // Ativar CC para Bela Essência e LS Nail Designer (tenant_001 e tenant_lsnaildesigner)
+      await client.query(`
+        UPDATE tenants SET send_cc_master = TRUE
+        WHERE schema_name IN ('tenant_001','tenant_lsnaildesigner')
+          AND send_cc_master = FALSE
+      `);
     } catch {}
 
     // Reparo startup: garante que todos os tenants têm admin_profile populado
@@ -4613,7 +4624,7 @@ app.get('/master/api/tenants', requireMaster, async (req, res) => {
     const { rows } = await pool.query(`
       SELECT t.id, t.slug, t.name, t.owner_name, t.owner_email, t.owner_phone,
              t.domain_custom, t.subdomain, t.active, t.plan_expires_at, t.schema_name,
-             t.monthly_fee, t.setup_fee, t.created_at, t.exempt, t.trial_ends_at,
+             t.monthly_fee, t.setup_fee, t.created_at, t.exempt, t.trial_ends_at, t.send_cc_master,
              tc.primary_color, tc.secondary_color, tc.business_name,
              tc.tagline, tc.whatsapp_number, tc.resend_from_email, tc.admin_user,
              tc.logo_url, tc.prof_photo_url, tc.prof_profession,
@@ -5567,6 +5578,18 @@ app.put('/master/api/tenants/:id/reset-password', requireMaster, async (req, res
 });
 
 // ── Re-enviar e-mail de boas-vindas ──────────────────────────────────────────
+// Toggle CC master por tenant
+app.patch('/master/api/tenants/:id/cc-master', requireMaster, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'UPDATE tenants SET send_cc_master = NOT send_cc_master WHERE id=$1 RETURNING id, send_cc_master',
+      [req.params.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Tenant não encontrado' });
+    res.json({ ok: true, send_cc_master: rows[0].send_cc_master });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
 app.post('/master/api/tenants/:id/resend-welcome', requireMaster, async (req, res) => {
   try {
     const { admin_pass } = req.body; // Senha informada manualmente pelo master
@@ -7160,7 +7183,7 @@ cron.schedule('30 9 * * *', async () => {
 
     // Busca snapshots do dia ainda não enviados
     const { rows: snaps } = await pool.query(
-      `SELECT s.*, t.schema_name, t.name as tenant_name,
+      `SELECT s.*, t.schema_name, t.name as tenant_name, t.send_cc_master,
               tc.business_name, tc.primary_color, tc.resend_from_email,
               tc.whatsapp_number
        FROM daily_agenda_snapshots s
@@ -7230,9 +7253,19 @@ cron.schedule('30 9 * * *', async () => {
           '<p style="text-align:center;font-size:10px;color:#aaa">Agenda gerada às ' + genAt + ' · Belle Planner</p>' +
         '</div>';
 
+        // CC master dinâmico — buscar email master e flag do tenant
+        let masterCcEmail;
+        if (snap.send_cc_master) {
+          try {
+            const { rows: mp } = await pool.query('SELECT email FROM master_profile LIMIT 1');
+            masterCcEmail = mp[0]?.email || undefined;
+            // Não enviar CC se o profissional já é o master
+            if (masterCcEmail === prof.email) masterCcEmail = undefined;
+          } catch {}
+        }
         await sendEmail({
           to:      prof.email,
-          bcc:     prof.email !== 'erick.torritezi@gmail.com' ? 'erick.torritezi@gmail.com' : undefined,
+          bcc:     masterCcEmail,
           subject: bizName + ' · Agenda de hoje ' + new Date().toLocaleDateString('pt-BR', {timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit'}),
           html,
         });
