@@ -1181,6 +1181,9 @@ function renderTenantsTable(containerId, list, compact=false) {
           <button class="icon-btn" onclick="masterResetTenantPush(${t.id},'${(t.business_name||t.name).replace(/'/g,'')}')" title="Reconectar push deste tenant">🔔</button>
           <button class="icon-btn" onclick="toggleTenantExempt(${t.id},'${(t.business_name||t.name).replace(/'/g,'')}',${!!t.exempt})" title="${t.exempt?'Remover isenção':'Marcar como isento'}" style="background:${t.exempt?'#27ae60':'none'};border-color:${t.exempt?'#27ae60':'var(--border)'};border-radius:6px;padding:3px 7px;">${t.exempt?'★':'☆'}</button>
           <button class="icon-btn" onclick="resendWelcome(${t.id},'${(t.business_name||t.name).replace(/'/g,'')}','${t.owner_email||''}','${t.admin_user||'admin'}')" title="Reenviar e-mail de boas-vindas">📧</button>
+          <button class="icon-btn" onclick="toggleCcMaster(${t.id}, this)"
+            title="${t.send_cc_master ? 'CC ativo — clique para desativar' : 'CC inativo — clique para ativar'}"
+            style="font-weight:700;font-size:12px;letter-spacing:.02em;${t.send_cc_master ? 'color:#27ae60;border-color:#27ae60' : 'color:var(--muted);border-color:var(--border)'}">CC</button>
           ${(t.domain_custom||t.subdomain)?`<a href="https://${t.domain_custom||(t.subdomain+'.belleplanner.com.br')}" target="_blank" class="icon-btn" style="text-decoration:none" title="Abrir agenda">↗</a>`:''}
           <button class="icon-btn" onclick="syncTenant('${t.schema_name}','${t.business_name||t.name}')" title="Sync dados">⚙️</button>
           <div style="width:1px;height:20px;background:var(--border);margin:0 2px"></div>
@@ -2409,6 +2412,17 @@ async function resetTenantLogin(id, name) {
 }
 
 // ── RESEND WELCOME ─────────────────────────────────────────────────────────
+async function toggleCcMaster(id, btn) {
+  try {
+    const r = await PATCH('/master/api/tenants/' + id + '/cc-master', {});
+    const on = r.send_cc_master;
+    btn.title   = on ? 'CC ativo — clique para desativar' : 'CC inativo — clique para ativar';
+    btn.style.color       = on ? '#27ae60' : 'var(--muted)';
+    btn.style.borderColor = on ? '#27ae60' : 'var(--border)';
+    toast((on ? '✅ CC ativado' : '⭕ CC desativado') + ' para este tenant', 'ok', 3000);
+  } catch(e) { toast('Erro: ' + e.message, 'err'); }
+}
+
 async function resendWelcome(id, name, email, adminUser) {
   // Preencher modal dedicado
   document.getElementById('welcome-recipient').textContent = 'Para: ' + name + ' (' + email + ')';
