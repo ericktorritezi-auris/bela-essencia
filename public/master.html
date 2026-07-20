@@ -1154,7 +1154,7 @@ function renderTenantsTable(containerId, list, compact=false) {
           <button class="icon-btn" onclick="resetTenantLogin(${t.id},'${(t.business_name||t.name).replace(/'/g,'')}')" title="Redefinir login">👤</button>
           <button class="icon-btn" onclick="masterResetTenantPush(${t.id},'${(t.business_name||t.name).replace(/'/g,'')}')" title="Reconectar push deste tenant">🔔</button>
           <button class="icon-btn" onclick="toggleTenantExempt(${t.id},'${(t.business_name||t.name).replace(/'/g,'')}',${!!t.exempt})" title="${t.exempt?'Remover isenção':'Marcar como isento'}" style="background:${t.exempt?'#27ae60':'none'};border-color:${t.exempt?'#27ae60':'var(--border)'};border-radius:6px;padding:3px 7px;">${t.exempt?'★':'☆'}</button>
-          <button class="icon-btn" onclick="resendWelcome(${t.id},'${(t.business_name||t.name).replace(/'/g,'')}','${t.owner_email||''}')" title="Reenviar e-mail de boas-vindas">📧</button>
+          <button class="icon-btn" onclick="resendWelcome(${t.id},'${(t.business_name||t.name).replace(/'/g,'')}','${t.owner_email||''}','${t.admin_user||'admin'}')" title="Reenviar e-mail de boas-vindas">📧</button>
           ${(t.domain_custom||t.subdomain)?`<a href="https://${t.domain_custom||(t.subdomain+'.belleplanner.com.br')}" target="_blank" class="icon-btn" style="text-decoration:none" title="Abrir agenda">↗</a>`:''}
           <button class="icon-btn" onclick="syncTenant('${t.schema_name}','${t.business_name||t.name}')" title="Sync dados">⚙️</button>
           <div style="width:1px;height:20px;background:var(--border);margin:0 2px"></div>
@@ -2383,12 +2383,36 @@ async function resetTenantLogin(id, name) {
 }
 
 // ── RESEND WELCOME ─────────────────────────────────────────────────────────
-async function resendWelcome(id, name, email) {
-  if (!confirm('Reenviar e-mail de boas-vindas para\n' + name + ' (' + email + ')?')) return;
-  try {
-    const r = await POST('/master/api/tenants/' + id + '/resend-welcome', {});
-    toast('✅ E-mail reenviado para ' + r.sent_to, 'ok', 5000);
-  } catch(e) { toast('Erro: ' + e.message, 'err'); }
+async function resendWelcome(id, name, email, adminUser) {
+  // Modal para informar a senha antes de reenviar
+  const modalHtml = '<div style="font-family:inherit">' +
+    '<p style="font-size:14px;color:#4a3040;margin-bottom:16px">Reenviar e-mail de boas-vindas para<br><strong>' + name + '</strong> (' + email + ')</p>' +
+    '<div style="margin-bottom:12px">' +
+      '<label style="font-size:11px;font-weight:700;color:#8a6070;text-transform:uppercase;letter-spacing:.05em">Login</label>' +
+      '<input id="rw-login" value="' + (adminUser||'admin') + '" disabled ' +
+        'style="width:100%;padding:9px 12px;margin-top:4px;border:1.5px solid #e8d5de;border-radius:8px;font-size:13px;background:#f9f0f4;color:#4a3040">' +
+    '</div>' +
+    '<div style="margin-bottom:4px">' +
+      '<label style="font-size:11px;font-weight:700;color:#8a6070;text-transform:uppercase;letter-spacing:.05em">Senha temporária</label>' +
+      '<input id="rw-pass" type="text" placeholder="Digite a senha para incluir no e-mail" ' +
+        'style="width:100%;padding:9px 12px;margin-top:4px;border:1.5px solid #e8d5de;border-radius:8px;font-size:13px;background:#fff;color:#4a3040;outline:none">' +
+      '<p style="font-size:11px;color:#b07090;margin-top:6px">⚠️ Se deixar em branco, o e-mail não incluirá a senha e instruirá o profissional a entrar em contato.</p>' +
+    '</div>' +
+  '</div>';
+
+  // Usar o modal existente do master
+  document.getElementById('modal-content').innerHTML = modalHtml;
+  document.getElementById('modal-title').textContent = '📧 Reenviar Boas-Vindas';
+  document.getElementById('modal-confirm-btn').textContent = 'Enviar E-mail';
+  document.getElementById('modal-confirm-btn').onclick = async function() {
+    const pass = document.getElementById('rw-pass').value.trim();
+    closeModal();
+    try {
+      const r = await POST('/master/api/tenants/' + id + '/resend-welcome', { admin_pass: pass || null });
+      toast('✅ E-mail reenviado para ' + r.sent_to, 'ok', 5000);
+    } catch(e) { toast('Erro: ' + e.message, 'err'); }
+  };
+  openModal();
 }
 
 // ── SYNC ───────────────────────────────────────────────────────────────────
