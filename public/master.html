@@ -859,6 +859,32 @@
   </div>
 </div>
 
+<!-- MODAL REENVIAR BOAS-VINDAS -->
+<div class="modal-bg hidden" id="modal-welcome-bg">
+  <div class="modal" style="max-width:460px">
+    <div class="modal-header">
+      <div class="modal-title">📧 Reenviar Boas-Vindas</div>
+      <button class="modal-close" onclick="closeModal('welcome')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p id="welcome-recipient" style="font-size:13px;color:var(--muted);margin-bottom:16px"></p>
+      <div class="fg" style="margin-bottom:12px">
+        <label>Login</label>
+        <input id="welcome-login" disabled style="background:var(--bg2);opacity:.7">
+      </div>
+      <div class="fg" style="margin-bottom:6px">
+        <label>Senha temporária</label>
+        <input id="welcome-pass" type="text" placeholder="Digite a senha para incluir no e-mail">
+      </div>
+      <p style="font-size:11px;color:var(--muted);margin-bottom:20px">⚠️ Se deixar em branco, o e-mail instruirá o profissional a entrar em contato para redefinir a senha.</p>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-primary" id="welcome-send-btn" style="flex:1">📧 Enviar E-mail</button>
+        <button class="btn btn-ghost" onclick="closeModal('welcome')" style="flex:1">Cancelar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script>
@@ -2429,33 +2455,6 @@ Isso move agendamentos, NPS e outros dados que estavam no schema público para o
     toast('Erro no sync: ' + e.message, 'err');
   }
 }
-
-// ── MODALS ─────────────────────────────────────────────────────────────────
-<!-- MODAL REENVIAR BOAS-VINDAS -->
-<div class="modal-bg hidden" id="modal-welcome-bg">
-  <div class="modal" style="max-width:460px">
-    <div class="modal-header">
-      <div class="modal-title">📧 Reenviar Boas-Vindas</div>
-      <button class="modal-close" onclick="closeModal('welcome')">✕</button>
-    </div>
-    <div class="modal-body">
-      <p id="welcome-recipient" style="font-size:13px;color:var(--muted);margin-bottom:18px"></p>
-      <div class="fg" style="margin-bottom:12px">
-        <label>Login</label>
-        <input id="welcome-login" disabled style="background:var(--bg2);opacity:.7">
-      </div>
-      <div class="fg" style="margin-bottom:6px">
-        <label>Senha temporária</label>
-        <input id="welcome-pass" type="text" placeholder="Digite a senha para incluir no e-mail">
-      </div>
-      <p style="font-size:11px;color:var(--muted);margin-bottom:20px">⚠️ Se deixar em branco, o e-mail não incluirá a senha e instruirá o profissional a entrar em contato.</p>
-      <div style="display:flex;gap:10px">
-        <button class="btn btn-primary" id="welcome-send-btn" style="flex:1">📧 Enviar E-mail</button>
-        <button class="btn btn-ghost" onclick="closeModal('welcome')" style="flex:1">Cancelar</button>
-      </div>
-    </div>
-  </div>
-</div>
 
 function closeModal(name) {
   const el = document.getElementById('modal-' + name + '-bg');
