@@ -2384,35 +2384,21 @@ async function resetTenantLogin(id, name) {
 
 // ── RESEND WELCOME ─────────────────────────────────────────────────────────
 async function resendWelcome(id, name, email, adminUser) {
-  // Modal para informar a senha antes de reenviar
-  const modalHtml = '<div style="font-family:inherit">' +
-    '<p style="font-size:14px;color:#4a3040;margin-bottom:16px">Reenviar e-mail de boas-vindas para<br><strong>' + name + '</strong> (' + email + ')</p>' +
-    '<div style="margin-bottom:12px">' +
-      '<label style="font-size:11px;font-weight:700;color:#8a6070;text-transform:uppercase;letter-spacing:.05em">Login</label>' +
-      '<input id="rw-login" value="' + (adminUser||'admin') + '" disabled ' +
-        'style="width:100%;padding:9px 12px;margin-top:4px;border:1.5px solid #e8d5de;border-radius:8px;font-size:13px;background:#f9f0f4;color:#4a3040">' +
-    '</div>' +
-    '<div style="margin-bottom:4px">' +
-      '<label style="font-size:11px;font-weight:700;color:#8a6070;text-transform:uppercase;letter-spacing:.05em">Senha temporária</label>' +
-      '<input id="rw-pass" type="text" placeholder="Digite a senha para incluir no e-mail" ' +
-        'style="width:100%;padding:9px 12px;margin-top:4px;border:1.5px solid #e8d5de;border-radius:8px;font-size:13px;background:#fff;color:#4a3040;outline:none">' +
-      '<p style="font-size:11px;color:#b07090;margin-top:6px">⚠️ Se deixar em branco, o e-mail não incluirá a senha e instruirá o profissional a entrar em contato.</p>' +
-    '</div>' +
-  '</div>';
-
-  // Usar o modal existente do master
-  document.getElementById('modal-content').innerHTML = modalHtml;
-  document.getElementById('modal-title').textContent = '📧 Reenviar Boas-Vindas';
-  document.getElementById('modal-confirm-btn').textContent = 'Enviar E-mail';
-  document.getElementById('modal-confirm-btn').onclick = async function() {
-    const pass = document.getElementById('rw-pass').value.trim();
-    closeModal();
+  // Preencher modal dedicado
+  document.getElementById('welcome-recipient').textContent = 'Para: ' + name + ' (' + email + ')';
+  document.getElementById('welcome-login').value = adminUser || 'admin';
+  document.getElementById('welcome-pass').value = '';
+  // Configurar botão de envio
+  document.getElementById('welcome-send-btn').onclick = async function() {
+    const pass = document.getElementById('welcome-pass').value.trim();
+    closeModal('welcome');
     try {
       const r = await POST('/master/api/tenants/' + id + '/resend-welcome', { admin_pass: pass || null });
       toast('✅ E-mail reenviado para ' + r.sent_to, 'ok', 5000);
     } catch(e) { toast('Erro: ' + e.message, 'err'); }
   };
-  openModal();
+  // Abrir modal
+  document.getElementById('modal-welcome-bg').classList.remove('hidden');
 }
 
 // ── SYNC ───────────────────────────────────────────────────────────────────
@@ -2445,6 +2431,32 @@ Isso move agendamentos, NPS e outros dados que estavam no schema público para o
 }
 
 // ── MODALS ─────────────────────────────────────────────────────────────────
+<!-- MODAL REENVIAR BOAS-VINDAS -->
+<div class="modal-bg hidden" id="modal-welcome-bg">
+  <div class="modal" style="max-width:460px">
+    <div class="modal-header">
+      <div class="modal-title">📧 Reenviar Boas-Vindas</div>
+      <button class="modal-close" onclick="closeModal('welcome')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p id="welcome-recipient" style="font-size:13px;color:var(--muted);margin-bottom:18px"></p>
+      <div class="fg" style="margin-bottom:12px">
+        <label>Login</label>
+        <input id="welcome-login" disabled style="background:var(--bg2);opacity:.7">
+      </div>
+      <div class="fg" style="margin-bottom:6px">
+        <label>Senha temporária</label>
+        <input id="welcome-pass" type="text" placeholder="Digite a senha para incluir no e-mail">
+      </div>
+      <p style="font-size:11px;color:var(--muted);margin-bottom:20px">⚠️ Se deixar em branco, o e-mail não incluirá a senha e instruirá o profissional a entrar em contato.</p>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-primary" id="welcome-send-btn" style="flex:1">📧 Enviar E-mail</button>
+        <button class="btn btn-ghost" onclick="closeModal('welcome')" style="flex:1">Cancelar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 function closeModal(name) {
   const el = document.getElementById('modal-' + name + '-bg');
   if (el) el.classList.add('hidden');
