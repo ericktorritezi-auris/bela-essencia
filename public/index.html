@@ -3273,10 +3273,23 @@ function renderAgendaPage(page) {
           ${(a.status==='confirmed'||a.status==='realizado')&&_getCourseProc(a.proc_id)?`<button class="act-btn" onclick="openCertModal('${a.id}')" style="color:var(--gold);border-color:var(--gold)">🎓 Certificado</button>`:''}
         </div>
         <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border-light);display:flex;align-items:center;gap:8px">
-          <label class="paid-check" onclick="event.stopPropagation()" style="flex:1">
-            <input type="checkbox" ${a.paid?'checked':''} onchange="togglePaid('${a.id}',this.checked)">
-            <label style="color:${a.paid?'#1e8449':'var(--text-light)'};font-weight:700;font-size:12px;cursor:pointer">${a.paid?'✅ Pago':'⏳ A receber'}</label>
-          </label>
+          <div class="partial-wrap" onclick="event.stopPropagation()" style="flex:1">
+            <label class="paid-check">
+              <input type="checkbox" ${a.paid?'checked':''} onchange="togglePaid('${a.id}',this.checked)">
+              <label style="color:${a.paid?'#1e8449':'var(--text-light)'};font-weight:700;font-size:12px;cursor:pointer">${a.paid?'✅ Pago':'⏳ A receber'}</label>
+            </label>
+            <label class="partial-row">
+              <input type="checkbox" style="accent-color:#c47a30;width:13px;height:13px" ${a.is_partial?'checked':''} onchange="togglePartialCheck('${a.id}',this.checked)">
+              <span style="font-size:11px;font-weight:700;color:${a.is_partial?'#c47a30':'var(--text-light)'};">${a.is_partial&&a.partial_amount?'💛 R$ '+Number(a.partial_amount).toLocaleString('pt-BR',{minimumFractionDigits:2}):'Parcial'}</span>
+            </label>
+            <div class="partial-input-wrap${a.is_partial?' open':''}" id="piw-${a.id}">
+              <span class="partial-pfx">R$</span>
+              <input class="partial-inp" type="number" id="piv-${a.id}" min="0" step="0.01"
+                value="${a.partial_amount||''}" placeholder="0,00"
+                onkeydown="if(event.key==='Enter')savePartialVal('${a.id}')">
+              <button class="partial-ok" onclick="savePartialVal('${a.id}')">✓</button>
+            </div>
+          </div>
         </div>
       </div>
     `;
