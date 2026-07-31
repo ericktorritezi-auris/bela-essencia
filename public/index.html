@@ -428,6 +428,14 @@ tr:hover td{background:#FAF3F6}
 
 /* ── PROC CARDS (mobile) ── */
 .paid-check{display:flex;align-items:center;gap:5px;cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.partial-wrap{display:flex;flex-direction:column;gap:4px}
+.partial-row{display:flex;align-items:center;gap:5px;cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.partial-input-wrap{display:flex;align-items:center;gap:4px;padding:4px 6px;background:#fef9ef;border:1px solid #f8c471;border-radius:6px;overflow:hidden;max-height:0;opacity:0;transition:max-height .2s ease,opacity .2s ease}
+.partial-input-wrap.open{max-height:42px;opacity:1}
+.partial-pfx{font-size:11px;font-weight:700;color:#c47a30;flex-shrink:0}
+.partial-inp{width:68px;padding:3px 5px;border:1px solid #f8c471;border-radius:5px;font-family:'Nunito',sans-serif;font-size:12px;font-weight:700;color:var(--dark);background:#fff;outline:none;text-align:right}
+.partial-inp:focus{border-color:#c47a30}
+.partial-ok{padding:3px 7px;border-radius:5px;border:none;background:#c47a30;color:#fff;font-family:'Nunito',sans-serif;font-size:11px;font-weight:800;cursor:pointer;flex-shrink:0;-webkit-tap-highlight-color:transparent}
 .paid-check input[type=checkbox]{width:15px;height:15px;accent-color:var(--success,#27ae60);cursor:pointer;flex-shrink:0}
 .paid-check label{font-size:11px;font-weight:700;color:var(--text-light);cursor:pointer;white-space:nowrap;user-select:none}
 .badge-paid{background:#e8f7ef;color:#1e8449;padding:3px 8px;border-radius:8px;font-size:11px;font-weight:700}
@@ -2060,7 +2068,7 @@ tr.drag-over{border-top:2.5px solid var(--rose)!important}
 // ══════════════════════════════════════════════════
 // VERSÃO — altere APENAS aqui; atualiza todos os rodapés
 // ══════════════════════════════════════════════════
-const APP_VERSION  = '2.9.8';
+const APP_VERSION  = '2.9.9';
 const APP_COPY     = `Versão: ${APP_VERSION} | ${(window._tenantConfig?.business_name || 'Belle Planner')} © ${new Date().getFullYear()}`;
 
 function renderFooters() {
@@ -3200,10 +3208,23 @@ function renderAgendaPage(page) {
         <td style="color:var(--gold);font-weight:700">${a.price?maskedCurr(a.price):a.pt==='eval'?'Avaliação':'—'}</td>
         <td>${statusBadge(a.status)}</td>
         <td>
-          <label class="paid-check" onclick="event.stopPropagation()">
-            <input type="checkbox" ${a.paid?'checked':''} onchange="togglePaid('${a.id}',this.checked)">
-            <label style="color:${a.paid?'#1e8449':'var(--text-light)'};font-weight:700;font-size:11px;cursor:pointer">${a.paid?'✅ Pago':'⏳ Pagar'}</label>
-          </label>
+          <div class="partial-wrap" onclick="event.stopPropagation()">
+            <label class="paid-check">
+              <input type="checkbox" ${a.paid?'checked':''} onchange="togglePaid('${a.id}',this.checked)">
+              <label style="color:${a.paid?'#1e8449':'var(--text-light)'};font-weight:700;font-size:11px;cursor:pointer">${a.paid?'✅ Pago':'⏳ Pagar'}</label>
+            </label>
+            <label class="partial-row">
+              <input type="checkbox" style="accent-color:#c47a30;width:13px;height:13px" ${a.is_partial?'checked':''} onchange="togglePartialCheck('${a.id}',this.checked)">
+              <span style="font-size:11px;font-weight:700;color:${a.is_partial?'#c47a30':'var(--text-light)'};">${a.is_partial&&a.partial_amount?'💛 R$ '+Number(a.partial_amount).toLocaleString('pt-BR',{minimumFractionDigits:2}):'Parcial'}</span>
+            </label>
+            <div class="partial-input-wrap${a.is_partial?' open':''}" id="piw-${a.id}">
+              <span class="partial-pfx">R$</span>
+              <input class="partial-inp" type="number" id="piv-${a.id}" min="0" step="0.01"
+                value="${a.partial_amount||''}" placeholder="0,00"
+                onkeydown="if(event.key==='Enter')savePartialVal('${a.id}')">
+              <button class="partial-ok" onclick="savePartialVal('${a.id}')">✓</button>
+            </div>
+          </div>
         </td>
         <td>
           <button class="act-btn" onclick="openEditModal('${a.id}')">Editar</button>
@@ -4483,6 +4504,39 @@ async function togglePaid(id, paid) {
   try {
     await PATCH(`/api/appointments/${id}/paid`, { paid });
     showToast(paid ? '✅ Marcado como pago' : '⏳ Pagamento desmarcado', 'ok');
+    renderAgenda();
+    renderStats();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+async function togglePartialCheck(id, checked) {
+  try {
+    if (checked) {
+      // Abrir campo inline sem salvar ainda — só mostra o input
+      const wrap = document.getElementById('piw-' + id);
+      if (wrap) { wrap.classList.add('open'); setTimeout(function(){ var inp = document.getElementById('piv-'+id); if(inp) inp.focus(); }, 220); }
+      // Marcar is_partial no servidor (sem valor ainda)
+      await PATCH(`/api/appointments/${id}/partial`, { is_partial: true, partial_amount: null });
+      renderStats();
+    } else {
+      // Desmarcar parcial
+      const wrap = document.getElementById('piw-' + id);
+      if (wrap) wrap.classList.remove('open');
+      await PATCH(`/api/appointments/${id}/partial`, { is_partial: false });
+      showToast('Parcial removido', 'ok');
+      renderAgenda();
+      renderStats();
+    }
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+async function savePartialVal(id) {
+  var inp = document.getElementById('piv-' + id);
+  var val = inp ? parseFloat(inp.value) : null;
+  if (!val || val <= 0) { showToast('Digite um valor válido', 'error'); if(inp) inp.focus(); return; }
+  try {
+    await PATCH(`/api/appointments/${id}/partial`, { is_partial: true, partial_amount: val });
+    showToast('💛 Parcial salvo — R$ ' + val.toLocaleString('pt-BR',{minimumFractionDigits:2}), 'ok');
     renderAgenda();
     renderStats();
   } catch(e) { showToast(e.message, 'error'); }
