@@ -1504,6 +1504,8 @@ async function initDB() {
         try { await pool.query(`ALTER TABLE "${sn}".appointments ADD COLUMN IF NOT EXISTS internal_note TEXT`); } catch {}
         try { await pool.query(`ALTER TABLE "${sn}".appointments ADD COLUMN IF NOT EXISTS reminder_token VARCHAR(64)`); } catch {}
         try { await pool.query(`ALTER TABLE "${sn}".appointments ADD COLUMN IF NOT EXISTS reminder_status VARCHAR(20) DEFAULT 'pending'`); } catch {}
+        try { await pool.query(`ALTER TABLE "${sn}".appointments ADD COLUMN IF NOT EXISTS is_partial BOOLEAN NOT NULL DEFAULT FALSE`); } catch {}
+        try { await pool.query(`ALTER TABLE "${sn}".appointments ADD COLUMN IF NOT EXISTS partial_amount DECIMAL(10,2) DEFAULT NULL`); } catch {}
         try { await pool.query(`CREATE TABLE IF NOT EXISTS "${sn}".proc_categories (id SERIAL PRIMARY KEY, name VARCHAR(100) NOT NULL, sort_order INTEGER DEFAULT 0, created_at TIMESTAMPTZ DEFAULT NOW())`); } catch {}
         try { await pool.query(`ALTER TABLE "${sn}".procedures ADD COLUMN IF NOT EXISTS category_id INTEGER REFERENCES "${sn}".proc_categories(id) ON DELETE SET NULL`); } catch {}
         try { await pool.query(`CREATE TABLE IF NOT EXISTS "${sn}".proc_category_links (proc_id INTEGER NOT NULL, category_id INTEGER NOT NULL, PRIMARY KEY (proc_id, category_id))`); } catch {}
@@ -1786,7 +1788,7 @@ function requireAdmin(req, res, next) {
 app.get('/api/health', async (req, res) => {
   try {
     await req.db('SELECT 1');
-    res.json({ ok: true, version: '2.9.8', db: 'connected' });
+    res.json({ ok: true, version: '2.9.9', db: 'connected' });
   } catch {
     res.status(503).json({ ok: false, db: 'disconnected' });
   }
@@ -3008,11 +3010,42 @@ app.put('/api/appointments/:id', requireAdmin, async (req, res) => {
 });
 
 // Marcar/desmarcar pagamento do procedimento
+// ── Pagamento parcial ────────────────────────────────────────────────────────
+app.patch('/api/appointments/:id/partial', requireAdmin, async (req, res) => {
+  const { is_partial, partial_amount } = req.body;
+  try {
+    if (is_partial) {
+      // Ativar parcial: desmarcar pago, salvar valor
+      const amount = partial_amount != null ? parseFloat(partial_amount) : null;
+      const { rows } = await req.db(
+        `UPDATE appointments SET is_partial=TRUE, partial_amount=$1, paid=FALSE, paid_at=NULL
+         WHERE id=$2 RETURNING id, is_partial, partial_amount, paid`,
+        [amount, req.params.id]
+      );
+      if (!rows.length) return res.status(404).json({ error: 'Não encontrado' });
+      res.json(rows[0]);
+    } else {
+      // Desativar parcial
+      const { rows } = await req.db(
+        `UPDATE appointments SET is_partial=FALSE, partial_amount=NULL
+         WHERE id=$1 RETURNING id, is_partial, partial_amount, paid`,
+        [req.params.id]
+      );
+      if (!rows.length) return res.status(404).json({ error: 'Não encontrado' });
+      res.json(rows[0]);
+    }
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
 app.patch('/api/appointments/:id/paid', requireAdmin, async (req, res) => {
   const { paid } = req.body;
   if (typeof paid !== 'boolean') return res.status(400).json({ error: 'paid deve ser boolean' });
   try {
     const paid_at = paid ? new Date().toISOString() : null;
+    // Ao marcar pago, limpar parcial
+    if (paid) {
+      await req.db(`UPDATE appointments SET is_partial=FALSE, partial_amount=NULL WHERE id=$1`, [req.params.id]);
+    }
     const { rows } = await req.db(
       `UPDATE appointments SET paid=$1, paid_at=$2 WHERE id=$3 RETURNING *`,
       [paid, paid_at, req.params.id]
@@ -3604,8 +3637,8 @@ app.get('/api/revenue/summary', requireAdmin, async (req, res) => {
     const q = (sql, p) => req.db(sql, p).then(r => r.rows[0]);
     const [todayRow, weekRow, monthRow, yearRow] = await Promise.all([
       q(`SELECT COALESCE(SUM(price),0) as total, COUNT(*) as cnt,
-              COALESCE(SUM(CASE WHEN paid=TRUE THEN price ELSE 0 END),0) as received,
-              COALESCE(SUM(CASE WHEN paid=FALSE AND status IN ('confirmed','realizado') THEN price ELSE 0 END),0) as pending
+              COALESCE(SUM(CASE WHEN paid=TRUE THEN price WHEN is_partial=TRUE THEN partial_amount ELSE 0 END),0) as received,
+              COALESCE(SUM(CASE WHEN paid=FALSE AND is_partial=FALSE AND status IN ('confirmed','realizado') THEN price ELSE 0 END),0) as pending
          FROM appointments WHERE date=$1 AND status IN ('confirmed','realizado')`, [today]),
       q(`SELECT COALESCE(SUM(price),0) as total, COUNT(*) as cnt,
               COALESCE(SUM(CASE WHEN paid=TRUE THEN price ELSE 0 END),0) as received,
@@ -4073,7 +4106,7 @@ app.get('/api/backup/export', requireAdmin, async (req, res) => {
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.json({
       exportedAt: new Date().toISOString(),
-      version: '2.9.8',
+      version: '2.9.9',
       procedures:    procs.rows,
       appointments:  appts.rows,
       blocked_dates: blocked.rows,
