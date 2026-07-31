@@ -3146,8 +3146,12 @@ function renderStatsFromList(list, filterLabel) {
   const realizado = list.filter(a => a.status === 'realizado');
   const cancelled = list.filter(a => a.status === 'cancelled');
   const revenue    = [...confirmed, ...realizado].reduce((s,a) => s + (Number(a.price)||0), 0);
-  const received   = [...confirmed, ...realizado].filter(a => a.paid).reduce((s,a) => s + (Number(a.price)||0), 0);
-  const pending    = [...confirmed, ...realizado].filter(a => !a.paid).reduce((s,a) => s + (Number(a.price)||0), 0);
+  const received   = [...confirmed, ...realizado].reduce((s,a) => {
+    if (a.paid) return s + (Number(a.price)||0);
+    if (a.is_partial && a.partial_amount) return s + Number(a.partial_amount);
+    return s;
+  }, 0);
+  const pending    = [...confirmed, ...realizado].filter(a => !a.paid && !a.is_partial).reduce((s,a) => s + (Number(a.price)||0), 0);
   document.getElementById('today-stats').innerHTML=`
     <div class="stat-card">
       <div class="stat-lbl" style="color:#1A56DB">✅ Confirmados</div>
@@ -6469,8 +6473,10 @@ function renderReceivablesTable() {
 
   // Calcular totais do conjunto completo (não filtrado)
   const allPaid   = _receivablesData.filter(a => a.paid);
-  const allUnpaid = _receivablesData.filter(a => !a.paid);
-  const sumPaid   = allPaid.reduce((s,a)   => s + Number(a.price||0), 0);
+  const allPartial = _receivablesData.filter(a => !a.paid && a.is_partial && a.partial_amount);
+  const allUnpaid = _receivablesData.filter(a => !a.paid && !a.is_partial);
+  const sumPaid   = allPaid.reduce((s,a) => s + Number(a.price||0), 0)
+                  + allPartial.reduce((s,a) => s + Number(a.partial_amount||0), 0);
   const sumUnpaid = allUnpaid.reduce((s,a) => s + Number(a.price||0), 0);
 
   const tp  = document.getElementById('rec-total-paid');
