@@ -3505,6 +3505,22 @@ app.get('/api/availability', async (req, res) => {
       }
     } catch(e) { /* colunas não existem ainda */ }
 
+    // Verificar se esta data tem evento promo para esta cidade
+    // Se sim e o proc solicitado não é o promo → data bloqueada para este proc
+    try {
+      const promoBlock = await req.db(
+        `SELECT id FROM procedures
+         WHERE is_promo=TRUE AND active=TRUE AND promo_date=$1
+           AND (promo_city_ids IS NULL OR cardinality(promo_city_ids)=0 OR $2=ANY(promo_city_ids))
+         LIMIT 1`,
+        [date, Number(cityId)]
+      );
+      if (promoBlock.rowCount > 0 && Number(promoBlock.rows[0].id) !== Number(procId)) {
+        // Esta data pertence exclusivamente ao promo — bloquear qualquer outro proc
+        return res.json([]);
+      }
+    } catch(e) { /* colunas podem não existir ainda */ }
+
     // Verifica se procedimento está habilitado para esta cidade
     const pRes = await req.db(
       `SELECT p.dur FROM procedures p
@@ -4294,6 +4310,8 @@ app.get('/api/cities', async (req, res) => {
       city.specificDates = [...new Set([...rdDates, ...rsDates, ...promoDatesArr])];
       city.specificDateConfigs = rd.rows;
       city.blockedByPromoDates = promoCityBlocked;
+      // Datas de evento promo desta cidade (para bloquear outros procedimentos)
+      city.promoEventDates = promoDatesArr;
     }
 
     // Filtra cidades sem dias ativos E sem datas futuras específicas
