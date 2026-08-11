@@ -428,6 +428,12 @@ tr:hover td{background:#FAF3F6}
 
 /* ── PROC CARDS (mobile) ── */
 .paid-check{display:flex;align-items:center;gap:5px;cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.promo-event-cities{display:flex;flex-direction:column;gap:8px;padding:10px 12px;background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);min-height:44px}
+.promo-event-city-label{display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 14px;background:#fff;border:1.5px solid var(--border-light,#E8D5DE);border-radius:8px;transition:border-color .15s;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.promo-event-city-label:hover{border-color:var(--rose)}
+.promo-event-city-label.checked{border-color:var(--rose);background:var(--rose-light,#F5E8EE)}
+.promo-event-city-name{font-size:13px;font-weight:700;color:var(--dark);flex:1}
+.promo-event-city-cb{width:18px;height:18px;accent-color:var(--rose);cursor:pointer;flex-shrink:0;touch-action:manipulation}
 .partial-wrap{display:flex;flex-direction:column;gap:4px}
 .partial-row{display:flex;align-items:center;gap:5px;cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 .partial-input-wrap{display:flex;align-items:center;gap:4px;padding:4px 6px;background:#fef9ef;border:1px solid #f8c471;border-radius:6px;overflow:hidden;max-height:0;opacity:0;transition:max-height .2s ease,opacity .2s ease}
@@ -2483,6 +2489,8 @@ async function selProc(id) {
   const p = procs.find(x => Number(x.id) === Number(id));
   if (!p) return;
   BK.procId=id; BK.procData=p; BK.promo=promo; BK.date=null; BK.time=null;
+  // Se é promo com data específica, restringir o calendário a essa data
+  BK.promoDate = (p.is_promo && p.promo_date) ? String(p.promo_date).slice(0,10) : null;
   const c = CITIES.find(x=>x.id===BK.cityId);
   document.getElementById('s3-sub').textContent=`${c.short} · ${p.name}`;
 
@@ -2513,6 +2521,8 @@ async function selProc(id) {
 // STEP 3: CALENDAR
 // ══════════════════════════════════════════════════
 function isValidDay(date, cityId) {
+  // Se procedimento selecionado tem data específica de evento → SÓ essa data
+  if (BK.promoDate) return date === BK.promoDate;
   const city = CITIES.find(c => Number(c.id) === Number(cityId));
   if (!city) return false;
   // Bloquear datas de promos de outras cidades
@@ -5262,7 +5272,13 @@ async function _loadPromoCities(selectedIds) {
     cb2.className = 'promo-event-city-cb';
     cb2.value = c.id;
     cb2.checked = sel.has(Number(c.id));
+    if (cb2.checked) lbl.classList.add('checked');
+    cb2.addEventListener('change', function() {
+      if (this.checked) lbl.classList.add('checked');
+      else lbl.classList.remove('checked');
+    });
     const sp = document.createElement('span');
+    sp.className = 'promo-event-city-name';
     sp.textContent = c.short || c.name || c.local_name || '';
     lbl.appendChild(cb2);
     lbl.appendChild(sp);
