@@ -3470,17 +3470,31 @@ app.get('/api/availability', async (req, res) => {
     let breaks  = (cfg.breaks || []).filter(Boolean).map(b => ({
       s: timeToMin(b.s), e: timeToMin(b.e)
     }));
-    // Override horários via promo_date (seguro se colunas não existirem)
+    // Override horários via promo_date — usa procId para busca precisa
     try {
-      const pdr = await req.db(
-        `SELECT promo_start_time::text as pst, promo_end_time::text as pet
-         FROM procedures
-         WHERE is_promo=TRUE AND active=TRUE AND promo_date=$1
-           AND (promo_city_ids IS NULL OR cardinality(promo_city_ids)=0 OR $2=ANY(promo_city_ids))
-         LIMIT 1`,
-        [date, Number(cityId)]
-      );
-      if (pdr.rowCount > 0 && pdr.rows[0].pst && pdr.rows[0].pet) {
+      let pdr;
+      if (procId) {
+        // Busca pelo procedimento específico selecionado
+        pdr = await req.db(
+          `SELECT promo_start_time::text as pst, promo_end_time::text as pet
+           FROM procedures
+           WHERE id=$1 AND is_promo=TRUE AND promo_date IS NOT NULL
+             AND promo_start_time IS NOT NULL AND promo_end_time IS NOT NULL
+           LIMIT 1`,
+          [Number(procId)]
+        );
+      } else {
+        // Fallback: qualquer promo com essa data
+        pdr = await req.db(
+          `SELECT promo_start_time::text as pst, promo_end_time::text as pet
+           FROM procedures
+           WHERE is_promo=TRUE AND active=TRUE AND promo_date=$1
+             AND promo_start_time IS NOT NULL AND promo_end_time IS NOT NULL
+           LIMIT 1`,
+          [date]
+        );
+      }
+      if (pdr && pdr.rowCount > 0 && pdr.rows[0].pst && pdr.rows[0].pet) {
         wStart = timeToMin(pdr.rows[0].pst);
         wEnd   = timeToMin(pdr.rows[0].pet);
         breaks = [];
