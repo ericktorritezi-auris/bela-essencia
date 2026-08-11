@@ -3474,13 +3474,10 @@ app.get('/api/availability', async (req, res) => {
     try {
       let pdr;
       if (procId) {
-        // Busca pelo procedimento específico selecionado
+        // Busca pelo procedimento específico — sem filtros extras que possam falhar
         pdr = await req.db(
           `SELECT promo_start_time::text as pst, promo_end_time::text as pet
-           FROM procedures
-           WHERE id=$1 AND is_promo=TRUE AND promo_date IS NOT NULL
-             AND promo_start_time IS NOT NULL AND promo_end_time IS NOT NULL
-           LIMIT 1`,
+           FROM procedures WHERE id=$1 AND is_promo=TRUE LIMIT 1`,
           [Number(procId)]
         );
       } else {
@@ -3488,9 +3485,7 @@ app.get('/api/availability', async (req, res) => {
         pdr = await req.db(
           `SELECT promo_start_time::text as pst, promo_end_time::text as pet
            FROM procedures
-           WHERE is_promo=TRUE AND active=TRUE AND promo_date=$1
-             AND promo_start_time IS NOT NULL AND promo_end_time IS NOT NULL
-           LIMIT 1`,
+           WHERE is_promo=TRUE AND active=TRUE AND promo_date=$1 LIMIT 1`,
           [date]
         );
       }
