@@ -8344,7 +8344,7 @@ async function renderReleasedSlots() {
 }
 
 // ── MODAL ─────────────────────────────────────────
-function closeModal(){document.getElementById('modal-bg').classList.add('hidden')}
+function closeModal(){document.getElementById('modal-bg').classList.add('hidden');window._promoCitySelected=new Set();}
 
 // ══════════════════════════════════════════════════
 // PUSH NOTIFICATIONS
