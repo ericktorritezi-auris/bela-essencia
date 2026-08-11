@@ -5241,7 +5241,11 @@ function togglePromoFields() {
   const cb = document.getElementById('proc-modal-is-promo');
   const fields = document.getElementById('proc-promo-fields');
   if (fields) fields.style.display = cb?.checked ? 'flex' : 'none';
-  if (cb?.checked) populatePromoCities([]);
+  // Só popula se o container estiver vazio (evita resetar seleções existentes)
+  if (cb?.checked) {
+    const wrap = document.getElementById('proc-promo-cities');
+    if (wrap && !wrap.querySelector('input[type=checkbox]')) populatePromoCities([]);
+  }
 }
 
 function togglePromoTimeFields() {
@@ -5548,8 +5552,16 @@ async function saveProc(id) {
   const is_promo       = document.getElementById('proc-modal-is-promo')?.checked || false;
   const promo_limit    = is_promo ? (parseInt(document.getElementById('proc-promo-limit')?.value)||null) : null;
   const promo_end_date = is_promo ? (document.getElementById('proc-promo-end-date')?.value||null) : null;
-  // Ler cidade(s), data e horários do evento promo
-  const promo_city_ids = is_promo ? getSelectedPromoCities() : [];
+  // Ler cidade(s) direto dos checkboxes do DOM no momento do salvar
+  var promo_city_ids = [];
+  if (is_promo) {
+    var _cityWrap = document.getElementById('proc-promo-cities');
+    if (_cityWrap) {
+      _cityWrap.querySelectorAll('input[type=checkbox]').forEach(function(cb) {
+        if (cb.checked) promo_city_ids.push(parseInt(cb.value));
+      });
+    }
+  }
   const promo_date       = is_promo ? (document.getElementById('proc-promo-date')?.value || null) : null;
   const promo_start_time = is_promo && promo_date ? (document.getElementById('proc-promo-start-time')?.value || null) : null;
   const promo_end_time   = is_promo && promo_date ? (document.getElementById('proc-promo-end-time')?.value || null) : null;
