@@ -5250,9 +5250,18 @@ function togglePromoTimeFields() {
   if (w) w.style.display = d && d.value ? '' : 'none';
 }
 
+// Armazena as cidades selecionadas no promo (evita dependência de querySelectorAll)
+window._promoCitySelected = new Set();
+
+function getSelectedPromoCities() {
+  return [...window._promoCitySelected].map(Number).filter(Boolean);
+}
+
 async function populatePromoCities(selectedIds) {
   const wrap = document.getElementById('proc-promo-cities');
   if (!wrap) return;
+  // Inicializar o set com os IDs pré-selecionados
+  window._promoCitySelected = new Set((selectedIds||[]).map(Number));
   let cities = (window.CITIES && window.CITIES.length) ? window.CITIES : [];
   if (!cities.length) {
     try { cities = await GET('/api/cities'); } catch(e) { cities = []; }
@@ -5261,14 +5270,27 @@ async function populatePromoCities(selectedIds) {
     wrap.innerHTML = '<span style="font-size:12px;color:var(--text-light)">Nenhuma cidade cadastrada.</span>';
     return;
   }
-  const selSet = new Set((selectedIds||[]).map(Number));
-  wrap.innerHTML = cities.map(function(c) {
-    const ck = selSet.has(Number(c.id)) ? 'checked' : '';
-    return '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600;color:var(--dark)">' +
-      '<input type="checkbox" value="' + c.id + '" ' + ck +
-      ' style="width:15px;height:15px;accent-color:var(--rose);cursor:pointer;flex-shrink:0"> ' +
-      (c.short || c.name) + '</label>';
-  }).join('');
+  // Criar checkboxes via DOM (mais confiável que innerHTML no mobile)
+  wrap.innerHTML = '';
+  cities.forEach(function(c) {
+    const cityId = Number(c.id);
+    const label = document.createElement('label');
+    label.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600;color:var(--dark);padding:4px 0;-webkit-tap-highlight-color:transparent;user-select:none;';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.value = cityId;
+    cb.checked = window._promoCitySelected.has(cityId);
+    cb.style.cssText = 'width:16px;height:16px;accent-color:var(--rose);cursor:pointer;flex-shrink:0;';
+    cb.addEventListener('change', function() {
+      if (this.checked) window._promoCitySelected.add(cityId);
+      else window._promoCitySelected.delete(cityId);
+    });
+    const span = document.createElement('span');
+    span.textContent = c.short || c.name || c.local_name || ('Cidade ' + cityId);
+    label.appendChild(cb);
+    label.appendChild(span);
+    wrap.appendChild(label);
+  });
 }
 function addProcModule(value='') {
   const list = document.getElementById('proc-modules-list');
@@ -5527,10 +5549,7 @@ async function saveProc(id) {
   const promo_limit    = is_promo ? (parseInt(document.getElementById('proc-promo-limit')?.value)||null) : null;
   const promo_end_date = is_promo ? (document.getElementById('proc-promo-end-date')?.value||null) : null;
   // Ler cidade(s), data e horários do evento promo
-  const promoCityWrap = document.getElementById('proc-promo-cities');
-  const promo_city_ids = is_promo && promoCityWrap
-    ? [...promoCityWrap.querySelectorAll('input[type=checkbox]:checked')].map(cb => parseInt(cb.value)).filter(Boolean)
-    : [];
+  const promo_city_ids = is_promo ? getSelectedPromoCities() : [];
   const promo_date       = is_promo ? (document.getElementById('proc-promo-date')?.value || null) : null;
   const promo_start_time = is_promo && promo_date ? (document.getElementById('proc-promo-start-time')?.value || null) : null;
   const promo_end_time   = is_promo && promo_date ? (document.getElementById('proc-promo-end-time')?.value || null) : null;
