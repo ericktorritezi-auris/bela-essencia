@@ -2073,6 +2073,12 @@ app.get('/api/procedures', async (req, res) => {
           WHERE pcl.proc_id = p.id) AS categories
        FROM procedures p
        WHERE p.active = TRUE
+         AND (
+           -- Promo com promo_date: só exibe se a data ainda não passou
+           NOT p.is_promo
+           OR p.promo_date IS NULL
+           OR p.promo_date >= CURRENT_DATE
+         )
        ORDER BY COALESCE(p.sort_order, p.id), p.id`
     );
     res.json(rows);
