@@ -1506,6 +1506,10 @@ async function initDB() {
         try { await pool.query(`ALTER TABLE "${sn}".appointments ADD COLUMN IF NOT EXISTS reminder_status VARCHAR(20) DEFAULT 'pending'`); } catch {}
         try { await pool.query(`ALTER TABLE "${sn}".appointments ADD COLUMN IF NOT EXISTS is_partial BOOLEAN NOT NULL DEFAULT FALSE`); } catch {}
         try { await pool.query(`ALTER TABLE "${sn}".appointments ADD COLUMN IF NOT EXISTS partial_amount DECIMAL(10,2) DEFAULT NULL`); } catch {}
+        try { await pool.query(`ALTER TABLE "${sn}".procedures ADD COLUMN IF NOT EXISTS promo_city_ids INTEGER[] DEFAULT ARRAY[]::INTEGER[]`); } catch(e) {}
+        try { await pool.query(`ALTER TABLE "${sn}".procedures ADD COLUMN IF NOT EXISTS promo_date DATE`); } catch(e) {}
+        try { await pool.query(`ALTER TABLE "${sn}".procedures ADD COLUMN IF NOT EXISTS promo_start_time TIME`); } catch(e) {}
+        try { await pool.query(`ALTER TABLE "${sn}".procedures ADD COLUMN IF NOT EXISTS promo_end_time TIME`); } catch(e) {}
         try { await pool.query(`CREATE TABLE IF NOT EXISTS "${sn}".proc_categories (id SERIAL PRIMARY KEY, name VARCHAR(100) NOT NULL, sort_order INTEGER DEFAULT 0, created_at TIMESTAMPTZ DEFAULT NOW())`); } catch {}
         try { await pool.query(`ALTER TABLE "${sn}".procedures ADD COLUMN IF NOT EXISTS category_id INTEGER REFERENCES "${sn}".proc_categories(id) ON DELETE SET NULL`); } catch {}
         try { await pool.query(`CREATE TABLE IF NOT EXISTS "${sn}".proc_category_links (proc_id INTEGER NOT NULL, category_id INTEGER NOT NULL, PRIMARY KEY (proc_id, category_id))`); } catch {}
@@ -1788,7 +1792,7 @@ function requireAdmin(req, res, next) {
 app.get('/api/health', async (req, res) => {
   try {
     await req.db('SELECT 1');
-    res.json({ ok: true, version: '2.9.9', db: 'connected' });
+    res.json({ ok: true, version: '2.9.10', db: 'connected' });
   } catch {
     res.status(503).json({ ok: false, db: 'disconnected' });
   }
@@ -2115,6 +2119,27 @@ app.post('/api/procedures', requireAdmin, async (req, res) => {
        cert_modules||null, cert_layout_url||null, cert_field_config||null, cert_abbreviation||null,
        is_promo||false, promo_limit||null, promo_end_date||null]
     );
+    // Campos do evento promocional (UPDATE separado — seguro se colunas ainda não existirem)
+    const { promo_city_ids, promo_date, promo_start_time, promo_end_time } = req.body;
+    if (promo_city_ids !== undefined || promo_date !== undefined) {
+      try {
+        await req.db(
+          `UPDATE procedures SET
+            promo_city_ids = $1,
+            promo_date = $2,
+            promo_start_time = $3,
+            promo_end_time = $4
+           WHERE id = $5`,
+          [
+            (Array.isArray(promo_city_ids) ? promo_city_ids : []).map(Number),
+            promo_date || null,
+            promo_start_time || null,
+            promo_end_time || null,
+            rows[0].id
+          ]
+        );
+      } catch(e) { /* colunas ainda não existem — ignora */ }
+    }
     res.status(201).json(rows[0]);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -2140,6 +2165,27 @@ app.put('/api/procedures/:id', requireAdmin, async (req, res) => {
        req.params.id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Procedimento não encontrado' });
+    // Campos do evento promocional (UPDATE separado — seguro se colunas não existirem)
+    const { promo_city_ids, promo_date, promo_start_time, promo_end_time } = req.body;
+    if (promo_city_ids !== undefined || promo_date !== undefined) {
+      try {
+        await req.db(
+          `UPDATE procedures SET
+            promo_city_ids = $1,
+            promo_date = $2,
+            promo_start_time = $3,
+            promo_end_time = $4
+           WHERE id = $5`,
+          [
+            (Array.isArray(promo_city_ids) ? promo_city_ids : []).map(Number),
+            promo_date || null,
+            promo_start_time || null,
+            promo_end_time || null,
+            req.params.id
+          ]
+        );
+      } catch(e) { /* colunas ainda não existem — ignora */ }
+    }
     // Atualizar vínculos de categoria
     const catIds2 = Array.isArray(category_id) ? category_id : (category_id ? [category_id] : []);
     await req.db('DELETE FROM proc_category_links WHERE proc_id=$1', [req.params.id]);
@@ -3419,11 +3465,27 @@ app.get('/api/availability', async (req, res) => {
       return res.json(relFreeSlots);
     }
 
-    const wStart = timeToMin(cfg.work_start);
-    const wEnd   = timeToMin(cfg.work_end);
-    const breaks  = (cfg.breaks || []).filter(Boolean).map(b => ({
+    let wStart = timeToMin(cfg.work_start);
+    let wEnd   = timeToMin(cfg.work_end);
+    let breaks  = (cfg.breaks || []).filter(Boolean).map(b => ({
       s: timeToMin(b.s), e: timeToMin(b.e)
     }));
+    // Override horários via promo_date (seguro se colunas não existirem)
+    try {
+      const pdr = await req.db(
+        `SELECT promo_start_time::text as pst, promo_end_time::text as pet
+         FROM procedures
+         WHERE is_promo=TRUE AND active=TRUE AND promo_date=$1
+           AND (promo_city_ids IS NULL OR cardinality(promo_city_ids)=0 OR $2=ANY(promo_city_ids))
+         LIMIT 1`,
+        [date, Number(cityId)]
+      );
+      if (pdr.rowCount > 0 && pdr.rows[0].pst && pdr.rows[0].pet) {
+        wStart = timeToMin(pdr.rows[0].pst);
+        wEnd   = timeToMin(pdr.rows[0].pet);
+        breaks = [];
+      }
+    } catch(e) { /* colunas não existem ainda */ }
 
     // Verifica se procedimento está habilitado para esta cidade
     const pRes = await req.db(
@@ -4106,7 +4168,7 @@ app.get('/api/backup/export', requireAdmin, async (req, res) => {
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.json({
       exportedAt: new Date().toISOString(),
-      version: '2.9.9',
+      version: '2.9.10',
       procedures:    procs.rows,
       appointments:  appts.rows,
       blocked_dates: blocked.rows,
@@ -4187,9 +4249,33 @@ app.get('/api/cities', async (req, res) => {
       );
       const rdDates  = rd.rows.map(r => r.date.slice(0,10));
       const rsDates  = rs.rows.map(r => r.date.slice(0,10));
-      // União das duas fontes — sem duplicatas
-      city.specificDates = [...new Set([...rdDates, ...rsDates])];
-      city.specificDateConfigs = rd.rows; // inclui horários para uso no motor
+      // Datas de promos com data específica para esta cidade
+      let promoDatesArr = [], promoCityBlocked = [];
+      try {
+        const pdRes = await req.db(
+          `SELECT promo_date::text as d, promo_start_time::text as pst, promo_end_time::text as pet
+           FROM procedures
+           WHERE is_promo=TRUE AND active=TRUE AND promo_date IS NOT NULL AND promo_date >= $1
+             AND (promo_city_ids IS NULL OR cardinality(promo_city_ids)=0 OR $2=ANY(promo_city_ids))`,
+          [today, city.id]
+        );
+        promoDatesArr = pdRes.rows.filter(r=>r.d).map(r=>r.d.slice(0,10));
+        // Datas bloqueadas para ESTA cidade (promo tem outra cidade específica)
+        const pbRes = await req.db(
+          `SELECT promo_date::text as d FROM procedures
+           WHERE is_promo=TRUE AND active=TRUE AND promo_date IS NOT NULL AND promo_date >= $1
+             AND promo_city_ids IS NOT NULL AND cardinality(promo_city_ids)>0
+             AND NOT($2=ANY(promo_city_ids))`,
+          [today, city.id]
+        );
+        promoCityBlocked = pbRes.rows.filter(r=>r.d).map(r=>r.d.slice(0,10));
+        // Configs de horário do promo para override no availability
+        city.promoDateConfigs = pdRes.rows.filter(r=>r.d && (r.pst||r.pet));
+      } catch(e) { /* coluna promo_city_ids ainda não existe — ignorar */ }
+      // União das fontes
+      city.specificDates = [...new Set([...rdDates, ...rsDates, ...promoDatesArr])];
+      city.specificDateConfigs = rd.rows;
+      city.blockedByPromoDates = promoCityBlocked;
     }
 
     // Filtra cidades sem dias ativos E sem datas futuras específicas
@@ -5825,7 +5911,9 @@ async function checkExpiredPromos() {
       try {
         const r1 = await pool.query(`UPDATE "${sn}".procedures SET active=FALSE WHERE is_promo=TRUE AND active=TRUE AND promo_end_date IS NOT NULL AND promo_end_date < CURRENT_DATE`);
         const r2 = await pool.query(`UPDATE "${sn}".procedures SET active=FALSE WHERE is_promo=TRUE AND active=TRUE AND promo_limit IS NOT NULL AND promo_used >= promo_limit`);
-        if ((r1.rowCount+r2.rowCount)>0) console.log('[Promo] ' + (r1.rowCount+r2.rowCount) + ' desativado(s) em ' + sn);
+        let r3 = {rowCount:0};
+        try { r3 = await pool.query(`UPDATE "${sn}".procedures SET active=FALSE WHERE is_promo=TRUE AND active=TRUE AND promo_date IS NOT NULL AND promo_date < CURRENT_DATE`); } catch(e) {}
+        if ((r1.rowCount+r2.rowCount+r3.rowCount)>0) console.log('[Promo] ' + (r1.rowCount+r2.rowCount+r3.rowCount) + ' desativado(s) em ' + sn);
       } catch(e) { console.warn('[Promo] ' + sn + ':', e.message); }
     }
   } catch(e) { console.warn('[Promo]', e.message); }
