@@ -5876,7 +5876,8 @@ async function checkExpiredPromos() {
       try {
         const r1 = await pool.query(`UPDATE "${sn}".procedures SET active=FALSE WHERE is_promo=TRUE AND active=TRUE AND promo_end_date IS NOT NULL AND promo_end_date < CURRENT_DATE`);
         const r2 = await pool.query(`UPDATE "${sn}".procedures SET active=FALSE WHERE is_promo=TRUE AND active=TRUE AND promo_limit IS NOT NULL AND promo_used >= promo_limit`);
-        if ((r1.rowCount+r2.rowCount)>0) console.log('[Promo] ' + (r1.rowCount+r2.rowCount) + ' desativado(s) em ' + sn);
+        const r3 = await pool.query(`UPDATE "${sn}".procedures SET active=FALSE WHERE is_promo=TRUE AND active=TRUE AND promo_date IS NOT NULL AND promo_date < CURRENT_DATE`);
+        if ((r1.rowCount+r2.rowCount+r3.rowCount)>0) console.log('[Promo] ' + (r1.rowCount+r2.rowCount+r3.rowCount) + ' desativado(s) em ' + sn);
       } catch(e) { console.warn('[Promo] ' + sn + ':', e.message); }
     }
   } catch(e) { console.warn('[Promo]', e.message); }
