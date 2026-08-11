@@ -2114,12 +2114,12 @@ app.post('/api/procedures', requireAdmin, async (req, res) => {
         cert_modules, cert_layout_url, cert_field_config, cert_abbreviation,
         is_promo, promo_limit, promo_end_date, promo_used,
         promo_city_ids, promo_date, promo_start_time, promo_end_time)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,0,$17,$18,$19,$20) RETURNING *`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,0,$17::INTEGER[],$18,$19,$20) RETURNING *`,
       [name, parseInt(dur), price||null, pt||'fixed', description||null,
        is_course||false, cert_name||null, cert_hours||null, cert_description||null,
        cert_modules||null, cert_layout_url||null, cert_field_config||null, cert_abbreviation||null,
        is_promo||false, promo_limit||null, promo_end_date||null,
-       promo_city_ids||[], promo_date||null, promo_start_time||null, promo_end_time||null]
+       (promo_city_ids||[]).map(Number), promo_date||null, promo_start_time||null, promo_end_time||null]
     );
     res.status(201).json(rows[0]);
   } catch (err) {
@@ -2139,13 +2139,13 @@ app.put('/api/procedures/:id', requireAdmin, async (req, res) => {
         is_course=$6, cert_name=$7, cert_hours=$8, cert_description=$9,
         cert_modules=$10, cert_layout_url=$11, cert_field_config=$12, cert_abbreviation=$13,
         is_promo=$14, promo_limit=$15, promo_end_date=$16,
-        promo_city_ids=$17, promo_date=$18, promo_start_time=$19, promo_end_time=$20
+        promo_city_ids=$17::INTEGER[], promo_date=$18, promo_start_time=$19, promo_end_time=$20
        WHERE id=$21 RETURNING *`,
       [name, parseInt(dur), price||null, pt||'fixed', description||null,
        is_course||false, cert_name||null, cert_hours?parseInt(cert_hours):null, cert_description||null,
        cert_modules||null, cert_layout_url||null, cert_field_config||null, cert_abbreviation||null,
        is_promo||false, promo_limit||null, promo_end_date||null,
-       promo_city_ids||[], promo_date||null, promo_start_time||null, promo_end_time||null,
+       (promo_city_ids||[]).map(Number), promo_date||null, promo_start_time||null, promo_end_time||null,
        req.params.id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Procedimento não encontrado' });
