@@ -2074,10 +2074,13 @@ app.get('/api/procedures', async (req, res) => {
        FROM procedures p
        WHERE p.active = TRUE
          AND (
-           -- Promo com promo_date: só exibe se a data ainda não passou
+           -- Procedimentos normais: sempre exibe
            NOT p.is_promo
-           OR p.promo_date IS NULL
-           OR p.promo_date >= CURRENT_DATE
+           OR (
+             -- Promo: só exibe se nenhuma data de validade passou
+             (p.promo_date IS NULL OR p.promo_date >= CURRENT_DATE)
+             AND (p.promo_end_date IS NULL OR p.promo_end_date >= CURRENT_DATE)
+           )
          )
        ORDER BY COALESCE(p.sort_order, p.id), p.id`
     );
