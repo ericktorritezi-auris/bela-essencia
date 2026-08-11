@@ -909,26 +909,65 @@
           <div class="section-title">Procedimento Promocional</div>
         </div>
         <div class="section-body">
-          <p>Um procedimento promocional é um serviço com tempo de vida limitado — desativa automaticamente ao atingir o número de vagas <strong>ou</strong> a data de encerramento, o que ocorrer primeiro. Ideal para lançamentos, ofertas relâmpago e ações de marketing com urgência real.</p>
+          <p>Um procedimento promocional é um serviço com tempo de vida limitado. Ideal para lançamentos, eventos presenciais, ofertas relâmpago e ações de marketing com urgência real.</p>
+
           <div class="sub">
             <h4>📌 Como criar</h4>
-            <p>Procedimentos → <em>+ Novo</em> ou edite um existente → marque <strong>🏷️ Este procedimento é promocional</strong>. Dois campos aparecem: <strong>Vagas disponíveis</strong> (opcional) e <strong>Válido até</strong> (opcional). Se preencher apenas vagas, encerra ao esgotá-las. Se preencher apenas data, encerra na data. Se preencher os dois, encerra no que acontecer primeiro.</p>
+            <p>Ao cadastrar ou editar um procedimento, marque <strong>"Este procedimento é promocional"</strong>. A seção de configurações avançadas será exibida.</p>
           </div>
+
           <div class="sub">
-            <h4>⚡ Desativação automática</h4>
-            <p>Cada agendamento feito incrementa o contador imediatamente. Ao atingir o limite, o procedimento é desativado na hora. Datas vencidas são verificadas diariamente à meia-noite. O procedimento desativado some da lista do cliente mas permanece visível no painel como inativo.</p>
+            <h4>🔢 Vagas e Validade</h4>
+            <p>Configure o número de vagas disponíveis e/ou a data de encerramento da oferta. O sistema desativa o procedimento automaticamente ao atingir o limite <strong>ou</strong> a data — o que ocorrer primeiro.</p>
           </div>
+
           <div class="sub">
-            <h4>↺ Reativar</h4>
-            <p>Na lista de Procedimentos, o item inativo exibe o botão <strong>↺ Reativar</strong>. Se tinha apenas vagas → reativa imediatamente com contador zerado. Se tinha data vencida → o sistema pede uma nova data válida antes de reativar. Para remover a promoção definitivamente → edite e desmarque a flag; vira item regular do catálogo.</p>
+            <h4>📍 Cidade(s) do Evento</h4>
+            <p>Selecione uma ou mais cidades onde o procedimento ocorrerá. Se nenhuma cidade for selecionada, o promo aparece em todas as cidades que você atende.</p>
+            <p>Com cidade(s) selecionada(s): o procedimento <strong>não aparece</strong> para clientes que escolheram outra cidade.</p>
           </div>
+
           <div class="sub">
-            <h4>🎯 Exibição para o cliente</h4>
-            <p>Procedimentos promocionais aparecem sempre em <strong>primeiro</strong> na lista, com barra animada em gradiente e mensagem de urgência automática que muda conforme as vagas diminuem ou a data se aproxima: <em>"🔥 X vagas disponíveis até DD/MM"</em>, <em>"⚡ Restam apenas X vagas!"</em>, <em>"🚨 ÚLTIMAS X vagas! Não perca!"</em>.</p>
+            <h4>📅 Data do Evento</h4>
+            <p>Define o dia específico em que o procedimento ocorrerá. Quando preenchida, ativa um conjunto de regras de bloqueio:</p>
+            <table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:8px">
+              <tr style="background:#f5e8ee">
+                <th style="padding:8px;text-align:left;border:1px solid #e8d5de">Configuração</th>
+                <th style="padding:8px;text-align:left;border:1px solid #e8d5de">Efeito no calendário</th>
+              </tr>
+              <tr>
+                <td style="padding:8px;border:1px solid #e8d5de">Data + Cidade(s)</td>
+                <td style="padding:8px;border:1px solid #e8d5de">Outras cidades ficam <strong>bloqueadas</strong> naquele dia. Na cidade do evento, apenas o procedimento promocional pode ser agendado.</td>
+              </tr>
+              <tr>
+                <td style="padding:8px;border:1px solid #e8d5de">Data sem Cidade</td>
+                <td style="padding:8px;border:1px solid #e8d5de">Todas as cidades veem o dia no calendário, mas <strong>apenas o procedimento promocional</strong> pode ser agendado naquela data — outros procedimentos ficam bloqueados.</td>
+              </tr>
+              <tr>
+                <td style="padding:8px;border:1px solid #e8d5de">Sem Data</td>
+                <td style="padding:8px;border:1px solid #e8d5de">Nenhum bloqueio por data. Funciona pelo filtro de vagas/validade normalmente.</td>
+              </tr>
+            </table>
+            <p style="margin-top:10px">A data do evento também aparece automaticamente no calendário, mesmo que aquele dia da semana não seja normalmente atendido pela cidade.</p>
           </div>
+
+          <div class="sub">
+            <h4>🕐 Horário do Evento</h4>
+            <p>Quando a data do evento é preenchida, surgem campos de <strong>Horário início</strong> e <strong>Horário fim</strong>. Esses horários substituem completamente a grade de horários normal daquela cidade naquele dia — apenas os slots dentro do intervalo (30 em 30 minutos) ficam disponíveis.</p>
+          </div>
+
+          <div class="sub">
+            <h4>⏰ Expiração automática</h4>
+            <p>Um procedimento promocional é removido do booking automaticamente quando qualquer uma das condições for atingida:</p>
+            <p>— A <strong>data do evento</strong> passou<br>
+            — A <strong>data de validade</strong> passou<br>
+            — O <strong>número de vagas</strong> foi esgotado</p>
+            <p>O procedimento passa a <strong>inativo</strong>, podendo ser reativado a qualquer momento pelo painel administrativo.</p>
+          </div>
+
           <div class="tip">
-            <span>🏷️</span>
-            <p>Anuncie a promoção nas redes com o número exato de vagas — o sistema conta, desativa e cria urgência automaticamente. Você foca no marketing.</p>
+            <span>⚠️</span>
+            <p>A <strong>Agenda Tática</strong> se sobrepõe a todas as regras — é o único recurso capaz de liberar ou bloquear horários independentemente das configurações do promocional.</p>
           </div>
         </div>
       </section>

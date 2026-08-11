@@ -2527,6 +2527,13 @@ function isValidDay(date, cityId) {
   if (!city) return false;
   // Bloquear datas de promos de outras cidades
   if (city.blockedByPromoDates && city.blockedByPromoDates.includes(date)) return false;
+  // Se esta data é de evento promo E o proc selecionado NÃO é o promo → bloquear
+  if (city.promoEventDates && city.promoEventDates.includes(date)) {
+    // Só libera se o proc selecionado é o próprio promo com esta data
+    const isPromoProc = BK.procData && BK.procData.is_promo &&
+      BK.procData.promo_date && String(BK.procData.promo_date).slice(0,10) === date;
+    if (!isPromoProc) return false;
+  }
   // Verifica data específica liberada para esta cidade
   if (city.specificDates && city.specificDates.includes(date)) return true;
   // Verifica dia da semana configurado
