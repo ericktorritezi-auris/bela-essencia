@@ -2068,7 +2068,7 @@ tr.drag-over{border-top:2.5px solid var(--rose)!important}
 // ══════════════════════════════════════════════════
 // VERSÃO — altere APENAS aqui; atualiza todos os rodapés
 // ══════════════════════════════════════════════════
-const APP_VERSION  = '2.9.10';
+const APP_VERSION  = '2.9.9';
 const APP_COPY     = `Versão: ${APP_VERSION} | ${(window._tenantConfig?.business_name || 'Belle Planner')} © ${new Date().getFullYear()}`;
 
 function renderFooters() {
@@ -2354,19 +2354,6 @@ async function renderProcs() {
       `;
     }
 
-    // Filtrar promos por promo_city_ids
-    procs = procs.filter(function(p) {
-      if (!p.is_promo) return true;
-      if (!p.promo_city_ids || p.promo_city_ids.length === 0) return true;
-      return p.promo_city_ids.map(Number).includes(Number(BK.cityId));
-    });
-    // Se data selecionada coincide com promo_date → mostrar apenas esses promos
-    if (BK.date) {
-      const datePromos = procs.filter(function(p) {
-        return p.is_promo && p.promo_date && String(p.promo_date).slice(0,10) === BK.date;
-      });
-      if (datePromos.length > 0) procs = datePromos;
-    }
     // Promos sempre primeiro
     procs.sort(function(a, b) {
       if (a.is_promo && !b.is_promo) return -1;
@@ -2516,9 +2503,7 @@ async function selProc(id) {
 function isValidDay(date, cityId) {
   const city = CITIES.find(c => Number(c.id) === Number(cityId));
   if (!city) return false;
-  // Bloqueado por promo de outra cidade nessa data?
-  if (city.blockedByPromoDates && city.blockedByPromoDates.includes(date)) return false;
-  // Verifica data específica liberada para esta cidade (incl. promo_date)
+  // Verifica data específica liberada para esta cidade
   if (city.specificDates && city.specificDates.includes(date)) return true;
   // Verifica dia da semana configurado
   const [y,m,d] = date.split('-').map(Number);
@@ -5241,60 +5226,6 @@ function togglePromoFields() {
   const cb = document.getElementById('proc-modal-is-promo');
   const fields = document.getElementById('proc-promo-fields');
   if (fields) fields.style.display = cb?.checked ? 'flex' : 'none';
-  // Só popula se o container estiver vazio (evita resetar seleções existentes)
-  if (cb?.checked) {
-    const wrap = document.getElementById('proc-promo-cities');
-    if (wrap && !wrap.querySelector('input[type=checkbox]')) populatePromoCities([]);
-  }
-}
-
-function togglePromoTimeFields() {
-  const d = document.getElementById('proc-promo-date');
-  const w = document.getElementById('proc-promo-time-wrap');
-  if (w) w.style.display = d && d.value ? '' : 'none';
-}
-
-// Armazena as cidades selecionadas no promo (evita dependência de querySelectorAll)
-window._promoCitySelected = new Set();
-
-function getSelectedPromoCities() {
-  return [...window._promoCitySelected].map(Number).filter(Boolean);
-}
-
-async function populatePromoCities(selectedIds) {
-  const wrap = document.getElementById('proc-promo-cities');
-  if (!wrap) return;
-  // Inicializar o set com os IDs pré-selecionados
-  window._promoCitySelected = new Set((selectedIds||[]).map(Number));
-  let cities = (window.CITIES && window.CITIES.length) ? window.CITIES : [];
-  if (!cities.length) {
-    try { cities = await GET('/api/cities'); } catch(e) { cities = []; }
-  }
-  if (!cities.length) {
-    wrap.innerHTML = '<span style="font-size:12px;color:var(--text-light)">Nenhuma cidade cadastrada.</span>';
-    return;
-  }
-  // Criar checkboxes via DOM (mais confiável que innerHTML no mobile)
-  wrap.innerHTML = '';
-  cities.forEach(function(c) {
-    const cityId = Number(c.id);
-    const label = document.createElement('label');
-    label.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600;color:var(--dark);padding:4px 0;-webkit-tap-highlight-color:transparent;user-select:none;';
-    const cb = document.createElement('input');
-    cb.type = 'checkbox';
-    cb.value = cityId;
-    cb.checked = window._promoCitySelected.has(cityId);
-    cb.style.cssText = 'width:16px;height:16px;accent-color:var(--rose);cursor:pointer;flex-shrink:0;';
-    cb.addEventListener('change', function() {
-      if (this.checked) window._promoCitySelected.add(cityId);
-      else window._promoCitySelected.delete(cityId);
-    });
-    const span = document.createElement('span');
-    span.textContent = c.short || c.name || c.local_name || ('Cidade ' + cityId);
-    label.appendChild(cb);
-    label.appendChild(span);
-    wrap.appendChild(label);
-  });
 }
 function addProcModule(value='') {
   const list = document.getElementById('proc-modules-list');
@@ -5380,32 +5311,6 @@ function openProcModal(id) {
             style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:var(--r-sm);font-family:inherit;font-size:13px">
         </div>
       </div>
-      <div style="height:1px;background:var(--border-light);margin:12px 0"></div>
-      <div class="fg" style="margin-bottom:10px">
-        <label>📍 Cidade(s) do evento <span style="font-weight:400;color:var(--text-light)">(opc. — sem seleção = todas)</span></label>
-        <div id="proc-promo-cities" style="display:flex;flex-direction:column;gap:6px;padding:10px 12px;background:var(--cream);border:1.5px solid var(--border);border-radius:var(--r-sm);min-height:42px">
-          <span style="font-size:12px;color:var(--text-light)">Carregando cidades...</span>
-        </div>
-      </div>
-      <div class="fg" style="margin-bottom:0">
-        <label>📅 Data do evento <span style="font-weight:400;color:var(--text-light)">(opc.)</span></label>
-        <input type="date" id="proc-promo-date" oninput="togglePromoTimeFields()"
-          style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:var(--r-sm);font-family:inherit;font-size:13px">
-      </div>
-      <div id="proc-promo-time-wrap" style="display:none;margin-top:10px">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-          <div class="fg" style="margin-bottom:0">
-            <label>🕐 Horário início</label>
-            <input type="time" id="proc-promo-start-time"
-              style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:var(--r-sm);font-family:inherit;font-size:13px">
-          </div>
-          <div class="fg" style="margin-bottom:0">
-            <label>🕑 Horário fim</label>
-            <input type="time" id="proc-promo-end-time"
-              style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:var(--r-sm);font-family:inherit;font-size:13px">
-          </div>
-        </div>
-      </div>
     </div>
     <div id="proc-course-fields" style="display:none">
       <div style="height:1px;background:var(--border);margin:14px 0"></div>
@@ -5461,14 +5366,6 @@ function openProcModal(id) {
         if (limEl && p.promo_limit) limEl.value = p.promo_limit;
         const endEl = document.getElementById('proc-promo-end-date');
         if (endEl && p.promo_end_date) endEl.value = String(p.promo_end_date).slice(0,10);
-        // Novos campos: cidade(s), data e horários do evento
-        const pdEl = document.getElementById('proc-promo-date');
-        if (pdEl) { pdEl.value = p.promo_date ? String(p.promo_date).slice(0,10) : ''; togglePromoTimeFields(); }
-        const pstEl = document.getElementById('proc-promo-start-time');
-        if (pstEl) pstEl.value = p.promo_start_time ? String(p.promo_start_time).slice(0,5) : '';
-        const petEl = document.getElementById('proc-promo-end-time');
-        if (petEl) petEl.value = p.promo_end_time ? String(p.promo_end_time).slice(0,5) : '';
-        populatePromoCities(p.promo_city_ids || []);
         // Card de métricas
         const metricsEl = document.getElementById('proc-promo-metrics');
         if (metricsEl) {
@@ -5552,20 +5449,7 @@ async function saveProc(id) {
   const is_promo       = document.getElementById('proc-modal-is-promo')?.checked || false;
   const promo_limit    = is_promo ? (parseInt(document.getElementById('proc-promo-limit')?.value)||null) : null;
   const promo_end_date = is_promo ? (document.getElementById('proc-promo-end-date')?.value||null) : null;
-  // Ler cidade(s) direto dos checkboxes do DOM no momento do salvar
-  var promo_city_ids = [];
-  if (is_promo) {
-    var _cityWrap = document.getElementById('proc-promo-cities');
-    if (_cityWrap) {
-      _cityWrap.querySelectorAll('input[type=checkbox]').forEach(function(cb) {
-        if (cb.checked) promo_city_ids.push(parseInt(cb.value));
-      });
-    }
-  }
-  const promo_date       = is_promo ? (document.getElementById('proc-promo-date')?.value || null) : null;
-  const promo_start_time = is_promo && promo_date ? (document.getElementById('proc-promo-start-time')?.value || null) : null;
-  const promo_end_time   = is_promo && promo_date ? (document.getElementById('proc-promo-end-time')?.value || null) : null;
-  const promoData = { is_promo, promo_limit, promo_end_date, promo_city_ids, promo_date, promo_start_time, promo_end_time };
+  const promoData = { is_promo, promo_limit, promo_end_date };
   const catWrap = document.getElementById('proc-modal-categories');
   const category_id = catWrap
     ? [...catWrap.querySelectorAll('input[type=checkbox]:checked')].map(function(cb){ return parseInt(cb.value); }).filter(Boolean)
@@ -8356,7 +8240,7 @@ async function renderReleasedSlots() {
 }
 
 // ── MODAL ─────────────────────────────────────────
-function closeModal(){document.getElementById('modal-bg').classList.add('hidden');window._promoCitySelected=new Set();}
+function closeModal(){document.getElementById('modal-bg').classList.add('hidden')}
 
 // ══════════════════════════════════════════════════
 // PUSH NOTIFICATIONS

@@ -1506,10 +1506,6 @@ async function initDB() {
         try { await pool.query(`ALTER TABLE "${sn}".appointments ADD COLUMN IF NOT EXISTS reminder_status VARCHAR(20) DEFAULT 'pending'`); } catch {}
         try { await pool.query(`ALTER TABLE "${sn}".appointments ADD COLUMN IF NOT EXISTS is_partial BOOLEAN NOT NULL DEFAULT FALSE`); } catch {}
         try { await pool.query(`ALTER TABLE "${sn}".appointments ADD COLUMN IF NOT EXISTS partial_amount DECIMAL(10,2) DEFAULT NULL`); } catch {}
-        try { await pool.query(`ALTER TABLE "${sn}".procedures ADD COLUMN IF NOT EXISTS promo_city_ids INTEGER[] DEFAULT '{}'`); } catch {}
-        try { await pool.query(`ALTER TABLE "${sn}".procedures ADD COLUMN IF NOT EXISTS promo_date DATE DEFAULT NULL`); } catch {}
-        try { await pool.query(`ALTER TABLE "${sn}".procedures ADD COLUMN IF NOT EXISTS promo_start_time TIME DEFAULT NULL`); } catch {}
-        try { await pool.query(`ALTER TABLE "${sn}".procedures ADD COLUMN IF NOT EXISTS promo_end_time TIME DEFAULT NULL`); } catch {}
         try { await pool.query(`CREATE TABLE IF NOT EXISTS "${sn}".proc_categories (id SERIAL PRIMARY KEY, name VARCHAR(100) NOT NULL, sort_order INTEGER DEFAULT 0, created_at TIMESTAMPTZ DEFAULT NOW())`); } catch {}
         try { await pool.query(`ALTER TABLE "${sn}".procedures ADD COLUMN IF NOT EXISTS category_id INTEGER REFERENCES "${sn}".proc_categories(id) ON DELETE SET NULL`); } catch {}
         try { await pool.query(`CREATE TABLE IF NOT EXISTS "${sn}".proc_category_links (proc_id INTEGER NOT NULL, category_id INTEGER NOT NULL, PRIMARY KEY (proc_id, category_id))`); } catch {}
@@ -1792,7 +1788,7 @@ function requireAdmin(req, res, next) {
 app.get('/api/health', async (req, res) => {
   try {
     await req.db('SELECT 1');
-    res.json({ ok: true, version: '2.9.10', db: 'connected' });
+    res.json({ ok: true, version: '2.9.9', db: 'connected' });
   } catch {
     res.status(503).json({ ok: false, db: 'disconnected' });
   }
@@ -2112,14 +2108,12 @@ app.post('/api/procedures', requireAdmin, async (req, res) => {
       `INSERT INTO procedures (name, dur, price, pt, description,
         is_course, cert_name, cert_hours, cert_description,
         cert_modules, cert_layout_url, cert_field_config, cert_abbreviation,
-        is_promo, promo_limit, promo_end_date, promo_used,
-        promo_city_ids, promo_date, promo_start_time, promo_end_time)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,0,$17::INTEGER[],$18,$19,$20) RETURNING *`,
+        is_promo, promo_limit, promo_end_date, promo_used)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,0) RETURNING *`,
       [name, parseInt(dur), price||null, pt||'fixed', description||null,
        is_course||false, cert_name||null, cert_hours||null, cert_description||null,
        cert_modules||null, cert_layout_url||null, cert_field_config||null, cert_abbreviation||null,
-       is_promo||false, promo_limit||null, promo_end_date||null,
-       (promo_city_ids||[]).map(Number), promo_date||null, promo_start_time||null, promo_end_time||null]
+       is_promo||false, promo_limit||null, promo_end_date||null]
     );
     res.status(201).json(rows[0]);
   } catch (err) {
@@ -2131,21 +2125,18 @@ app.put('/api/procedures/:id', requireAdmin, async (req, res) => {
   const { name, dur, price, pt, description,
           is_course, cert_name, cert_hours, cert_description,
           cert_modules, cert_layout_url, cert_field_config, cert_abbreviation,
-          is_promo, promo_limit, promo_end_date, category_id,
-          promo_city_ids, promo_date, promo_start_time, promo_end_time } = req.body;
+          is_promo, promo_limit, promo_end_date, category_id } = req.body;
   try {
     const { rows } = await req.db(
       `UPDATE procedures SET name=$1, dur=$2, price=$3, pt=$4, description=$5,
         is_course=$6, cert_name=$7, cert_hours=$8, cert_description=$9,
         cert_modules=$10, cert_layout_url=$11, cert_field_config=$12, cert_abbreviation=$13,
-        is_promo=$14, promo_limit=$15, promo_end_date=$16,
-        promo_city_ids=$17::INTEGER[], promo_date=$18, promo_start_time=$19, promo_end_time=$20
-       WHERE id=$21 RETURNING *`,
+        is_promo=$14, promo_limit=$15, promo_end_date=$16
+       WHERE id=$17 RETURNING *`,
       [name, parseInt(dur), price||null, pt||'fixed', description||null,
        is_course||false, cert_name||null, cert_hours?parseInt(cert_hours):null, cert_description||null,
        cert_modules||null, cert_layout_url||null, cert_field_config||null, cert_abbreviation||null,
        is_promo||false, promo_limit||null, promo_end_date||null,
-       (promo_city_ids||[]).map(Number), promo_date||null, promo_start_time||null, promo_end_time||null,
        req.params.id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Procedimento não encontrado' });
@@ -3428,30 +3419,11 @@ app.get('/api/availability', async (req, res) => {
       return res.json(relFreeSlots);
     }
 
-    let wStart = timeToMin(cfg.work_start);
-    let wEnd   = timeToMin(cfg.work_end);
-    let breaks  = (cfg.breaks || []).filter(Boolean).map(b => ({
+    const wStart = timeToMin(cfg.work_start);
+    const wEnd   = timeToMin(cfg.work_end);
+    const breaks  = (cfg.breaks || []).filter(Boolean).map(b => ({
       s: timeToMin(b.s), e: timeToMin(b.e)
     }));
-
-    // Verificar se existe procedimento promocional com data e horário para esta data/cidade
-    // Nesse caso, substitui wStart/wEnd/breaks
-    const promoDateProc = await req.db(
-      `SELECT promo_start_time::text as pst, promo_end_time::text as pet
-       FROM procedures
-       WHERE is_promo=TRUE AND active=TRUE AND promo_date=$1
-         AND (cardinality(promo_city_ids)=0 OR $2=ANY(promo_city_ids))
-       LIMIT 1`,
-      [date, Number(cityId)]
-    );
-    if (promoDateProc.rowCount > 0) {
-      const pd = promoDateProc.rows[0];
-      if (pd.pst && pd.pet) {
-        wStart = timeToMin(pd.pst);
-        wEnd   = timeToMin(pd.pet);
-        breaks = []; // sem pausas no dia de evento
-      }
-    }
 
     // Verifica se procedimento está habilitado para esta cidade
     const pRes = await req.db(
@@ -4134,7 +4106,7 @@ app.get('/api/backup/export', requireAdmin, async (req, res) => {
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.json({
       exportedAt: new Date().toISOString(),
-      version: '2.9.10',
+      version: '2.9.9',
       procedures:    procs.rows,
       appointments:  appts.rows,
       blocked_dates: blocked.rows,
@@ -4213,34 +4185,11 @@ app.get('/api/cities', async (req, res) => {
          ORDER BY date`,
         [today, city.id]
       );
-      // Datas de procedimentos promocionais com data específica para esta cidade
-      const promoDates = await req.db(
-        `SELECT promo_date::text as date, promo_start_time::text as work_start, promo_end_time::text as work_end
-         FROM procedures
-         WHERE is_promo=TRUE AND active=TRUE AND promo_date >= $1
-           AND (cardinality(promo_city_ids)=0 OR $2=ANY(promo_city_ids))`,
-        [today, city.id]
-      );
-      const rdDates    = rd.rows.map(r => r.date.slice(0,10));
-      const rsDates    = rs.rows.map(r => r.date.slice(0,10));
-      const promoDatesArr = promoDates.rows.filter(r => r.date).map(r => r.date.slice(0,10));
-      // União de todas as fontes — sem duplicatas
-      city.specificDates = [...new Set([...rdDates, ...rsDates, ...promoDatesArr])];
-      city.specificDateConfigs = [
-        ...rd.rows,
-        ...promoDates.rows.filter(r => r.date && (r.work_start || r.work_end)).map(r => ({
-          date: r.date, work_start: r.work_start, work_end: r.work_end, _fromPromo: true
-        }))
-      ];
-      // Datas de promos COM cidade específica — outras cidades NÃO devem ver essas datas
-      const promoCityDates = await req.db(
-        `SELECT promo_date::text as date
-         FROM procedures
-         WHERE is_promo=TRUE AND active=TRUE AND promo_date >= $1
-           AND cardinality(promo_city_ids)>0 AND NOT($2=ANY(promo_city_ids))`,
-        [today, city.id]
-      );
-      city.blockedByPromoDates = promoCityDates.rows.filter(r=>r.date).map(r=>r.date.slice(0,10));
+      const rdDates  = rd.rows.map(r => r.date.slice(0,10));
+      const rsDates  = rs.rows.map(r => r.date.slice(0,10));
+      // União das duas fontes — sem duplicatas
+      city.specificDates = [...new Set([...rdDates, ...rsDates])];
+      city.specificDateConfigs = rd.rows; // inclui horários para uso no motor
     }
 
     // Filtra cidades sem dias ativos E sem datas futuras específicas
@@ -5876,8 +5825,7 @@ async function checkExpiredPromos() {
       try {
         const r1 = await pool.query(`UPDATE "${sn}".procedures SET active=FALSE WHERE is_promo=TRUE AND active=TRUE AND promo_end_date IS NOT NULL AND promo_end_date < CURRENT_DATE`);
         const r2 = await pool.query(`UPDATE "${sn}".procedures SET active=FALSE WHERE is_promo=TRUE AND active=TRUE AND promo_limit IS NOT NULL AND promo_used >= promo_limit`);
-        const r3 = await pool.query(`UPDATE "${sn}".procedures SET active=FALSE WHERE is_promo=TRUE AND active=TRUE AND promo_date IS NOT NULL AND promo_date < CURRENT_DATE`);
-        if ((r1.rowCount+r2.rowCount+r3.rowCount)>0) console.log('[Promo] ' + (r1.rowCount+r2.rowCount+r3.rowCount) + ' desativado(s) em ' + sn);
+        if ((r1.rowCount+r2.rowCount)>0) console.log('[Promo] ' + (r1.rowCount+r2.rowCount) + ' desativado(s) em ' + sn);
       } catch(e) { console.warn('[Promo] ' + sn + ':', e.message); }
     }
   } catch(e) { console.warn('[Promo]', e.message); }
