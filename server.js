@@ -1122,6 +1122,10 @@ async function initDB() {
     // Migração: cidades — adiciona uf e neighborhood em public e em todos os schemas de tenant
     await client.query(`ALTER TABLE cities ADD COLUMN IF NOT EXISTS uf VARCHAR(2)`);
     await client.query(`ALTER TABLE cities ADD COLUMN IF NOT EXISTS neighborhood VARCHAR(100)`);
+    // Migração: slot_interval por cidade (intervalo de tempo configurável)
+    try { await client.query(`ALTER TABLE cities ADD COLUMN IF NOT EXISTS slot_interval INTEGER DEFAULT 30`); } catch(e) {}
+    // Limpeza: work_configs órfãos (city_id aponta para cidade deletada → exibe "null" no admin)
+    try { await client.query(`DELETE FROM work_configs WHERE city_id IS NOT NULL AND city_id NOT IN (SELECT id FROM cities)`); } catch(e) {}
     // Migração: admin_profile — adiciona phone e torna pass_hash nullable (se existir)
     await client.query(`ALTER TABLE admin_profile ADD COLUMN IF NOT EXISTS phone VARCHAR(30)`);
     await client.query(`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE`);
@@ -1179,6 +1183,17 @@ async function initDB() {
         )`);
       } catch {}
       try { await client.query(`UPDATE "${schema_name}".procedures SET sort_order = id WHERE sort_order IS NULL`); } catch {}
+      // Migração: slot_interval por cidade (Etapa 2 — intervalo de tempo configurável)
+      try { await client.query(`ALTER TABLE "${schema_name}".cities ADD COLUMN IF NOT EXISTS slot_interval INTEGER DEFAULT 30`); } catch(e) {}
+      // Limpeza: work_configs órfãos (city_id aponta para cidade deletada → exibe "null")
+      try {
+        await client.query(
+          `DELETE FROM "${schema_name}".work_configs
+           WHERE city_id IS NOT NULL
+             AND city_id NOT IN (SELECT id FROM "${schema_name}".cities)`
+        );
+      } catch(e) {}
+
       // Migração: reminder_sent (push 30min)
       try { await client.query(`ALTER TABLE "${schema_name}".appointments ADD COLUMN IF NOT EXISTS reminder_sent BOOLEAN NOT NULL DEFAULT FALSE`); } catch {}
       // Migração: pagamento do procedimento
@@ -3360,6 +3375,15 @@ app.get('/api/availability', async (req, res) => {
     const dayOfWeek = new Date(y, m-1, d).getDay();
     const cfg = await resolveWorkConfig(Number(cityId), dayOfWeek);
 
+    // Buscar intervalo de slot da cidade (padrão 30min se não configurado)
+    let citySlotInterval = 30;
+    try {
+      const siRow = await req.db('SELECT slot_interval FROM cities WHERE id=$1', [Number(cityId)]);
+      if (siRow.rowCount > 0 && siRow.rows[0].slot_interval) {
+        citySlotInterval = parseInt(siRow.rows[0].slot_interval) || 30;
+      }
+    } catch(e) { /* coluna pode não existir ainda — usa 30 */ }
+
     // Dia desabilitado na config — verifica se há liberação para esta data/cidade
     if (!cfg.is_active || !cfg.work_start || !cfg.work_end) {
       // Verifica se já temos released_slots para esta cidade (já carregado acima)
@@ -3384,7 +3408,7 @@ app.get('/api/availability', async (req, res) => {
           for (const row of ownRelSlots.rows) {
             const slotS = timeToMin(row.st);
             const slotE = timeToMin(row.et);
-            for (let s = slotS; s + durX <= slotE; s += SLOT) {
+            for (let s = slotS; s + durX <= slotE; s += citySlotInterval) {
               const e = s + durX;
               if (s > nowMinBRT && !busyX.some(b => s < b.e && e > b.s)) freeSlotsX.push(minToTime(s));
             }
@@ -3431,7 +3455,7 @@ app.get('/api/availability', async (req, res) => {
         for (const row of relSlots.rows) {
           const slotS = timeToMin(row.st);
           const slotE = timeToMin(row.et);
-          for (let s = slotS; s + dur2 <= slotE; s += SLOT) {
+          for (let s = slotS; s + dur2 <= slotE; s += citySlotInterval) {
             const e = s + dur2;
             if (!busy2.some(b => s < b.e && e > b.s)) freeSlots.push(minToTime(s));
           }
@@ -3465,7 +3489,7 @@ app.get('/api/availability', async (req, res) => {
       ]);
       const busy3 = [...aRes3.rows, ...bkSlots3.rows, ...excSlots3.rows].map(r => ({ s: timeToMin(r.st), e: timeToMin(r.et) }));
       const relFreeSlots = [];
-      for (let s = rStart; s <= rEnd; s += SLOT) {
+      for (let s = rStart; s <= rEnd; s += citySlotInterval) {
         const e = s + dur3;
         if (isToday && s <= nowMinBRT) continue;
         if (rBreaks.some(b => s < b.e && e > b.s)) continue;
@@ -3570,7 +3594,7 @@ app.get('/api/availability', async (req, res) => {
 
     // Calcula slots livres respeitando configuração dinâmica
     const slots = [];
-    for (let s = wStart; s <= wEnd; s += SLOT) {
+    for (let s = wStart; s <= wEnd; s += citySlotInterval) {
       const e = s + dur;
       // Filtra horários que já passaram no dia de hoje (fuso Brasília)
       if (isToday && s <= nowMinBRT) continue;
@@ -4408,6 +4432,13 @@ app.post('/api/cities', requireAdmin, async (req, res) => {
       } catch(e) { console.warn('[Cities] Auto-limpeza:', e.message); }
     }
 
+    // Salvar slot_interval via UPDATE separado (não toca no INSERT original)
+    if (req.body.slot_interval !== undefined) {
+      try {
+        await req.db(`UPDATE cities SET slot_interval=$1 WHERE id=$2`,
+          [parseInt(req.body.slot_interval) || 30, city.id]);
+      } catch(e) { /* coluna pode não existir ainda */ }
+    }
     res.status(201).json(city);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -4436,6 +4467,13 @@ app.put('/api/cities/:id', requireAdmin, async (req, res) => {
       }
     }
     res.json(rows[0]);
+    // Salvar slot_interval via UPDATE separado (não toca no UPDATE original)
+    if (req.body.slot_interval !== undefined) {
+      try {
+        await req.db(`UPDATE cities SET slot_interval=$1 WHERE id=$2`,
+          [parseInt(req.body.slot_interval) || 30, req.params.id]);
+      } catch(e) { /* coluna pode não existir ainda em todos os ambientes */ }
+    }
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
