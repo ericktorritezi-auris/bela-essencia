@@ -4216,7 +4216,8 @@ app.get('/api/backup/export', requireAdmin, async (req, res) => {
 // ── Todas as cidades ativas (para Agenda Retroativa — sem filtro de agenda) ──
 app.get('/api/cities/all', requireAdmin, async (req, res) => {
   try {
-    const { rows } = await req.db('SELECT * FROM cities WHERE is_active=TRUE ORDER BY name');
+    // Retorna TODAS as cidades (ativas e inativas) para o admin poder reativar
+    const { rows } = await req.db('SELECT * FROM cities ORDER BY name');
     for (const city of rows) {
       const pr = await req.db(
         `SELECT p.id, p.name, p.dur, p.price, p.pt
@@ -4440,11 +4441,16 @@ app.put('/api/cities/:id', requireAdmin, async (req, res) => {
 
 app.delete('/api/cities/:id', requireAdmin, async (req, res) => {
   try {
-    // Only delete if inactive
-    const { rows } = await req.db('SELECT is_active FROM cities WHERE id=$1', [req.params.id]);
+    const cityId = req.params.id;
+    const { rows } = await req.db('SELECT is_active FROM cities WHERE id=$1', [cityId]);
     if (!rows.length) return res.status(404).json({ error: 'Cidade não encontrada' });
     if (rows[0].is_active) return res.status(400).json({ error: 'Desative a cidade antes de excluir' });
-    await req.db('DELETE FROM cities WHERE id=$1', [req.params.id]);
+    // Verificar se há histórico de agendamentos — se sim, não permite exclusão
+    const hist = await req.db('SELECT COUNT(*) FROM appointments WHERE city_id=$1', [cityId]);
+    if (parseInt(hist.rows[0].count) > 0) {
+      return res.status(400).json({ error: 'Esta cidade possui agendamentos no histórico e não pode ser excluída. Mantenha-a inativa.' });
+    }
+    await req.db('DELETE FROM cities WHERE id=$1', [cityId]);
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
