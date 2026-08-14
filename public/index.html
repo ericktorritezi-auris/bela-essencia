@@ -7471,6 +7471,16 @@ async function openCityModal(cityId) {
       <div class="fg" style="margin-bottom:10px"><label>Bairro</label><input type="text" id="cy-neigh" value="${city?.neighborhood||''}" placeholder="Centro" style="width:100%"></div>
     </div>
     <div class="fg" style="margin-bottom:14px"><label>CEP</label><input type="text" id="cy-cep" value="${city?.cep||''}" placeholder="00000-000" maxlength="9" style="width:160px"></div>
+    <div class="fg" style="margin-bottom:14px">
+      <label>Intervalo de horários</label>
+      <div style="display:flex;gap:8px;margin-top:6px">
+        ${[15,30,60].map(v=>`
+          <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px;background:${(city?.slot_interval||30)===v?'var(--rose-light)':'var(--cream)'};border:1.5px solid ${(city?.slot_interval||30)===v?'var(--rose)':'var(--border)'};border-radius:var(--r-sm);padding:7px 12px;flex:1;justify-content:center;transition:var(--tr)">
+            <input type="radio" name="cy-slot" value="${v}" ${(city?.slot_interval||30)===v?'checked':''} style="accent-color:var(--rose)">
+            ${v}min
+          </label>`).join('')}
+      </div>
+    </div>
     <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:var(--text-light);margin-bottom:8px">Procedimentos disponíveis nesta cidade</div>
     <div style="max-height:200px;overflow-y:auto;border:1.5px solid var(--border);border-radius:var(--r-sm);padding:8px 12px;margin-bottom:16px">${procList}</div>
     <div style="display:flex;gap:9px">
@@ -7496,7 +7506,9 @@ async function saveCity(cityId) {
     procOverrides[el.value] = el.checked;
   });
   try {
-    const body = {name,uf,local_name:local,address:addr,number:num,complement:comp,neighborhood:neigh,cep,proc_overrides:procOverrides};
+    const slotEl = document.querySelector('input[name="cy-slot"]:checked');
+  const slotInterval = slotEl ? parseInt(slotEl.value) : 30;
+  const body = {name,uf,local_name:local,address:addr,number:num,complement:comp,neighborhood:neigh,cep,slot_interval:slotInterval,proc_overrides:procOverrides};
     if(cityId) await PUT(`/api/cities/${cityId}`, body);
     else await POST('/api/cities', {...body, proc_ids: Object.keys(procOverrides).filter(k=>procOverrides[k]).map(Number)});
     clearCitiesCache();
@@ -7540,9 +7552,10 @@ async function renderSchedules() {
     let filtered = configs.filter(c=>c.scope==='city_day');
     if(filter) filtered=filtered.filter(c=>String(c.city_id)===String(filter));
 
-    // Group by city
+    // Group by city — ignorar work_configs órfãos (city_name null = cidade deletada)
     const byCityMap = {};
     filtered.forEach(c=>{
+      if(c.city_id && !c.city_name) return; // órfão: cidade foi deletada sem cascade
       if(!byCityMap[c.city_name]) byCityMap[c.city_name]={cityName:c.city_name,days:[]};
       byCityMap[c.city_name].days.push(c);
     });
