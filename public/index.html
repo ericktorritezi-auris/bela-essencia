@@ -2970,96 +2970,57 @@ async function doLogout() {
   checkBiometricAvailability();
 }
 
-// ── WebAuthn / Biometria ─────────────────────────────────────────────────────
+// ── WebAuthn / Biometria (usa @simplewebauthn/browser bundle) ───────────────
 
-// Verifica se o ambiente suporta WebAuthn e se há credencial registrada
+// Helper: carregar o bundle uma vez (servido localmente)
+let _swab = null;
+async function getSwab() {
+  if (_swab) return _swab;
+  await new Promise((resolve, reject) => {
+    if (window.SimpleWebAuthnBrowser) { _swab = window.SimpleWebAuthnBrowser; resolve(); return; }
+    const s = document.createElement('script');
+    s.src = '/simplewebauthn-browser.js';
+    s.onload = () => { _swab = window.SimpleWebAuthnBrowser; resolve(); };
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+  return _swab;
+}
+
 async function checkBiometricAvailability() {
   const btnBio = document.getElementById('btn-biometric');
   if (!btnBio) return;
-  // Suporte básico
   if (!window.PublicKeyCredential) { btnBio.classList.add('hidden'); return; }
-  // Verificar se é PWA (standalone) ou se biometria foi enrollada antes (permite em qualquer contexto)
-  const isPWA = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+  const isPWA = window.matchMedia('(display-mode: standalone)').matches || !!window.navigator.standalone;
   const isEnrolled = localStorage.getItem('biometric_enrolled') === 'true';
   if (!isPWA && !isEnrolled) { btnBio.classList.add('hidden'); return; }
-  // Verificar autenticador de plataforma disponível
   try {
-    const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+    const swab = await getSwab();
+    const available = await swab.platformAuthenticatorIsAvailable();
     if (!available) { btnBio.classList.add('hidden'); return; }
   } catch { btnBio.classList.add('hidden'); return; }
-  // Mostrar botão só se tiver credencial registrada
-  if (isEnrolled) {
-    btnBio.classList.remove('hidden');
-  } else {
-    btnBio.classList.add('hidden');
-  }
+  if (isEnrolled) btnBio.classList.remove('hidden');
+  else btnBio.classList.add('hidden');
 }
 
-// Inicializa verificação de biometria ao carregar a tela de login
 (function initBiometricCheck() {
-  // Aguarda DOM pronto
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', checkBiometricAvailability);
-  } else {
-    checkBiometricAvailability();
-  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', checkBiometricAvailability);
+  else checkBiometricAvailability();
 })();
 
-// Helper: converter base64url para Uint8Array
-function base64urlToBuffer(base64url) {
-  const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/');
-  const str = atob(base64);
-  return new Uint8Array([...str].map(c => c.charCodeAt(0)));
-}
-
-// Helper: converter ArrayBuffer/Uint8Array para base64url
-function bufferToBase64url(buffer) {
-  const bytes = new Uint8Array(buffer);
-  let str = '';
-  bytes.forEach(b => str += String.fromCharCode(b));
-  return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-}
-
-// Login biométrico
 async function doBiometricLogin() {
   try {
-    // 1. Pedir options ao servidor
+    const swab = await getSwab();
     const options = await POST('/api/webauthn/auth/start', {});
-    // 2. Converter challenge para ArrayBuffer
-    options.challenge = base64urlToBuffer(options.challenge);
-    if (options.allowCredentials) {
-      options.allowCredentials = options.allowCredentials.map(c => ({
-        ...c, id: base64urlToBuffer(c.id)
-      }));
-    }
-    // 3. Solicitar autenticação biométrica ao dispositivo
-    const assertion = await navigator.credentials.get({ publicKey: options });
-    // 4. Serializar para enviar ao servidor
-    const body = {
-      id: assertion.id,
-      rawId: bufferToBase64url(assertion.rawId),
-      type: assertion.type,
-      response: {
-        authenticatorData: bufferToBase64url(assertion.response.authenticatorData),
-        clientDataJSON: bufferToBase64url(assertion.response.clientDataJSON),
-        signature: bufferToBase64url(assertion.response.signature),
-        userHandle: assertion.response.userHandle ? bufferToBase64url(assertion.response.userHandle) : null,
-      },
-    };
-    // 5. Verificar no servidor → cria sessão
-    await POST('/api/webauthn/auth/finish', body);
-    // 6. Login bem-sucedido
+    const authResp = await swab.startAuthentication({ optionsJSON: options });
+    await POST('/api/webauthn/auth/finish', authResp);
     document.getElementById('adm-login').classList.add('hidden');
     document.getElementById('adm-dash').classList.remove('hidden');
     initAdmin();
     loadProfProfile();
     setTimeout(() => subscribePush('admin').catch(()=>{}), 2000);
   } catch (err) {
-    if (err.name === 'NotAllowedError') {
-      // Usuário cancelou — não mostrar erro agressivo
-      return;
-    }
-    // Credencial inválida ou expirada — limpar e pedir login normal
+    if (err && (err.name === 'NotAllowedError' || String(err.message||'').includes('cancel'))) return;
     localStorage.removeItem('biometric_enrolled');
     document.getElementById('btn-biometric').classList.add('hidden');
     const errEl = document.getElementById('login-err');
@@ -3067,19 +3028,17 @@ async function doBiometricLogin() {
   }
 }
 
-// Verificar se deve mostrar banner de sugestão após login
 async function checkBiometricBannerAfterLogin() {
-  // Não sugerido se: não é PWA, não suporta WebAuthn, já enrollou, recusou definitivamente
-  const isPWA = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+  const isPWA = window.matchMedia('(display-mode: standalone)').matches || !!window.navigator.standalone;
   if (!isPWA) return;
   if (!window.PublicKeyCredential) return;
   if (localStorage.getItem('biometric_enrolled') === 'true') return;
   if (localStorage.getItem('biometric_declined') === 'true') return;
   try {
-    const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+    const swab = await getSwab();
+    const available = await swab.platformAuthenticatorIsAvailable();
     if (!available) return;
   } catch { return; }
-  // Mostrar banner com pequeno delay para não sobrepor animação de entrada
   setTimeout(() => {
     const banner = document.getElementById('biometric-banner');
     if (banner) banner.classList.remove('hidden');
@@ -3092,43 +3051,20 @@ function dismissBiometricBanner(action) {
   if (action === 'never') localStorage.setItem('biometric_declined', 'true');
 }
 
-// Enroll: registrar biometria
 async function enrollBiometric() {
-  dismissBiometricBanner('later'); // fecha banner primeiro
+  dismissBiometricBanner('later');
   try {
-    // 1. Pedir options de registro ao servidor
+    const swab = await getSwab();
     const options = await POST('/api/webauthn/register/start', {});
-    // 2. Converter challenge e userId
-    options.challenge = base64urlToBuffer(options.challenge);
-    options.user.id = base64urlToBuffer(options.user.id);
-    if (options.excludeCredentials) {
-      options.excludeCredentials = options.excludeCredentials.map(c => ({
-        ...c, id: base64urlToBuffer(c.id)
-      }));
-    }
-    // 3. Criar credencial no dispositivo (abre TouchID/FaceID/PIN)
-    const credential = await navigator.credentials.create({ publicKey: options });
-    // 4. Serializar resposta
-    const body = {
-      id: credential.id,
-      rawId: bufferToBase64url(credential.rawId),
-      type: credential.type,
-      response: {
-        attestationObject: bufferToBase64url(credential.response.attestationObject),
-        clientDataJSON: bufferToBase64url(credential.response.clientDataJSON),
-        transports: credential.response.getTransports ? credential.response.getTransports() : [],
-      },
-    };
-    // 5. Registrar no servidor
-    await POST('/api/webauthn/register/finish', body);
-    // 6. Marcar como enrollado
+    const regResp = await swab.startRegistration({ optionsJSON: options });
+    await POST('/api/webauthn/register/finish', regResp);
     localStorage.setItem('biometric_enrolled', 'true');
     localStorage.removeItem('biometric_declined');
     document.getElementById('btn-biometric').classList.remove('hidden');
-    showToast('Biometria ativada! Próximo login será mais rápido.', 'ok');
+    showToast('Biometria ativada! Pr\u00f3ximo login ser\u00e1 mais r\u00e1pido.', 'ok');
   } catch (err) {
-    if (err.name === 'NotAllowedError') return; // usuário cancelou
-    showToast('Não foi possível ativar a biometria. Tente novamente.', 'error');
+    if (err && (err.name === 'NotAllowedError' || String(err.message||'').includes('cancel'))) return;
+    showToast('N\u00e3o foi poss\u00edvel ativar a biometria. Tente novamente.', 'error');
   }
 }
 function toggleSB(){document.getElementById('adm-sb').classList.toggle('open')}
