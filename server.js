@@ -1870,10 +1870,16 @@ app.get('/api/auth/me', (req, res) => {
 // Armazena challenges temporários por session (sem banco — expira com a sessão)
 const webauthnChallenges = new Map();
 
-// Helper: determina o rpID correto (domínio do tenant)
+// Helper: determina o rpID e origin corretos (suporta Railway, proxies, etc.)
 function getRpID(req) {
   const host = req.headers['x-forwarded-host'] || req.headers.host || 'localhost';
-  return host.split(':')[0]; // remove porta se houver
+  return host.split(':')[0]; // apenas hostname, sem porta
+}
+function getOrigin(req) {
+  // O browser envia o Origin exato na requisição — usar direto é o mais confiável
+  if (req.headers.origin) return req.headers.origin;
+  const proto = req.headers['x-forwarded-proto'] || 'https';
+  return `${proto}://${getRpID(req)}`;
 }
 
 // Registro — Passo 1: gerar options
@@ -1922,7 +1928,7 @@ app.post('/api/webauthn/register/finish', requireAdmin, async (req, res) => {
     const verification = await verifyRegistrationResponse({
       response: req.body,
       expectedChallenge,
-      expectedOrigin: `https://${rpID}`,
+      expectedOrigin: getOrigin(req),
       expectedRPID: rpID,
       requireUserVerification: true,
     });
@@ -2002,7 +2008,7 @@ app.post('/api/webauthn/auth/finish', async (req, res) => {
     const verification = await verifyAuthenticationResponse({
       response: req.body,
       expectedChallenge,
-      expectedOrigin: `https://${rpID}`,
+      expectedOrigin: getOrigin(req),
       expectedRPID: rpID,
       requireUserVerification: true,
       credential: {
