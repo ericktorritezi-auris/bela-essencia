@@ -1912,7 +1912,8 @@ app.post('/api/webauthn/register/start', requireAdmin, async (req, res) => {
     });
 
     // Salva challenge na session para verificar no finish
-    webauthnChallenges.set(req.session.id, options.challenge);
+    req.session.webauthnChallenge = options.challenge;
+    await new Promise((r,e) => req.session.save(err => err ? e(err) : r()));
     res.json(options);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -1922,7 +1923,7 @@ app.post('/api/webauthn/register/finish', requireAdmin, async (req, res) => {
   try {
     const { verifyRegistrationResponse } = await import('@simplewebauthn/server');
     const rpID = getRpID(req);
-    const expectedChallenge = webauthnChallenges.get(req.session.id);
+    const expectedChallenge = req.session.webauthnChallenge;
     if (!expectedChallenge) return res.status(400).json({ error: 'Challenge expirado. Tente novamente.' });
 
     const verification = await verifyRegistrationResponse({
@@ -1937,7 +1938,7 @@ app.post('/api/webauthn/register/finish', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Verificação falhou' });
     }
 
-    webauthnChallenges.delete(req.session.id);
+    delete req.session.webauthnChallenge;
     const { credential } = verification.registrationInfo;
     const userHandle = req.schemaName || 'default';
 
@@ -1985,7 +1986,8 @@ app.post('/api/webauthn/auth/start', async (req, res) => {
       userVerification: 'required',
     });
 
-    webauthnChallenges.set(req.session.id, options.challenge);
+    req.session.webauthnChallenge = options.challenge;
+    await new Promise((r,e) => req.session.save(err => err ? e(err) : r()));
     res.json(options);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -1995,7 +1997,7 @@ app.post('/api/webauthn/auth/finish', async (req, res) => {
   try {
     const { verifyAuthenticationResponse } = await import('@simplewebauthn/server');
     const rpID = getRpID(req);
-    const expectedChallenge = webauthnChallenges.get(req.session.id);
+    const expectedChallenge = req.session.webauthnChallenge;
     if (!expectedChallenge) return res.status(400).json({ error: 'Challenge expirado. Tente novamente.' });
 
     const userHandle = req.schemaName || 'default';
@@ -2025,7 +2027,7 @@ app.post('/api/webauthn/auth/finish', async (req, res) => {
     await req.db('UPDATE webauthn_credentials SET counter=$1 WHERE id=$2',
       [verification.authenticationInfo.newCounter, cred.id]);
 
-    webauthnChallenges.delete(req.session.id);
+    delete req.session.webauthnChallenge;
     req.session.isAdmin = true;
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
