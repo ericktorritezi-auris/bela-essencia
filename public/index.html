@@ -3073,3 +3073,64 @@ async function enrollBiometric() {
   }
 }
 
+
+</script>
+
+<!-- POPUP POLÍTICA DE PRIVACIDADE LGPD -->
+<div id="privacy-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9500;overflow-y:auto;-webkit-overflow-scrolling:touch">
+  <div style="background:white;border-radius:var(--r-lg);max-width:560px;width:calc(100% - 32px);margin:20px auto 40px;position:relative;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+    <div style="background:linear-gradient(135deg,#1f0d18 0%,#4a1528 100%);padding:16px 20px;border-radius:var(--r-lg) var(--r-lg) 0 0;display:flex;justify-content:space-between;align-items:center">
+      <span style="color:white;font-weight:700;font-size:14px">📋 Política de Privacidade &amp; Termos de Uso</span>
+      <button onclick="closePrivacyModal()" style="background:rgba(255,255,255,.2);border:none;color:white;border-radius:50%;width:30px;height:30px;font-size:16px;cursor:pointer;line-height:1">✕</button>
+    </div>
+    <div id="privacy-modal-content" style="padding:20px 22px;max-height:60vh;overflow-y:auto;font-size:13px;color:#4a3040;line-height:1.7">
+      <h3 style="color:#9b4d6a;font-size:15px;margin-bottom:8px;margin-top:4px">Política de Privacidade</h3>
+      <p>Esta agenda online coleta <strong>nome</strong> e <strong>WhatsApp</strong> para realizar o agendamento de serviços.</p>
+      <p>Os dados são usados para confirmar, lembrar e comunicar sobre o agendamento. Não são compartilhados com terceiros.</p>
+      <p>O responsável pelos dados é o <strong>profissional desta agenda</strong>. A Belle Planner atua como operadora tecnológica.</p>
+      <p>Você pode solicitar acesso, correção ou exclusão dos seus dados ao profissional responsável.</p>
+      <div style="height:1px;background:#f0d0dc;margin:14px 0"></div>
+      <h3 style="color:#9b4d6a;font-size:15px;margin-bottom:8px">Termos de Uso</h3>
+      <p>Esta agenda facilita o agendamento de serviços. Ao confirmar, você se compromete a fornecer informações verdadeiras.</p>
+      <p>O profissional é o único responsável pelos serviços prestados. A Belle Planner atua como intermediadora tecnológica.</p>
+      <p style="font-size:11px;color:#9a6070;margin-top:16px;text-align:center">Belle Planner · Política de Privacidade v1.0 · LGPD — Lei 13.709/2018</p>
+    </div>
+    <div style="padding:14px 22px;border-top:1px solid #f0d0dc;display:flex;gap:10px;flex-wrap:wrap">
+      <button onclick="acceptAndClose()" style="flex:1;background:#9b4d6a;color:white;border:none;border-radius:var(--r-sm);padding:12px;font-size:14px;font-weight:700;cursor:pointer">
+        ✅ Entendi e Concordo
+      </button>
+      <a href="/privacidade.html" target="_blank" style="flex:0 0 auto;border:1.5px solid #9b4d6a;color:#9b4d6a;border-radius:var(--r-sm);padding:11px 16px;font-size:13px;font-weight:700;cursor:pointer;text-decoration:none;display:flex;align-items:center">
+        Ver completo ↗
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- POPUP SAIBA MAIS PROCEDIMENTO -->
+<div id="pm-overlay" class="pm-overlay hidden" onclick="if(event.target===this)closeProcDetail()">
+  <div class="pm-card" style="position:relative">
+    <button class="pm-close" onclick="closeProcDetail()">✕</button>
+    <div class="pm-header">
+      <div class="pm-title" id="pm-proc-title"></div>
+      <div class="pm-badges" id="pm-proc-badges"></div>
+      <div class="pm-divider"></div>
+    </div>
+    <div class="pm-body" id="pm-proc-desc"></div>
+  </div>
+</div>
+
+<!-- POPUP COCKPIT MONTH DETAIL -->
+<div id="cm-overlay" class="pm-overlay hidden" onclick="if(event.target===this)closeCockpitMonth()">
+  <div class="pm-card" style="position:relative;max-width:520px;width:100%">
+    <button class="pm-close" onclick="closeCockpitMonth()">✕</button>
+    <div class="pm-header">
+      <div class="pm-title" id="cm-title"></div>
+      <div class="pm-badges" id="cm-badges"></div>
+      <div class="pm-divider"></div>
+    </div>
+    <div class="pm-body" id="cm-body" style="white-space:normal"></div>
+  </div>
+</div>
+
+</body>
+</html>
