@@ -3064,8 +3064,7 @@ async function enrollBiometric() {
     showToast('Biometria ativada! Pr\u00f3ximo login ser\u00e1 mais r\u00e1pido.', 'ok');
   } catch (err) {
     if (err && (err.name === 'NotAllowedError' || String(err.message||'').includes('cancel'))) return;
-    const _msg = (err && err.message) ? err.message : String(err);
-    showToast('Erro: ' + _msg.substring(0, 100), 'error');
+    showToast('Não foi possível ativar a biometria. Tente novamente.', 'error');
   }
 }
 function toggleSB(){document.getElementById('adm-sb').classList.toggle('open')}
