@@ -9085,7 +9085,7 @@ async function checkBiometricAvailability() {
   try {
     const swab = await getSwab();
     const ok = await swab.platformAuthenticatorIsAvailable();
-    if (ok && enrolled) { btn.style.display = 'flex'; }
+    if (ok && enrolled) { btn.classList.remove('hidden'); btn.style.display = 'flex'; }
   } catch(e) {}
 }
 
@@ -9145,7 +9145,7 @@ async function enrollBiometric() {
     localStorage.setItem('biometric_enrolled', 'true');
     localStorage.removeItem('biometric_declined');
     const btn = document.getElementById('btn-biometric');
-    if (btn) btn.style.display = 'flex';
+    if (btn) { btn.classList.remove('hidden'); btn.style.display = 'flex'; }
     showToast('Biometria ativada!', 'ok');
   } catch(err) {
     if (err && err.name === 'NotAllowedError') return;
