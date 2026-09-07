@@ -1125,11 +1125,14 @@ async function initDB() {
     // Migração: WebAuthn credentials (login por biometria no PWA)
     try {
       await client.query(`
+        DROP TABLE IF EXISTS webauthn_credentials
+      `);
+      await client.query(`
         CREATE TABLE IF NOT EXISTS webauthn_credentials (
           id            SERIAL PRIMARY KEY,
           user_handle   VARCHAR(100) NOT NULL,
           credential_id TEXT NOT NULL UNIQUE,
-          public_key    BYTEA NOT NULL,
+          public_key    TEXT NOT NULL,
           counter       BIGINT NOT NULL DEFAULT 0,
           transports    TEXT,
           created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -1975,7 +1978,7 @@ app.post('/api/webauthn/register/finish', requireAdmin, async (req, res) => {
       [
         userHandle,
         credential.id,                              // já é base64url — salvar direto
-        Buffer.from(credential.publicKey),          // Uint8Array → Buffer → BYTEA
+        Buffer.from(credential.publicKey).toString('base64'), // base64 TEXT
         credential.counter,
         JSON.stringify(credential.transports || []),
       ]
@@ -2045,7 +2048,7 @@ app.post('/api/webauthn/auth/finish', async (req, res) => {
       // Reconstruir WebAuthnCredential conforme tipo exigido pelo v14
       credential: {
         id: cred.credential_id,                    // Base64URLString
-        publicKey: new Uint8Array(cred.public_key), // Buffer BYTEA → Uint8Array
+        publicKey: new Uint8Array(Buffer.from(cred.public_key, 'base64')), // base64 TEXT → Uint8Array
         counter: Number(cred.counter),
         transports: cred.transports ? JSON.parse(cred.transports) : [],
       },
