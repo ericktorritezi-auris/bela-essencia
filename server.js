@@ -1129,10 +1129,8 @@ async function initDB() {
           id            SERIAL PRIMARY KEY,
           user_handle   VARCHAR(100) NOT NULL,
           credential_id TEXT NOT NULL UNIQUE,
-          public_key    TEXT NOT NULL,
+          public_key    BYTEA NOT NULL,
           counter       BIGINT NOT NULL DEFAULT 0,
-          device_type   VARCHAR(50),
-          backed_up     BOOLEAN DEFAULT FALSE,
           transports    TEXT,
           created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
@@ -1866,181 +1864,222 @@ app.get('/api/auth/me', (req, res) => {
 });
 
 // ── WebAuthn / Biometria ──────────────────────────────────────────────────────
+// Implementação baseada em SimpleWebAuthn v14 — assinaturas confirmadas dos .d.ts
 
-// Armazena challenges temporários por session (sem banco — expira com a sessão)
-const webauthnChallenges = new Map();
-
-// Helper: determina o rpID e origin corretos (suporta Railway, proxies, etc.)
-function getRpID(req) {
-  const host = req.headers['x-forwarded-host'] || req.headers.host || 'localhost';
-  return host.split(':')[0]; // apenas hostname, sem porta
+// Configuração de domínio por request (multi-tenant — cada tenant tem sua própria URL)
+// NÃO cachear: cada request pode vir de um domínio diferente
+// O browser sempre envia o Origin correto — é a fonte mais confiável
+function getRpConfig(req) {
+  // 1. Origin header: enviado pelo browser em toda requisição fetch/XHR — mais confiável
+  const originHdr = req.headers.origin;
+  if (originHdr) {
+    try {
+      const u = new URL(originHdr);
+      const cfg = { rpID: u.hostname, expectedOrigin: u.origin, rpName: 'Belle Planner' };
+      console.log('[WebAuthn] rpConfig via Origin header:', cfg.rpID, cfg.expectedOrigin);
+      return cfg;
+    } catch(e) {}
+  }
+  // 2. Referer header (fallback — menos confiável mas presente em alguns contextos)
+  const referer = req.headers.referer;
+  if (referer) {
+    try {
+      const u = new URL(referer);
+      const cfg = { rpID: u.hostname, expectedOrigin: u.origin, rpName: 'Belle Planner' };
+      console.log('[WebAuthn] rpConfig via Referer:', cfg.rpID, cfg.expectedOrigin);
+      return cfg;
+    } catch(e) {}
+  }
+  // 3. Host header (último recurso)
+  const host = (req.headers['x-forwarded-host'] || req.headers.host || 'localhost').split(':')[0];
+  const proto = (req.headers['x-forwarded-proto'] || 'https').split(',')[0].trim();
+  const cfg = { rpID: host, expectedOrigin: `${proto}://${host}`, rpName: 'Belle Planner' };
+  console.log('[WebAuthn] rpConfig via host fallback:', cfg.rpID, cfg.expectedOrigin);
+  return cfg;
 }
-function getOrigin(req) {
-  // O browser envia o Origin exato na requisição — usar direto é o mais confiável
-  if (req.headers.origin) return req.headers.origin;
-  const proto = req.headers['x-forwarded-proto'] || 'https';
-  return `${proto}://${getRpID(req)}`;
-}
 
-// Registro — Passo 1: gerar options
+// ── Registro Passo 1: gerar options ──
 app.post('/api/webauthn/register/start', requireAdmin, async (req, res) => {
   try {
     const { generateRegistrationOptions } = await import('@simplewebauthn/server');
-    const rpID = getRpID(req);
+    const { rpID, rpName } = getRpConfig(req);
     const userHandle = req.schemaName || 'default';
 
-    // Buscar credenciais já existentes para excluir (evitar duplicatas)
+    // Credenciais existentes para evitar duplicatas
     const existing = await req.db('SELECT credential_id FROM webauthn_credentials WHERE user_handle=$1', [userHandle]);
-    const excludeCredentials = existing.rows.map(r => ({
-      id: r.credential_id,
-      type: 'public-key',
-    }));
 
     const options = await generateRegistrationOptions({
-      rpName: 'Belle Planner',
+      rpName,
       rpID,
-      userID: new TextEncoder().encode(userHandle),
       userName: userHandle,
       userDisplayName: 'Administrador',
       attestationType: 'none',
-      excludeCredentials,
+      excludeCredentials: existing.rows.map(r => ({ id: r.credential_id })),
       authenticatorSelection: {
-        authenticatorAttachment: 'platform', // apenas biometria do dispositivo
+        authenticatorAttachment: 'platform',
+        residentKey: 'required',
         userVerification: 'required',
-        residentKey: 'preferred',
       },
     });
 
-    // Salva challenge na session para verificar no finish
+    // Salvar challenge na session com persist (httpOnly cookie via express-session)
     req.session.webauthnChallenge = options.challenge;
-    await new Promise((r,e) => req.session.save(err => err ? e(err) : r()));
+    await new Promise((resolve, reject) =>
+      req.session.save(err => err ? reject(err) : resolve())
+    );
+
     res.json(options);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) {
+    console.error('[WebAuthn] register/start error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// Registro — Passo 2: verificar e salvar credencial
+// ── Registro Passo 2: verificar e salvar credencial ──
 app.post('/api/webauthn/register/finish', requireAdmin, async (req, res) => {
   try {
     const { verifyRegistrationResponse } = await import('@simplewebauthn/server');
-    const rpID = getRpID(req);
+    const { rpID, expectedOrigin } = getRpConfig(req);
     const expectedChallenge = req.session.webauthnChallenge;
-    if (!expectedChallenge) return res.status(400).json({ error: 'Challenge expirado. Tente novamente.' });
+
+    if (!expectedChallenge) {
+      return res.status(400).json({ error: 'Challenge expirado ou inválido. Tente novamente.' });
+    }
+
+    console.log('[WebAuthn] register/finish — rpID:', rpID, 'expectedOrigin:', expectedOrigin);
 
     const verification = await verifyRegistrationResponse({
       response: req.body,
       expectedChallenge,
-      expectedOrigin: getOrigin(req),
+      expectedOrigin,
       expectedRPID: rpID,
       requireUserVerification: true,
     });
 
     if (!verification.verified || !verification.registrationInfo) {
-      return res.status(400).json({ error: 'Verificação falhou' });
+      return res.status(400).json({ error: 'Verificação da biometria falhou.' });
     }
 
     delete req.session.webauthnChallenge;
-    const { credential } = verification.registrationInfo;
     const userHandle = req.schemaName || 'default';
 
-    // Salvar credencial (upsert por user_handle — um dispositivo por conta)
+    // credential.id já é Base64URLString (não converter!)
+    // credential.publicKey é Uint8Array — salvar como BYTEA
+    const { credential } = verification.registrationInfo;
+
     await req.db(
-      `INSERT INTO webauthn_credentials
-         (user_handle, credential_id, public_key, counter, device_type, backed_up, transports)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)
+      `INSERT INTO webauthn_credentials (user_handle, credential_id, public_key, counter, transports)
+       VALUES ($1, $2, $3, $4, $5)
        ON CONFLICT (credential_id) DO UPDATE
-         SET counter=$4, device_type=$5, backed_up=$6, transports=$7`,
+         SET counter=$4, transports=$5`,
       [
         userHandle,
-        Buffer.from(credential.id).toString('base64url'),
-        Buffer.from(credential.publicKey).toString('base64'),
+        credential.id,                              // já é base64url — salvar direto
+        Buffer.from(credential.publicKey),          // Uint8Array → Buffer → BYTEA
         credential.counter,
-        credential.deviceType || null,
-        credential.backedUp || false,
-        JSON.stringify(req.body.response?.transports || []),
+        JSON.stringify(credential.transports || []),
       ]
     );
 
     res.json({ ok: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) {
+    console.error('[WebAuthn] register/finish error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// Autenticação — Passo 1: gerar options
+// ── Auth Passo 1: gerar options ──
+// allowCredentials vazio: browser/SO escolhe qual credencial usar para este domínio
 app.post('/api/webauthn/auth/start', async (req, res) => {
   try {
     const { generateAuthenticationOptions } = await import('@simplewebauthn/server');
-    const rpID = getRpID(req);
-    const userHandle = req.schemaName || 'default';
-
-    const existing = await req.db('SELECT credential_id, transports FROM webauthn_credentials WHERE user_handle=$1', [userHandle]);
-    if (!existing.rowCount) return res.status(404).json({ error: 'Nenhuma credencial registrada' });
-
-    const allowCredentials = existing.rows.map(r => ({
-      id: r.credential_id,
-      type: 'public-key',
-      transports: r.transports ? JSON.parse(r.transports) : [],
-    }));
+    const { rpID } = getRpConfig(req);
 
     const options = await generateAuthenticationOptions({
       rpID,
-      allowCredentials,
       userVerification: 'required',
+      // allowCredentials omitido → browser descobre sozinho qual credencial usar
     });
 
     req.session.webauthnChallenge = options.challenge;
-    await new Promise((r,e) => req.session.save(err => err ? e(err) : r()));
+    await new Promise((resolve, reject) =>
+      req.session.save(err => err ? reject(err) : resolve())
+    );
+
     res.json(options);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) {
+    console.error('[WebAuthn] auth/start error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// Autenticação — Passo 2: verificar e logar
+// ── Auth Passo 2: verificar e criar sessão ──
 app.post('/api/webauthn/auth/finish', async (req, res) => {
   try {
     const { verifyAuthenticationResponse } = await import('@simplewebauthn/server');
-    const rpID = getRpID(req);
+    const { rpID, expectedOrigin } = getRpConfig(req);
     const expectedChallenge = req.session.webauthnChallenge;
-    if (!expectedChallenge) return res.status(400).json({ error: 'Challenge expirado. Tente novamente.' });
 
-    const userHandle = req.schemaName || 'default';
+    if (!expectedChallenge) {
+      return res.status(400).json({ error: 'Challenge expirado. Tente novamente.' });
+    }
+
+    console.log('[WebAuthn] auth/finish — rpID:', rpID, 'expectedOrigin:', expectedOrigin);
+
+    // Buscar credencial pelo ID que veio na resposta do browser
+    const credId = req.body.id;
     const credRow = await req.db(
-      'SELECT * FROM webauthn_credentials WHERE user_handle=$1 LIMIT 1', [userHandle]
+      'SELECT * FROM webauthn_credentials WHERE credential_id=$1', [credId]
     );
-    if (!credRow.rowCount) return res.status(404).json({ error: 'Credencial não encontrada' });
+    if (!credRow.rowCount) {
+      return res.status(404).json({ error: 'Credencial não encontrada. Refaça o cadastro da biometria.' });
+    }
     const cred = credRow.rows[0];
 
     const verification = await verifyAuthenticationResponse({
       response: req.body,
       expectedChallenge,
-      expectedOrigin: getOrigin(req),
+      expectedOrigin,
       expectedRPID: rpID,
       requireUserVerification: true,
+      // Reconstruir WebAuthnCredential conforme tipo exigido pelo v14
       credential: {
-        id: cred.credential_id,
-        publicKey: Buffer.from(cred.public_key, 'base64'),
+        id: cred.credential_id,                    // Base64URLString
+        publicKey: new Uint8Array(cred.public_key), // Buffer BYTEA → Uint8Array
         counter: Number(cred.counter),
         transports: cred.transports ? JSON.parse(cred.transports) : [],
       },
     });
 
-    if (!verification.verified) return res.status(401).json({ error: 'Autenticação biométrica falhou' });
+    if (!verification.verified) {
+      return res.status(401).json({ error: 'Autenticação biométrica falhou.' });
+    }
 
-    // Atualizar counter (proteção contra replay attacks)
-    await req.db('UPDATE webauthn_credentials SET counter=$1 WHERE id=$2',
-      [verification.authenticationInfo.newCounter, cred.id]);
+    // Atualizar counter (proteção anti-replay — obrigatório)
+    await req.db(
+      'UPDATE webauthn_credentials SET counter=$1 WHERE credential_id=$2',
+      [verification.authenticationInfo.newCounter, cred.credential_id]
+    );
 
     delete req.session.webauthnChallenge;
+
+    // Reusar o mesmo mecanismo de sessão do login normal
     req.session.isAdmin = true;
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[WebAuthn] auth/finish error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Remover credencial ──
+app.delete('/api/webauthn/credential', requireAdmin, async (req, res) => {
+  try {
+    await req.db('DELETE FROM webauthn_credentials WHERE user_handle=$1', [req.schemaName || 'default']);
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Remover credencial biométrica
-app.delete('/api/webauthn/credential', requireAdmin, async (req, res) => {
-  try {
-    const userHandle = req.schemaName || 'default';
-    await req.db('DELETE FROM webauthn_credentials WHERE user_handle=$1', [userHandle]);
-    res.json({ ok: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
 
 // ── EXPENSES (Contas a Pagar) ────────────────────────────────────────────────
 
