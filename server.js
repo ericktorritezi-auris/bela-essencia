@@ -1122,6 +1122,23 @@ async function initDB() {
     // Migração: cidades — adiciona uf e neighborhood em public e em todos os schemas de tenant
     await client.query(`ALTER TABLE cities ADD COLUMN IF NOT EXISTS uf VARCHAR(2)`);
     await client.query(`ALTER TABLE cities ADD COLUMN IF NOT EXISTS neighborhood VARCHAR(100)`);
+    // Migração: WebAuthn credentials (login por biometria no PWA)
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS webauthn_credentials (
+          id            SERIAL PRIMARY KEY,
+          user_handle   VARCHAR(100) NOT NULL,
+          credential_id TEXT NOT NULL UNIQUE,
+          public_key    TEXT NOT NULL,
+          counter       BIGINT NOT NULL DEFAULT 0,
+          device_type   VARCHAR(50),
+          backed_up     BOOLEAN DEFAULT FALSE,
+          transports    TEXT,
+          created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+    } catch(e) {}
+
     // Migração: slot_interval por cidade (intervalo de tempo configurável)
     try { await client.query(`ALTER TABLE cities ADD COLUMN IF NOT EXISTS slot_interval INTEGER DEFAULT 30`); } catch(e) {}
     // Limpeza: work_configs órfãos (city_id aponta para cidade deletada → exibe "null" no admin)
@@ -1846,6 +1863,175 @@ app.post('/api/auth/logout', (req, res) => {
 
 app.get('/api/auth/me', (req, res) => {
   res.json({ isAdmin: !!req.session.isAdmin });
+});
+
+// ── WebAuthn / Biometria ──────────────────────────────────────────────────────
+
+// Armazena challenges temporários por session (sem banco — expira com a sessão)
+const webauthnChallenges = new Map();
+
+// Helper: determina o rpID correto (domínio do tenant)
+function getRpID(req) {
+  const host = req.headers['x-forwarded-host'] || req.headers.host || 'localhost';
+  return host.split(':')[0]; // remove porta se houver
+}
+
+// Registro — Passo 1: gerar options
+app.post('/api/webauthn/register/start', requireAdmin, async (req, res) => {
+  try {
+    const { generateRegistrationOptions } = await import('@simplewebauthn/server');
+    const rpID = getRpID(req);
+    const userHandle = req.schemaName || 'default';
+
+    // Buscar credenciais já existentes para excluir (evitar duplicatas)
+    const existing = await req.db('SELECT credential_id FROM webauthn_credentials WHERE user_handle=$1', [userHandle]);
+    const excludeCredentials = existing.rows.map(r => ({
+      id: r.credential_id,
+      type: 'public-key',
+    }));
+
+    const options = await generateRegistrationOptions({
+      rpName: 'Belle Planner',
+      rpID,
+      userID: new TextEncoder().encode(userHandle),
+      userName: userHandle,
+      userDisplayName: 'Administrador',
+      attestationType: 'none',
+      excludeCredentials,
+      authenticatorSelection: {
+        authenticatorAttachment: 'platform', // apenas biometria do dispositivo
+        userVerification: 'required',
+        residentKey: 'preferred',
+      },
+    });
+
+    // Salva challenge na session para verificar no finish
+    webauthnChallenges.set(req.session.id, options.challenge);
+    res.json(options);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Registro — Passo 2: verificar e salvar credencial
+app.post('/api/webauthn/register/finish', requireAdmin, async (req, res) => {
+  try {
+    const { verifyRegistrationResponse } = await import('@simplewebauthn/server');
+    const rpID = getRpID(req);
+    const expectedChallenge = webauthnChallenges.get(req.session.id);
+    if (!expectedChallenge) return res.status(400).json({ error: 'Challenge expirado. Tente novamente.' });
+
+    const verification = await verifyRegistrationResponse({
+      response: req.body,
+      expectedChallenge,
+      expectedOrigin: `https://${rpID}`,
+      expectedRPID: rpID,
+      requireUserVerification: true,
+    });
+
+    if (!verification.verified || !verification.registrationInfo) {
+      return res.status(400).json({ error: 'Verificação falhou' });
+    }
+
+    webauthnChallenges.delete(req.session.id);
+    const { credential } = verification.registrationInfo;
+    const userHandle = req.schemaName || 'default';
+
+    // Salvar credencial (upsert por user_handle — um dispositivo por conta)
+    await req.db(
+      `INSERT INTO webauthn_credentials
+         (user_handle, credential_id, public_key, counter, device_type, backed_up, transports)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
+       ON CONFLICT (credential_id) DO UPDATE
+         SET counter=$4, device_type=$5, backed_up=$6, transports=$7`,
+      [
+        userHandle,
+        Buffer.from(credential.id).toString('base64url'),
+        Buffer.from(credential.publicKey).toString('base64'),
+        credential.counter,
+        credential.deviceType || null,
+        credential.backedUp || false,
+        JSON.stringify(req.body.response?.transports || []),
+      ]
+    );
+
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Autenticação — Passo 1: gerar options
+app.post('/api/webauthn/auth/start', async (req, res) => {
+  try {
+    const { generateAuthenticationOptions } = await import('@simplewebauthn/server');
+    const rpID = getRpID(req);
+    const userHandle = req.schemaName || 'default';
+
+    const existing = await req.db('SELECT credential_id, transports FROM webauthn_credentials WHERE user_handle=$1', [userHandle]);
+    if (!existing.rowCount) return res.status(404).json({ error: 'Nenhuma credencial registrada' });
+
+    const allowCredentials = existing.rows.map(r => ({
+      id: r.credential_id,
+      type: 'public-key',
+      transports: r.transports ? JSON.parse(r.transports) : [],
+    }));
+
+    const options = await generateAuthenticationOptions({
+      rpID,
+      allowCredentials,
+      userVerification: 'required',
+    });
+
+    webauthnChallenges.set(req.session.id, options.challenge);
+    res.json(options);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Autenticação — Passo 2: verificar e logar
+app.post('/api/webauthn/auth/finish', async (req, res) => {
+  try {
+    const { verifyAuthenticationResponse } = await import('@simplewebauthn/server');
+    const rpID = getRpID(req);
+    const expectedChallenge = webauthnChallenges.get(req.session.id);
+    if (!expectedChallenge) return res.status(400).json({ error: 'Challenge expirado. Tente novamente.' });
+
+    const userHandle = req.schemaName || 'default';
+    const credRow = await req.db(
+      'SELECT * FROM webauthn_credentials WHERE user_handle=$1 LIMIT 1', [userHandle]
+    );
+    if (!credRow.rowCount) return res.status(404).json({ error: 'Credencial não encontrada' });
+    const cred = credRow.rows[0];
+
+    const verification = await verifyAuthenticationResponse({
+      response: req.body,
+      expectedChallenge,
+      expectedOrigin: `https://${rpID}`,
+      expectedRPID: rpID,
+      requireUserVerification: true,
+      credential: {
+        id: cred.credential_id,
+        publicKey: Buffer.from(cred.public_key, 'base64'),
+        counter: Number(cred.counter),
+        transports: cred.transports ? JSON.parse(cred.transports) : [],
+      },
+    });
+
+    if (!verification.verified) return res.status(401).json({ error: 'Autenticação biométrica falhou' });
+
+    // Atualizar counter (proteção contra replay attacks)
+    await req.db('UPDATE webauthn_credentials SET counter=$1 WHERE id=$2',
+      [verification.authenticationInfo.newCounter, cred.id]);
+
+    webauthnChallenges.delete(req.session.id);
+    req.session.isAdmin = true;
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Remover credencial biométrica
+app.delete('/api/webauthn/credential', requireAdmin, async (req, res) => {
+  try {
+    const userHandle = req.schemaName || 'default';
+    await req.db('DELETE FROM webauthn_credentials WHERE user_handle=$1', [userHandle]);
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ── EXPENSES (Contas a Pagar) ────────────────────────────────────────────────
