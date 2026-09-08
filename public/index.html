@@ -1800,6 +1800,33 @@ tr.drag-over{border-top:2.5px solid var(--rose)!important}
                 <a href="/manual-profissional.html" target="_blank" class="btn btn-secondary" style="width:auto;padding:10px 20px;margin-left:8px;text-decoration:none;display:inline-flex;align-items:center;gap:5px">📖 Manual da profissional</a>
               </div>
             </div>
+            <!-- Card: Acesso Biométrico -->
+            <div id="card-biometric-profile" class="tbl-wrap" style="margin-bottom:14px;display:none">
+              <div style="padding:20px">
+                <div class="tbl-ttl" style="margin-bottom:6px">🔒 Acesso Biométrico</div>
+                <p style="font-size:12px;color:var(--text-light);margin-bottom:16px;line-height:1.7">
+                  Login por digital ou Face ID vinculado a este dispositivo.
+                  Redefina se trocou de celular ou perdeu o acesso biométrico.
+                </p>
+                <div id="bio-status-enrolled" style="display:none;align-items:center;gap:10px;margin-bottom:14px;background:var(--rose-light);border:1.5px solid var(--rose-mid);border-radius:var(--r-sm);padding:10px 14px">
+                  <span style="font-size:20px">✅</span>
+                  <span style="font-size:13px;color:var(--rose);font-weight:600">Biometria ativa neste dispositivo</span>
+                </div>
+                <div id="bio-status-empty" style="display:none;align-items:center;gap:10px;margin-bottom:14px;background:#f5f5f5;border:1.5px solid #ddd;border-radius:var(--r-sm);padding:10px 14px">
+                  <span style="font-size:20px">⚠️</span>
+                  <span style="font-size:13px;color:#666">Nenhuma biometria cadastrada neste dispositivo</span>
+                </div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap">
+                  <button id="btn-bio-enroll-profile" onclick="enrollBiometricFromProfile()" class="btn btn-primary" style="width:auto;padding:10px 20px;display:none">
+                    ＋ Cadastrar biometria
+                  </button>
+                  <button id="btn-bio-reset-profile" onclick="resetBiometric()" class="btn" style="width:auto;padding:10px 20px;background:var(--rose-light);border:1.5px solid var(--rose-mid);color:var(--rose);font-weight:700;display:none">
+                    🔄 Redefinir biometria
+                  </button>
+                </div>
+              </div>
+            </div>
+
             <div class="tbl-wrap">
               <div style="padding:20px">
                 <div class="tbl-ttl" style="margin-bottom:14px">Alterar Senha</div>
@@ -2983,6 +3010,7 @@ const SEC_TITLES={
 const ALL_SECS = ['agenda','manual','retro','tatica','blocked','released','avail','report','historico','lembretes','nps','revenue','cockpit','receivables','expenses','summary-fin','promos','commem','webpush','cities','schedules','procs','cert-config','profile','lgpd','backup'];
 
 function showSec(name){
+  if (name === 'profile') renderBiometricProfileCard();
   ALL_SECS.forEach(s=>{
     const sec=document.getElementById(`sec-${s}`); if(sec) sec.classList.toggle('hidden',s!==name);
     const el=document.getElementById(`nav-${s}`); if(el) el.classList.toggle('active',s===name);
@@ -9124,10 +9152,12 @@ async function doBiometricLogin() {
     setTimeout(() => subscribePush('admin').catch(()=>{}), 2000);
   } catch(err) {
     if (err && err.name === 'NotAllowedError') return;
+    // Limpar flags — permite re-enroll no próximo login normal
     localStorage.removeItem('biometric_enrolled');
+    localStorage.removeItem('biometric_declined');
     const btn = document.getElementById('btn-biometric');
     if (btn) btn.style.display = 'none';
-    showToast('Biometria não reconhecida. Use usuário e senha.', 'error');
+    showToast('Biometria não reconhecida. Faça login com senha para recadastrar.', 'error');
   }
 }
 
@@ -9159,6 +9189,64 @@ if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', checkBiometricAvailability);
 } else {
   checkBiometricAvailability();
+}
+
+// ── Gerenciamento de biometria no Perfil ─────────────────────────────────────
+
+async function renderBiometricProfileCard() {
+  const card = document.getElementById('card-biometric-profile');
+  if (!card) return;
+  // Só mostra o card se o dispositivo suporta WebAuthn
+  if (!window.PublicKeyCredential) return;
+  try {
+    const swab = await getSwab();
+    const available = await swab.platformAuthenticatorIsAvailable();
+    if (!available) return;
+  } catch(e) { return; }
+
+  card.style.display = 'block';
+  const enrolled = localStorage.getItem('biometric_enrolled') === 'true';
+  document.getElementById('bio-status-enrolled').style.display = enrolled ? 'flex' : 'none';
+  document.getElementById('bio-status-empty').style.display = enrolled ? 'none' : 'flex';
+  document.getElementById('btn-bio-enroll-profile').style.display = enrolled ? 'none' : 'inline-flex';
+  document.getElementById('btn-bio-reset-profile').style.display = enrolled ? 'inline-flex' : 'none';
+}
+
+async function enrollBiometricFromProfile() {
+  try {
+    showToast('Abrindo cadastro biométrico...', 'ok');
+    const swab = await getSwab();
+    const options = await POST('/api/webauthn/register/start', {});
+    const regResp = await swab.startRegistration({ optionsJSON: options });
+    await POST('/api/webauthn/register/finish', regResp);
+    localStorage.setItem('biometric_enrolled', 'true');
+    localStorage.removeItem('biometric_declined');
+    const btnLogin = document.getElementById('btn-biometric');
+    if (btnLogin) { btnLogin.classList.remove('hidden'); btnLogin.style.display = 'flex'; }
+    showToast('Biometria cadastrada com sucesso!', 'ok');
+    renderBiometricProfileCard();
+  } catch(err) {
+    if (err && err.name === 'NotAllowedError') return;
+    showToast('Não foi possível cadastrar. Tente novamente.', 'error');
+  }
+}
+
+async function resetBiometric() {
+  if (!confirm('Isso vai apagar a biometria deste dispositivo e permitir cadastrar uma nova. Continuar?')) return;
+  try {
+    // Apagar no servidor
+    await DEL('/api/webauthn/credential');
+  } catch(e) { /* se não existir no banco, tudo bem */ }
+  // Limpar localStorage
+  localStorage.removeItem('biometric_enrolled');
+  localStorage.removeItem('biometric_declined');
+  // Esconder botão biométrico da tela de login
+  const btnLogin = document.getElementById('btn-biometric');
+  if (btnLogin) { btnLogin.style.display = 'none'; }
+  showToast('Biometria removida. Cadastre uma nova abaixo.', 'ok');
+  renderBiometricProfileCard();
+  // Iniciar novo cadastro automaticamente após 800ms
+  setTimeout(() => enrollBiometricFromProfile(), 800);
 }
 </script>
 <!-- POPUP POLÍTICA DE PRIVACIDADE LGPD -->
